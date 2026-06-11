@@ -1,0 +1,26 @@
+# Expo
+.expo/
+dist/
+web-build/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Native builds
+ios/
+android/
+*.ipa
+*.apk
+*.aab
+
+# EAS
+.easignore
+
+# Omgeving en secrets
+.env
+.env.*
+
+# macOS / Windows
+.DS_Store
+Thumbs.db

@@ -1,0 +1,287 @@
+import React, { useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { CheckCircle2, Home, Share2 } from 'lucide-react-native';
+import { colors, typography, spacing, radius, shadows } from '../../src/theme/tokens';
+import { useAppStore } from '../../src/store/appStore';
+import { getTrainingPlan, zoneInfo } from '../../src/data/trainingPlans';
+import type { TrainingWeek } from '../../src/data/trainingPlans';
+import { selectTotalKm } from '../../src/store/appStore';
+import { Button } from '../../src/components/ui/Button';
+import { ZoneBadge } from '../../src/components/ui/ZoneBadge';
+import { ShareRunSheet } from '../../src/components/ui/ShareRunSheet';
+
+export default function SummaryScreen() {
+  const { distanceKm, durationSeconds, avgPace, sessionId, weekNumber } =
+    useLocalSearchParams<{
+      distanceKm: string;
+      durationSeconds: string;
+      avgPace: string;
+      sessionId: string;
+      weekNumber: string;
+    }>();
+
+  const profile           = useAppStore(s => s.profile);
+  const racePlan          = useAppStore(s => s.racePlan);
+  const schemaMode        = useAppStore(s => s.schemaMode);
+  const completedSessions = useAppStore(s => s.completedSessions);
+  const currentWeek       = useAppStore(s => s.currentWeek);
+  const [showShare, setShowShare] = useState(false);
+  const completedInWeek = useAppStore(s =>
+    s.completedSessions.filter(c => c.weekNumber === parseInt(weekNumber ?? '1')).length
+  );
+
+  if (!profile) return null;
+
+  const lastSession = completedSessions[completedSessions.length - 1];
+
+  // Zoek week en sessie op in het juiste plan (vrij of race)
+  const weekNum = parseInt(weekNumber ?? '1');
+  const resolveWeek = (): TrainingWeek | undefined => {
+    if (schemaMode === 'race' && racePlan) {
+      return racePlan.weeks.find(w => w.weekNumber === weekNum);
+    }
+    return getTrainingPlan(profile.goal).plan.find(w => w.weekNumber === weekNum);
+  };
+
+  const week    = resolveWeek();
+  const session = week?.sessions.find(s => s.id === sessionId);
+
+  const km = parseFloat(distanceKm ?? '0');
+  const secs = parseInt(durationSeconds ?? '0');
+  const pace = parseInt(avgPace ?? '0');
+
+  const formatDuration = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    if (s >= 3600) {
+      const h = Math.floor(s / 3600);
+      const rem = Math.floor((s % 3600) / 60);
+      return `${h}u ${rem}m`;
+    }
+    return `${m}m ${sec}s`;
+  };
+
+  const formatPace = (secPerKm: number) => {
+    if (secPerKm === 0) return '--:--';
+    const m = Math.floor(secPerKm / 60);
+    const s = Math.round(secPerKm % 60);
+    return `${m}:${String(s).padStart(2, '0')} /km`;
+  };
+
+  const totalInWeek = week?.sessions.length ?? 3;
+  const weekDone = completedInWeek >= totalInWeek;
+
+  // Controleer of het hele schema nu klaar is
+  const totalWeeks = schemaMode === 'race' && racePlan
+    ? racePlan.totalWeeks
+    : getTrainingPlan(profile.goal).weeks;
+  const schemaComplete = weekDone && weekNum >= totalWeeks;
+
+  const getMessage = () => {
+    if (km >= (session?.distanceKm ?? 0)) return 'Doelafstand gehaald!';
+    if (km >= (session?.distanceKm ?? 0) * 0.8) return 'Goed bezig! Elke training brengt je dichter bij je doel.';
+    return 'Elke meter telt. Ga zo door!';
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* Hero */}
+        <View style={styles.hero}>
+          <View style={styles.checkIcon}>
+            <CheckCircle2 size={48} color={colors.success} strokeWidth={1.5} />
+          </View>
+          <Text style={styles.heroTitle}>Sessie voltooid</Text>
+          <Text style={styles.heroSub}>{getMessage()}</Text>
+        </View>
+
+        {/* Grote afstand */}
+        <View style={styles.bigStat}>
+          <Text style={styles.bigStatValue}>{km.toFixed(2)}</Text>
+          <Text style={styles.bigStatUnit}>kilometer</Text>
+        </View>
+
+        {/* Stats grid */}
+        <View style={styles.statsGrid}>
+          <View style={styles.statCell}>
+            <Text style={styles.statLabel}>Tijd</Text>
+            <Text style={styles.statValue}>{formatDuration(secs)}</Text>
+          </View>
+          <View style={[styles.statCell, styles.statCellBorder]}>
+            <Text style={styles.statLabel}>Tempo</Text>
+            <Text style={styles.statValue}>{formatPace(pace)}</Text>
+          </View>
+          {session && (
+            <View style={styles.statCell}>
+              <Text style={styles.statLabel}>Zone</Text>
+              <ZoneBadge zone={session.zone} size="sm" />
+            </View>
+          )}
+        </View>
+
+        {/* Week progress */}
+        <View style={styles.weekCard}>
+          <View style={styles.weekCardHeader}>
+            <Text style={styles.weekCardTitle}>Week {weekNumber} voortgang</Text>
+            <Text style={styles.weekCardCount}>{completedInWeek}/{totalInWeek} sessies</Text>
+          </View>
+          <View style={styles.sessionDots}>
+            {Array.from({ length: totalInWeek }, (_, i) => (
+              <View
+                key={i}
+                style={[styles.dot, i < completedInWeek && styles.dotDone]}
+              />
+            ))}
+          </View>
+          {weekDone && (
+            <View style={styles.weekDoneBanner}>
+              <Text style={styles.weekDoneText}>🎉 Week {weekNumber} volledig afgerond!</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Coach bericht */}
+        {session && (
+          <View style={styles.coachCard}>
+            <Text style={styles.coachLabel}>Tip van de coach</Text>
+            <Text style={styles.coachText}>{session.coachTip}</Text>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Footer */}
+      <View style={styles.footer}>
+        <TouchableOpacity style={styles.shareBtn} onPress={() => setShowShare(true)} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="Deel je run">
+          <Share2 size={18} color={colors.brandPrimary} strokeWidth={2} />
+          <Text style={styles.shareBtnText}>Deel je run</Text>
+        </TouchableOpacity>
+        {schemaComplete ? (
+          <Button
+            label="Bekijk je prestatie"
+            onPress={() => router.replace({
+              pathname: '/session/complete',
+              params: {
+                totalWeeks: String(totalWeeks),
+                weekNumber,
+              },
+            })}
+            fullWidth
+            size="lg"
+          />
+        ) : (
+          <Button
+            label="Terug naar dashboard"
+            onPress={() => router.replace('/(tabs)/dashboard')}
+            fullWidth
+            size="lg"
+            icon={<Home size={18} color={colors.textInverse} strokeWidth={2} />}
+          />
+        )}
+      </View>
+
+      {lastSession && (
+        <ShareRunSheet
+          visible={showShare}
+          session={lastSession}
+          weekNumber={parseInt(weekNumber ?? '1')}
+          runnerName={profile.name}
+          maxHeartRate={profile.maxHeartRate}
+          onClose={() => setShowShare(false)}
+        />
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.bgBase },
+  scroll: { paddingHorizontal: spacing[3], paddingTop: spacing[4], paddingBottom: spacing[3], gap: spacing[3] },
+  hero: { alignItems: 'center', gap: spacing[1.5] },
+  checkIcon: {
+    width: 80, height: 80, borderRadius: 24,
+    backgroundColor: colors.success + '22', borderWidth: 1, borderColor: colors.success + '44',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  heroTitle: {
+    fontFamily: typography.fontFamily.display, fontSize: typography.fontSize['2xl'],
+    color: colors.textPrimary, letterSpacing: typography.letterSpacing.tight,
+  },
+  heroSub: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.base,
+    color: colors.textSecondary, textAlign: 'center',
+  },
+  bigStat: { alignItems: 'center' },
+  bigStatValue: {
+    fontFamily: typography.fontFamily.display, fontSize: typography.fontSize['5xl'],
+    color: colors.textPrimary, letterSpacing: -4,
+  },
+  bigStatUnit: {
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.md,
+    color: colors.textSecondary, marginTop: -4,
+  },
+  statsGrid: {
+    flexDirection: 'row', backgroundColor: colors.bgCard,
+    borderRadius: radius.xl, borderWidth: 1, borderColor: colors.borderSubtle,
+    ...shadows.sm,
+  },
+  statCell: { flex: 1, alignItems: 'center', paddingVertical: spacing[2] },
+  statCellBorder: { borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.borderSubtle },
+  statLabel: {
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.xs,
+    color: colors.textTertiary, textTransform: 'uppercase', letterSpacing: typography.letterSpacing.wider, marginBottom: 6,
+  },
+  statValue: {
+    fontFamily: typography.fontFamily.sansBold, fontSize: typography.fontSize.base, color: colors.textPrimary,
+  },
+  weekCard: {
+    backgroundColor: colors.bgCard, borderRadius: radius.xl,
+    borderWidth: 1, borderColor: colors.borderSubtle, padding: spacing[2], gap: spacing[1.5],
+  },
+  weekCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  weekCardTitle: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base, color: colors.textPrimary,
+  },
+  weekCardCount: {
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.sm, color: colors.textSecondary,
+  },
+  sessionDots: { flexDirection: 'row', gap: spacing[1] },
+  dot: {
+    flex: 1, height: 6, borderRadius: radius.full, backgroundColor: colors.borderDefault,
+  },
+  dotDone: { backgroundColor: colors.success },
+  weekDoneBanner: {
+    backgroundColor: colors.success + '22', borderRadius: radius.md,
+    padding: spacing[1], borderWidth: 1, borderColor: colors.success + '44',
+  },
+  weekDoneText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
+    color: colors.success, textAlign: 'center',
+  },
+  coachCard: {
+    backgroundColor: colors.bgSurface, borderRadius: radius.lg,
+    padding: spacing[2], borderWidth: 1, borderColor: colors.borderSubtle, gap: 6,
+  },
+  coachLabel: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.xs,
+    color: colors.brandPrimary, textTransform: 'uppercase', letterSpacing: typography.letterSpacing.widest,
+  },
+  coachText: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.base,
+    color: colors.textSecondary, lineHeight: typography.fontSize.base * typography.lineHeight.relaxed,
+    fontStyle: 'italic',
+  },
+  footer: { paddingHorizontal: spacing[3], paddingBottom: spacing[3], paddingTop: spacing[2], gap: spacing[1] },
+  shareBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: spacing[1], paddingVertical: spacing[1.5],
+    borderRadius: radius.xl, borderWidth: 1,
+    borderColor: colors.brandPrimary + '55',
+    backgroundColor: colors.brandPrimary + '11',
+  },
+  shareBtnText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base,
+    color: colors.brandPrimary,
+  },
+});
