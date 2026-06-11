@@ -22,4 +22,9 @@ android/
 .env.*
 google-service-account.json
 
-# macOS / 
+# macOS / Windows
+.DS_Store
+Thumbs.db
+
+# Sync-artefacten
+.fuse_hidden*

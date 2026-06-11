@@ -645,7 +645,7 @@ const styles = StyleSheet.create({
     ...shadows.md,
   },
   featuredGlow: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: radius['2xl'],
   },
   featuredBadgeRow: { flexDirection: 'row' },

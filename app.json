@@ -7,11 +7,6 @@
     "icon": "./assets/icon.png",
     "scheme": "lopentelopen",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0A0F1A"
-    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -61,6 +56,17 @@
         {
           "photosPermission": "Geef toegang tot je fotobibliotheek om je run-kaart op te slaan.",
           "savePhotosPermission": "Lopen te Lopen wil je run-kaart opslaan in je fotobibliotheek."
+        }
+      ],
+      "expo-font",
+      "expo-sharing",
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0A0F1A"
         }
       ]
     ],
