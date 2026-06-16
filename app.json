@@ -37,7 +37,7 @@
       ],
       "config": {
         "googleMaps": {
-          "apiKey": "YOUR_GOOGLE_MAPS_API_KEY_HERE"
+          "apiKey": "AIzaSyC_mehbQycogOJ_beEnnji-I9ZvjEIT4os"
         }
       }
     },
@@ -68,13 +68,10 @@
           "resizeMode": "contain",
           "backgroundColor": "#0A0F1A"
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "extra": {
       "router": {},
       "eas": {
         "projectId": "77bb6e1a-d692-48e8-8206-3cb6cdcea770"
-      }
-    }
-  }
-}

@@ -6,6 +6,8 @@ import { ChevronLeft, Volume2, EyeOff } from 'lucide-react-native';
 import { colors, typography, spacing, radius } from '../../src/theme/tokens';
 import { Button } from '../../src/components/ui/Button';
 import { useAppStore } from '../../src/store/appStore';
+import * as voiceService from '../../src/services/voiceService';
+import type { VoiceType } from '../../src/config/voiceConfig';
 import type { GoalType } from '../../src/data/trainingPlans';
 import { ROTTERDAM_RACES } from '../../src/data/rotterdamRaces';
 import { buildRacePlan } from '../../src/data/buildRacePlan';
@@ -14,11 +16,19 @@ export default function VoiceScreen() {
   const { goal, name, age, schemaMode, raceId } =
     useLocalSearchParams<{ goal: GoalType; name: string; age: string; schemaMode: string; raceId: string }>();
   const [voiceGuidance, setVoiceGuidance] = useState(true);
+  const [voiceType, setVoiceType]         = useState<VoiceType>('female');
   const completeOnboarding = useAppStore(s => s.completeOnboarding);
   const setSchemaMode     = useAppStore(s => s.setSchemaMode);
   const setRacePlan       = useAppStore(s => s.setRacePlan);
 
+  // Korte voorbeeldzin zodat de gebruiker de stem direct hoort
+  const previewVoice = (type: VoiceType) => {
+    setVoiceType(type);
+    voiceService.speak('Hoi! Ik ben je hardloopcoach. Samen gaan we trainen.', type);
+  };
+
   const handleStart = () => {
+    voiceService.stop();
     completeOnboarding({
       name: name || 'Hardloper',
       goal: goal as GoalType,
@@ -26,6 +36,7 @@ export default function VoiceScreen() {
       age: parseInt(age) || 30,
       maxHeartRate: 220 - (parseInt(age) || 30),
       voiceGuidance,
+      voiceType,
     });
 
     const mode = schemaMode === 'race' ? 'race' : 'training';
@@ -115,6 +126,42 @@ export default function VoiceScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Stemkeuze, alleen relevant bij gesproken begeleiding */}
+        {voiceGuidance && (
+          <View style={styles.voicePicker}>
+            <Text style={styles.voicePickerLabel}>Welke stem wil je horen?</Text>
+            <View style={styles.voicePickerRow}>
+              <TouchableOpacity
+                onPress={() => previewVoice('female')}
+                activeOpacity={0.8}
+                style={[styles.voiceBtn, voiceType === 'female' && styles.voiceBtnSelected]}
+                accessibilityRole="radio"
+                accessibilityLabel="Vrouwenstem"
+                accessibilityState={{ selected: voiceType === 'female' }}
+              >
+                <Text style={styles.voiceBtnEmoji}>👩</Text>
+                <Text style={[styles.voiceBtnLabel, voiceType === 'female' && styles.voiceBtnLabelSelected]}>
+                  Vrouwenstem
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => previewVoice('male')}
+                activeOpacity={0.8}
+                style={[styles.voiceBtn, voiceType === 'male' && styles.voiceBtnSelected]}
+                accessibilityRole="radio"
+                accessibilityLabel="Mannenstem"
+                accessibilityState={{ selected: voiceType === 'male' }}
+              >
+                <Text style={styles.voiceBtnEmoji}>👨</Text>
+                <Text style={[styles.voiceBtnLabel, voiceType === 'male' && styles.voiceBtnLabelSelected]}>
+                  Mannenstem
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.voicePickerHint}>Tik op een stem om die te beluisteren.</Text>
+          </View>
+        )}
+
         <Text style={styles.note}>
           Je kunt dit altijd wijzigen in de instellingen.
         </Text>
@@ -176,6 +223,29 @@ const styles = StyleSheet.create({
   },
   radioSelected: { borderColor: colors.brandPrimary },
   radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.brandPrimary },
+  voicePicker: { gap: spacing[1] },
+  voicePickerLabel: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base,
+    color: colors.textPrimary,
+  },
+  voicePickerRow: { flexDirection: 'row', gap: spacing[1.5] },
+  voiceBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: spacing[1], minHeight: 52,
+    backgroundColor: colors.bgCard, borderRadius: radius.lg,
+    borderWidth: 1.5, borderColor: colors.borderSubtle,
+  },
+  voiceBtnSelected: { borderColor: colors.brandPrimary, backgroundColor: colors.brandPrimary + '11' },
+  voiceBtnEmoji: { fontSize: 20 },
+  voiceBtnLabel: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+  },
+  voiceBtnLabelSelected: { color: colors.brandLight },
+  voicePickerHint: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
+    color: colors.textTertiary,
+  },
   note: {
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm,
     color: colors.textTertiary, textAlign: 'center',

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Alert, BackHandler, Switch, ActivityIndicator,
+  View, Text, TouchableOpacity, StyleSheet, Alert, BackHandler, ActivityIndicator,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +16,7 @@ import { useRoutePlanner } from '../../src/hooks/useRoutePlanner';
 import { useRouteCoaching } from '../../src/hooks/useRouteCoaching';
 import { RoutePreviewSheet } from '../../src/components/ui/RoutePreviewSheet';
 import { SessionTypeSheet } from '../../src/components/ui/SessionTypeSheet';
+import { Button } from '../../src/components/ui/Button';
 import { LiveRouteMap } from '../../src/components/ui/LiveRouteMap';
 import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
 import { PREMIUM_CONFIG } from '../../src/config/premiumConfig';
@@ -74,10 +75,8 @@ export default function ActiveSessionScreen() {
 
   // ── Routeplanner ──────────────────────────────────────────────────────────
   const canUsePlanner = !PREMIUM_CONFIG.PAYWALL_ACTIVE || (profile?.isPremium ?? true);
-  const [routePlannerOn, setRoutePlannerOn] = useState(
-    canUsePlanner && (profile?.routePlannerEnabled ?? false),
-  );
-  const [showRoutePreview, setShowRoutePreview] = useState(false);
+  const [showRouteQuestion, setShowRouteQuestion] = useState(false);
+  const [showRoutePreview, setShowRoutePreview]   = useState(false);
   const [activePlannedRoute, setActivePlannedRoute] = useState<PlannedRoute | null>(null);
   const routePlanTriggered = useRef(false);
   const firstGpsRef = useRef<{ lat: number; lon: number } | null>(null);
@@ -108,14 +107,17 @@ export default function ActiveSessionScreen() {
 
   // ── Gesproken begeleiding ─────────────────────────────────────────────────
   const voiceEnabled = profile?.voiceGuidance ?? false;
+  const voiceType    = profile?.voiceType ?? 'female';
   const { onKmUpdate, onFinish, stop: stopVoice } = useVoiceGuidance(
     voiceEnabled,
     session?.distanceKm ?? 0,
+    voiceType,
   );
   const { onGpsUpdate: onRouteCoachingUpdate } = useRouteCoaching(
-    routePlannerOn && !!activePlannedRoute,
+    !!activePlannedRoute,
     voiceEnabled,
     activePlannedRoute ?? undefined,
+    voiceType,
   );
 
   // ── Init sessie ───────────────────────────────────────────────────────────
@@ -124,12 +126,6 @@ export default function ActiveSessionScreen() {
       startSession(session, weekNum);
     }
   }, []);
-
-  // ── Sla routeplanner-voorkeur op ──────────────────────────────────────────
-  const toggleRoutePlanner = useCallback((value: boolean) => {
-    setRoutePlannerOn(value);
-    updateProfile({ routePlannerEnabled: value });
-  }, [updateProfile]);
 
   // ── Sessie intern starten (na GPS/route-flow) ─────────────────────────────
   const startSessionNow = useCallback((route: PlannedRoute | null) => {
@@ -182,12 +178,12 @@ export default function ActiveSessionScreen() {
             setGpsReady(true);
             firstGpsRef.current = { lat: latitude, lon: longitude };
 
-            if (routePlannerOn && !routePlanTriggered.current) {
+            // Vraag de gebruiker of er een route gepland moet worden
+            if (canUsePlanner && !routePlanTriggered.current) {
               routePlanTriggered.current = true;
-              planner.planRoute(latitude, longitude).then(() => {
-                if (mounted) setShowRoutePreview(true);
-              });
-            } else {
+              setShowRouteQuestion(true);
+            } else if (!routePlanTriggered.current) {
+              routePlanTriggered.current = true;
               startSessionNow(null);
             }
           }
@@ -261,6 +257,25 @@ export default function ActiveSessionScreen() {
     const pos = firstGpsRef.current;
     if (pos) planner.planRoute(pos.lat, pos.lon);
   }, [planner]);
+
+  // ── Routevraag beantwoorden ───────────────────────────────────────────────
+  const handlePlanRoute = useCallback(() => {
+    setShowRouteQuestion(false);
+    updateProfile({ routePlannerEnabled: true });
+    const pos = firstGpsRef.current;
+    if (pos) {
+      setShowRoutePreview(true);
+      planner.planRoute(pos.lat, pos.lon);
+    } else {
+      startSessionNow(null);
+    }
+  }, [planner, startSessionNow, updateProfile]);
+
+  const handleSkipRoute = useCallback(() => {
+    setShowRouteQuestion(false);
+    updateProfile({ routePlannerEnabled: false });
+    startSessionNow(null);
+  }, [startSessionNow, updateProfile]);
 
   // Pas na alle hooks: zonder profiel valt er niets te tonen
   if (!profile) return null;
@@ -364,54 +379,57 @@ export default function ActiveSessionScreen() {
     return (
       <View style={[styles.container, styles.loadingBg]}>
         <SafeAreaView style={styles.loadingInner}>
-          <View style={styles.gpsIconBox}>
-            <MapPin size={36} color={colors.brandPrimary} strokeWidth={1.5} />
-          </View>
+          {!showRouteQuestion && (
+            <>
+              <View style={styles.gpsIconBox}>
+                <MapPin size={36} color={colors.brandPrimary} strokeWidth={1.5} />
+              </View>
 
-          <View style={styles.gpsTextBlock}>
-            <ActivityIndicator size="small" color={colors.brandPrimary} style={{ marginBottom: spacing[1] }} />
-            <Text style={styles.gpsWaitTitle}>GPS-signaal zoeken...</Text>
-            <Text style={styles.gpsWaitSub}>
-              We zoeken je locatie. Geen signaal na 30 seconden?{'\n'}
-              Dan starten we zonder GPS.
-            </Text>
-          </View>
-
-          {/* Routeplanner toggle */}
-          {canUsePlanner && (
-            <View style={styles.plannerCard}>
-              <View style={styles.plannerCardLeft}>
-                <View style={styles.plannerLabelRow}>
-                  <Map size={16} color={colors.brandPrimary} strokeWidth={2} />
-                  <Text style={styles.plannerLabel}>Routeplanner</Text>
-                  <PremiumBadge />
-                </View>
-                <Text style={styles.plannerSub}>
-                  Automatische {session.distanceKm} km route vanaf je locatie
+              <View style={styles.gpsTextBlock}>
+                <ActivityIndicator size="small" color={colors.brandPrimary} style={{ marginBottom: spacing[1] }} />
+                <Text style={styles.gpsWaitTitle}>GPS-signaal zoeken...</Text>
+                <Text style={styles.gpsWaitSub}>
+                  We zoeken je locatie. Geen signaal na 30 seconden?{'\n'}
+                  Dan starten we zonder GPS.
                 </Text>
               </View>
-              <Switch
-                value={routePlannerOn}
-                onValueChange={toggleRoutePlanner}
-                accessibilityLabel="Routeplanner"
-                trackColor={{ false: colors.borderDefault, true: `${colors.brandPrimary}66` }}
-                thumbColor={routePlannerOn ? colors.brandPrimary : colors.textTertiary}
-              />
+            </>
+          )}
+
+          {/* Routevraag: GPS gevonden, wil je een route plannen? */}
+          {showRouteQuestion && (
+            <View style={styles.routeQuestionCard}>
+              <View style={styles.plannerLabelRow}>
+                <Map size={18} color={colors.brandPrimary} strokeWidth={2} />
+                <Text style={styles.plannerLabel}>Routeplanner</Text>
+                <PremiumBadge />
+              </View>
+              <Text style={styles.routeQuestionTitle}>Wil je een route plannen?</Text>
+              <Text style={styles.routeQuestionSub}>
+                Voor deze training staat {session.distanceKm} km op het programma. De app kan een
+                route van die lengte voor je uitstippelen vanaf je startpunt.
+              </Text>
+              <Button label="Plan mijn route" onPress={handlePlanRoute} fullWidth />
+              <Button label="Start zonder route" onPress={handleSkipRoute} variant="secondary" fullWidth />
             </View>
           )}
 
-          <TouchableOpacity
-            onPress={() => {
-              if (gpsTimeoutRef.current) clearTimeout(gpsTimeoutRef.current);
-              setGpsError('Geen GPS-signaal. Afstand wordt niet bijgehouden.');
-              setGpsReady(true);
-              startSessionNow(null);
-            }}
-            style={styles.skipGpsBtn}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.skipGpsText}>Nu starten zonder GPS</Text>
-          </TouchableOpacity>
+          {!showRouteQuestion && (
+            <TouchableOpacity
+              onPress={() => {
+                if (gpsTimeoutRef.current) clearTimeout(gpsTimeoutRef.current);
+                setGpsError('Geen GPS-signaal. Afstand wordt niet bijgehouden.');
+                setGpsReady(true);
+                startSessionNow(null);
+              }}
+              style={styles.skipGpsBtn}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Nu starten zonder GPS"
+            >
+              <Text style={styles.skipGpsText}>Nu starten zonder GPS</Text>
+            </TouchableOpacity>
+          )}
         </SafeAreaView>
 
         {/* Route preview sheet — verschijnt bovenop GPS-wachtscherm */}
@@ -608,20 +626,17 @@ const styles = StyleSheet.create({
     lineHeight: typography.fontSize.base * typography.lineHeight.relaxed,
   },
 
-  // Routeplanner card
-  plannerCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  // Routevraag card
+  routeQuestionCard: {
     backgroundColor: colors.bgCard,
     borderRadius: radius.xl,
-    padding: spacing[2],
+    padding: spacing[3],
     borderWidth: 1,
     borderColor: colors.borderSubtle,
-    width: '85%',
+    width: '88%',
+    gap: spacing[1.5],
     ...shadows.sm,
   },
-  plannerCardLeft: { flex: 1, gap: 4, marginRight: spacing[2] },
   plannerLabelRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing[1],
   },
@@ -629,9 +644,15 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base,
     color: colors.textPrimary,
   },
-  plannerSub: {
-    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm,
+  routeQuestionTitle: {
+    fontFamily: typography.fontFamily.sansBold, fontSize: typography.fontSize.xl,
+    color: colors.textPrimary,
+  },
+  routeQuestionSub: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.base,
     color: colors.textSecondary,
+    lineHeight: typography.fontSize.base * typography.lineHeight.relaxed,
+    marginBottom: spacing[0.5],
   },
 
   skipGpsBtn: {

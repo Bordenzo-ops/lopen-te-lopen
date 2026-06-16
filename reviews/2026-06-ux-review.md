@@ -36,6 +36,18 @@ Eerste maandelijkse review van de hardloopapp (Expo/React Native, doelgroep: beg
 ### 10. Zone-jargon op het actieve scherm: GEFIXT
 **Bestanden:** active.tsx. Tijdens de run zag een beginner alleen "Z2" met het woord "Aeroob" eronder. De zone-statcel is nu aantikbaar (met info-icoon als visuele hint) en opent de bestaande SessionTypeSheet met de volledige uitleg van het trainingstype, inclusief de praattest.
 
+## Aanvulling na testronde Lars
+
+**Routeplanner zichtbaar gemaakt als startvraag (active.tsx).** Uit de test bleek dat de routeplanner onvindbaar was: het was een klein schuifje op het GPS-wachtscherm dat standaard uit stond. Dat schuifje is vervangen door een expliciete vraag. Zodra GPS je locatie heeft gevonden, verschijnt nu een kaart: "Wil je een route plannen?" met de trainingsafstand erbij, en twee knoppen: "Plan mijn route" (opent de routevoorvertoning) en "Start zonder route". Je antwoord wordt onthouden als voorkeur, maar de vraag komt bij elke training terug zodat de functie altijd vindbaar is. Zonder locatietoestemming of GPS-signaal start de training direct zonder route.
+
+## Aanvulling 2: ElevenLabs stemmen
+
+**Coaching en routebegeleiding via ElevenLabs, met stemkeuze.** De spraak liep via de ingebouwde telefoonstem (expo-speech). Er is nu een centrale spraakservice (src/services/voiceService.ts) die ElevenLabs text-to-speech gebruikt zodra er een API-sleutel staat in src/config/voiceConfig.ts. Gegenereerde zinnen worden op het toestel gecachet zodat herhaalde teksten geen nieuwe API-kosten veroorzaken. Zonder sleutel, zonder netwerk of bij een fout valt de app automatisch terug op de telefoonstem, zodat de coaching tijdens een run nooit wegvalt.
+
+De gebruiker kiest een vrouwenstem of mannenstem in stap 3 van de onboarding (met directe voorbeeldweergave bij het aantikken) en kan dit later wijzigen via Instellingen, onder Begeleiding tijdens het lopen. De keuze wordt opgeslagen in het profiel en geldt voor de kilometer-updates, aanmoedigingen, zone-meldingen en de turn-by-turn routebegeleiding.
+
+Nog nodig om dit live te zetten (zie takenlijst hieronder): ElevenLabs API-sleutel invullen, twee pakketten installeren en een nieuwe development build maken.
+
 ## Samenvatting
 
 **Alle 10 bevindingen zijn opgelost.** In de eerste ronde: accessibilityLabels en rollen app-breed, touch targets naar 44pt, contrast-token verhoogd, gedachtestreepjes uit alle copy, annuleer-dialoog verduidelijkt, twee hooks-bugs en microcopy. In de tweede ronde: hooks-volgorde in active.tsx hersteld, laadindicator op het GPS-wachtscherm, lege staten voorzien van een directe vervolgactie en de zone-uitleg bereikbaar gemaakt vanaf het actieve sessiescherm. Daarnaast zijn drie lege rommelbestanden uit de projectroot verwijderd ("navigation.goBack()}", "setShowShare(false)}" en "{"). Het project compileert foutloos na alle wijzigingen.

@@ -16,7 +16,9 @@ import { useRef, useCallback, useState } from 'react';
 import { Alert, Platform, Linking, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
-import * as MediaLibrary from 'expo-media-library';
+// Let op: expo-media-library wordt lazy geladen in saveToLibrary().
+// De native module (ExpoMediaLibraryNext) zit niet in Expo Go bij SDK 56;
+// een top-level import zou daar de hele app laten crashen.
 
 // ── Instagram URL-scheme ───────────────────────────────────────────────────────
 // Instagram Stories accepteert een afbeelding als "background_image" of "sticker_image"
@@ -122,6 +124,17 @@ export function useShareRun() {
 
   /** Slaat de kaart op in de fotobibliotheek (vraagt toestemming indien nodig) */
   const saveToLibrary = useCallback(async (imageUri: string): Promise<ShareResult> => {
+    let MediaLibrary: typeof import('expo-media-library');
+    try {
+      MediaLibrary = require('expo-media-library');
+    } catch {
+      // Native module ontbreekt (bijv. in Expo Go): sla netjes af in plaats van crashen
+      Alert.alert(
+        'Niet beschikbaar',
+        'Opslaan in je fotobibliotheek werkt niet in Expo Go. Gebruik het deelmenu of een development build.',
+      );
+      return { success: false, error: 'media_library_unavailable' };
+    }
     // writeOnly: de app hoeft alleen op te slaan, niet de bibliotheek te lezen
     const { status } = await MediaLibrary.requestPermissionsAsync(true);
     if (status !== 'granted') {

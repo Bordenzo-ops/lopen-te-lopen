@@ -10,7 +10,7 @@
  */
 export const PREMIUM_CONFIG = {
   /** OpenRouteService API-sleutel — vul je eigen sleutel in */
-  ORS_API_KEY: 'YOUR_ORS_API_KEY_HERE',
+  ORS_API_KEY: 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjdmODA3NjU4MTVmMzRlNjlhOTM3MDEzODFmYWVkOWI4IiwiaCI6Im11cm11cjY0In0=',
 
   /**
    * Betaalmuur actief?

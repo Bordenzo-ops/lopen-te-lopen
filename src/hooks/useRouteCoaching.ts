@@ -14,7 +14,8 @@
  */
 
 import { useRef, useCallback } from 'react';
-import * as Speech from 'expo-speech';
+import * as voiceService from '../services/voiceService';
+import type { VoiceType } from '../config/voiceConfig';
 import { haversineMeters, PlannedRoute } from '../services/routeService';
 
 // ── Constanten ────────────────────────────────────────────────────────────────
@@ -29,13 +30,6 @@ const MILESTONES: Array<[number, string]> = [
   [0.75, 'Driekwart onderweg. Bijna terug!'],
 ];
 
-// ── Spraak-helper ─────────────────────────────────────────────────────────────
-
-function speak(text: string): void {
-  Speech.stop();
-  Speech.speak(text, { language: 'nl-NL', pitch: 1.0, rate: 0.95 });
-}
-
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export interface UseRouteCoachingReturn {
@@ -49,9 +43,14 @@ export function useRouteCoaching(
   enabled:      boolean,
   voiceEnabled: boolean,
   plannedRoute: PlannedRoute | undefined,
+  voiceType:    VoiceType = 'female',
 ): UseRouteCoachingReturn {
   const spokenInstructions = useRef<Set<number>>(new Set());
   const spokenMilestones   = useRef<Set<number>>(new Set());
+
+  const speak = useCallback((text: string) => {
+    voiceService.speak(text, voiceType);
+  }, [voiceType]);
 
   const onGpsUpdate = useCallback((
     lat:             number,
@@ -89,7 +88,7 @@ export function useRouteCoaching(
       speak(`${msg} Nog ${remaining} kilometer te gaan.`);
       spokenMilestones.current.add(pct);
     });
-  }, [enabled, voiceEnabled, plannedRoute]);
+  }, [enabled, voiceEnabled, plannedRoute, speak]);
 
   const reset = useCallback(() => {
     spokenInstructions.current.clear();

@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getTrainingPlan } from '../data/trainingPlans';
 import type { GoalType, Session, TrainingWeek } from '../data/trainingPlans';
 import type { RacePlan } from '../data/buildRacePlan';
+import { ensureAnonymousSession, getCurrentSession } from '../services/authService';
+import { syncAll } from '../services/syncService';
 
 // ── Types ─────────────────────────────────────
 export interface UserProfile {
@@ -13,6 +15,8 @@ export interface UserProfile {
   maxHeartRate: number;    // berekend: 220 - leeftijd
   age: number;
   voiceGuidance: boolean;  // gesproken begeleiding aan/uit
+  /** Stemkeuze voor de coaching (default 'female') */
+  voiceType?: 'female' | 'male';
   /** Routeplanner standaard aan bij sessiestart (default false) */
   routePlannerEnabled?: boolean;
   /** Premium-status — default true zolang betaalmuur niet actief is */
@@ -67,6 +71,21 @@ interface AppState {
   _hasHydrated: boolean;
   setHasHydrated: (v: boolean) => void;
 
+  // Backend (offline-first, additief)
+  /** Is er een actieve Supabase-sessie? Default false (offline). */
+  isSignedIn: boolean;
+  /** Status van de laatste synchronisatiepoging */
+  syncStatus: 'idle' | 'syncing' | 'synced' | 'error';
+  /** Laatste succesvolle sync als ISO-string, of null */
+  lastSyncedAt: string | null;
+  /**
+   * Start de backend best-effort: anonieme sessie en eerste sync.
+   * Faalt stil naar offline als er geen sleutels of netwerk zijn.
+   */
+  initBackend: () => Promise<void>;
+  /** Best-effort synchronisatie van profiel en sessies. Blokkeert de UI nooit. */
+  syncNow: () => Promise<void>;
+
   // Actions
   completeOnboarding: (profile: UserProfile) => void;
   setRacePlan: (plan: RacePlan | null) => void;
@@ -102,12 +121,54 @@ export const useAppStore = create<AppState>()(
       schemaMode: 'training',
       _hasHydrated: false,
 
+      // Backend-status (offline-first defaults)
+      isSignedIn: false,
+      syncStatus: 'idle',
+      lastSyncedAt: null,
+
+      initBackend: async () => {
+        try {
+          const session = await ensureAnonymousSession();
+          set({ isSignedIn: !!session });
+          if (session) {
+            // Eerste sync best-effort, mag de UI niet blokkeren
+            void get().syncNow();
+          }
+        } catch (_) {
+          // Stil falen: app blijft offline werken
+          set({ isSignedIn: false });
+        }
+      },
+
+      syncNow: async () => {
+        try {
+          const session = await getCurrentSession();
+          if (!session) {
+            set({ isSignedIn: false });
+            return;
+          }
+          set({ isSignedIn: true, syncStatus: 'syncing' });
+          const { profile, completedSessions } = get();
+          const result = await syncAll(profile, completedSessions);
+          set({
+            syncStatus: result.ok ? 'synced' : 'error',
+            lastSyncedAt: result.ok ? new Date().toISOString() : get().lastSyncedAt,
+          });
+        } catch (_) {
+          // Sync is best-effort: nooit crashen
+          set({ syncStatus: 'error' });
+        }
+      },
+
       setHasHydrated: (v) => set({ _hasHydrated: v }),
       setRacePlan: (plan) => set({ racePlan: plan }),
       setSchemaMode: (mode) => set({ schemaMode: mode }),
 
-      completeOnboarding: (profile) =>
-        set({ profile, hasCompletedOnboarding: true, currentWeek: 1 }),
+      completeOnboarding: (profile) => {
+        set({ profile, hasCompletedOnboarding: true, currentWeek: 1 });
+        // Best-effort sync, blokkeert de onboarding niet
+        void get().syncNow();
+      },
 
       updateProfile: (updates) =>
         set(state => ({
@@ -183,6 +244,9 @@ export const useAppStore = create<AppState>()(
           activeSession: null,
           currentWeek: nextWeek,
         });
+
+        // Best-effort sync van de nieuwe sessie naar de cloud
+        void get().syncNow();
       },
 
       cancelSession: () => set({ activeSession: null }),

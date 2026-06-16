@@ -12,6 +12,7 @@ import {
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '../src/theme/tokens';
+import { useAppStore } from '../src/store/appStore';
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -21,6 +22,12 @@ export default function RootLayout() {
     Inter_700Bold,
     Inter_800ExtraBold,
   });
+
+  // Start de backend best-effort op de achtergrond. Faalt stil naar offline
+  // als er geen Supabase-sleutels of netwerk zijn. Blokkeert de UI nooit.
+  useEffect(() => {
+    void useAppStore.getState().initBackend();
+  }, []);
 
   if (!fontsLoaded) return null;
 

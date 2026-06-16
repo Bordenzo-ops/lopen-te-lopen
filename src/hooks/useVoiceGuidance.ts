@@ -14,7 +14,8 @@
  */
 
 import { useRef, useCallback } from 'react';
-import * as Speech from 'expo-speech';
+import * as voiceService from '../services/voiceService';
+import type { VoiceType } from '../config/voiceConfig';
 
 // ── Aanmoedigingen per km-split ────────────────────────────────────────────
 const KM_MESSAGES = [
@@ -34,20 +35,19 @@ const ZONE_DESCRIPTIONS: Record<string, string> = {
   Z5: 'Maximale zone. Alles geven!',
 };
 
-function speak(text: string) {
-  // Stop lopende uitspraak en start nieuwe
-  Speech.stop();
-  Speech.speak(text, {
-    language: 'nl-NL',
-    pitch:    1.0,
-    rate:     0.95,
-  });
-}
-
-export function useVoiceGuidance(enabled: boolean, targetDistanceKm: number) {
+export function useVoiceGuidance(
+  enabled: boolean,
+  targetDistanceKm: number,
+  voiceType: VoiceType = 'female',
+) {
   const lastSpokenKm   = useRef(0);
   const halfwaySpoken  = useRef(false);
   const finishSpoken   = useRef(false);
+
+  // Stop lopende uitspraak en start nieuwe, met de gekozen stem
+  const speak = useCallback((text: string) => {
+    voiceService.speak(text, voiceType);
+  }, [voiceType]);
 
   /**
    * Aanroepen elke keer dat de afstand bijgewerkt wordt.
@@ -81,7 +81,7 @@ export function useVoiceGuidance(enabled: boolean, targetDistanceKm: number) {
       const remaining = (targetDistanceKm - distanceKm).toFixed(1);
       speak(`Halverwege! Nog ${remaining} kilometer te gaan. Je doet het geweldig.`);
     }
-  }, [enabled, targetDistanceKm]);
+  }, [enabled, targetDistanceKm, speak]);
 
   /**
    * Aanroepen wanneer de hartslagzone verandert.
@@ -90,7 +90,7 @@ export function useVoiceGuidance(enabled: boolean, targetDistanceKm: number) {
     if (!enabled) return;
     const desc = ZONE_DESCRIPTIONS[newZone] ?? newZone;
     speak(`Zone ${newZone}. ${desc}`);
-  }, [enabled]);
+  }, [enabled, speak]);
 
   /**
    * Aanroepen wanneer de sessie voltooid is.
@@ -105,13 +105,13 @@ export function useVoiceGuidance(enabled: boolean, targetDistanceKm: number) {
     const timeStr = secs > 0 ? `${mins} minuten en ${secs} seconden` : `${mins} minuten`;
 
     speak(`Sessie voltooid! Je hebt ${km} kilometer gelopen in ${timeStr}. Geweldig gedaan!`);
-  }, [enabled]);
+  }, [enabled, speak]);
 
   /**
    * Stop alle lopende uitspraak (bij pauze of annuleren).
    */
   const stop = useCallback(() => {
-    Speech.stop();
+    voiceService.stop();
   }, []);
 
   return { onKmUpdate, onZoneChange, onFinish, stop };

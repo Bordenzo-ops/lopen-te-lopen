@@ -99,9 +99,9 @@ Uitgevoerde fixes: 12 in totaal.
 - 3 rommelbestanden in de projectroot verwijderd
 - google-service-account.json aan .gitignore toegevoegd
 
-Resterende acties voor de eigenaar (kunnen niet vanuit deze omgeving):
-1. Expo SDK 56 upgrade voor de 12 moderate kwetsbaarheden: draai lokaal "npx expo install expo@^56" gevolgd door "npx expo install --fix", en test daarna de app. Gebruik niet "npm audit fix --force".
-2. Datasafety-formulieren in App Store Connect en Play Console bijwerken: vermeld dat locatiedata bij gebruik van de routeplanner naar openrouteservice.org gaat.
-3. Bij het invullen van echte API-sleutels: beperk de Google Maps sleutel in Google Cloud Console tot de Maps SDK for Android en het package com.lopentelopen.app, en gebruik voor ORS alleen een gratis sleutel met lage limieten.
-4. Optioneel (bevinding 2): routes uit de persistente opslag halen of migreren naar SQLite. Dit raakt de kern van de app en hoort lokaal met testen te gebeuren.
-5. Na de wijzigingen eenmalig lokaal "npx tsc --noEmit" draaien en de app testen (delen van een run-kaart, locatietracking met vergrendeld scherm).
+Resterende acties, status per 11 juni 2026 (tweede controle):
+1. Expo SDK 56 upgrade: AFGEROND. package.json staat op expo ~56.0.11 met react-native 0.85.3. De npm audit van 11 juni 2026 (na de upgrade) laat zien dat de postcss-kwetsbaarheid is opgelost. Wat overblijft is 1 onderliggend issue: uuid kleiner dan 11.1.1 via het xcode-pakket in de Expo build-tooling (12 meldingen, allemaal moderate, allemaal dezelfde wortel, alleen build-tooling, niet exploiteerbaar in de app zelf). Daarvoor is op 11 juni 2026 een npm override toegevoegd aan package.json (xcode > uuid ^11.1.1). De override kon vanuit deze omgeving niet geinstalleerd worden (registry geblokkeerd): draai lokaal "npm install" en daarna "npm audit"; verwacht dan 0 kwetsbaarheden. Volg niet het advies van npm audit fix --force (dat downgradet expo-splash-screen en breekt SDK 56). Verwijder de override weer zodra Expo zelf een gefixte @expo/config-plugins meelevert.
+2. Datasafety-formulieren in App Store Connect en Play Console: NOG OPEN. Vermeld dat locatiedata bij gebruik van de routeplanner naar openrouteservice.org gaat. Niet controleerbaar vanuit deze omgeving.
+3. API-sleutels: DEELS OPEN. Er staat inmiddels een echte Google Maps sleutel in app.json; controleer in Google Cloud Console dat die beperkt is tot de Maps SDK for Android en het package com.lopentelopen.app met SHA-1 fingerprint. De ORS-sleutel is nog een placeholder, dus daar is nu niets nodig.
+4. Optioneel (bevinding 2): NOG OPEN. completedSessions inclusief routes staat nog in AsyncStorage.
+5. Compilatie en testen: compilatie AFGEROND, npx tsc --noEmit slaagt zonder fouten na alle wijzigingen inclusief de Expo 56 upgrade. NOG OPEN: handmatig testen op een toestel (run-kaart delen, locatietracking met vergrendeld scherm).

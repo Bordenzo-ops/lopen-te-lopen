@@ -20,6 +20,7 @@ android/
 # Omgeving en secrets
 .env
 .env.*
+!.env.example
 google-service-account.json
 
 # macOS / Windows

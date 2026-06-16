@@ -152,7 +152,16 @@ async function orsPost(endpoint: string, body: object): Promise<any> {
     if (res.status === 429) {
       throw new Error('Dagelijkse limiet bereikt. Probeer het morgen opnieuw.');
     }
-    throw new Error(`Route ophalen mislukt (${res.status}). Probeer het opnieuw.`);
+    // Probeer de echte ORS-foutmelding uit de response body te halen
+    let detail = '';
+    try {
+      const json = JSON.parse(text);
+      detail = json?.error?.message ?? json?.error ?? '';
+    } catch {
+      detail = text;
+    }
+    const suffix = detail ? `: ${detail}` : '';
+    throw new Error(`Route ophalen mislukt (${res.status})${suffix}. Probeer het opnieuw.`);
   }
 
   return res.json();
@@ -169,7 +178,7 @@ export async function generateLoopRoute(
   lon: number,
   targetDistanceKm: number,
 ): Promise<PlannedRoute> {
-  const data = await orsPost('/directions/foot-running/geojson', {
+  const data = await orsPost('/directions/foot-walking/geojson', {
     coordinates: [[lon, lat]],
     options: {
       round_trip: {
@@ -199,7 +208,7 @@ export async function generateOutAndBackRoute(
   // 0.75 factor compenseert voor bochten en omwegen
   const dest = destinationPoint(lat, lon, halfKm * 0.75, bearing);
 
-  const data = await orsPost('/directions/foot-running/geojson', {
+  const data = await orsPost('/directions/foot-walking/geojson', {
     coordinates: [[lon, lat], [dest.lon, dest.lat]],
     instructions: true,
     language:     'nl',

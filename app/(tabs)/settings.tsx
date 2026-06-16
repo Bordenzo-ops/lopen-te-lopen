@@ -8,6 +8,8 @@ import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink } from 'lucide-react
 import { colors, typography, spacing, radius } from '../../src/theme/tokens';
 import { useAppStore } from '../../src/store/appStore';
 import { zoneInfo } from '../../src/data/trainingPlans';
+import * as voiceService from '../../src/services/voiceService';
+import type { VoiceType } from '../../src/config/voiceConfig';
 import { router } from 'expo-router';
 import { Minus, Plus } from 'lucide-react-native';
 
@@ -275,7 +277,46 @@ export default function SettingsScreen() {
                   thumbColor={profile.voiceGuidance ? colors.brandPrimary : colors.textTertiary}
                 />
               </View>
+              {profile.voiceGuidance && (
+                <>
+                  <Divider />
+                  <View style={styles.row}>
+                    <Text style={styles.rowLabel}>Stem</Text>
+                    <View style={styles.voiceToggle}>
+                      {(['female', 'male'] as VoiceType[]).map(type => {
+                        const isActive = (profile.voiceType ?? 'female') === type;
+                        return (
+                          <TouchableOpacity
+                            key={type}
+                            onPress={() => {
+                              updateProfile({ voiceType: type });
+                              voiceService.speak(
+                                'Hoi! Ik ben je hardloopcoach. Zo klink ik tijdens het lopen.',
+                                type,
+                              );
+                            }}
+                            style={[styles.voiceToggleBtn, isActive && styles.voiceToggleBtnActive]}
+                            activeOpacity={0.8}
+                            accessibilityRole="radio"
+                            accessibilityLabel={type === 'female' ? 'Vrouwenstem' : 'Mannenstem'}
+                            accessibilityState={{ selected: isActive }}
+                          >
+                            <Text style={[styles.voiceToggleLabel, isActive && styles.voiceToggleLabelActive]}>
+                              {type === 'female' ? 'Vrouw' : 'Man'}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </>
+              )}
             </View>
+            {profile.voiceGuidance && (
+              <Text style={styles.fieldNote}>
+                Tik op een stem om die te beluisteren.
+              </Text>
+            )}
           </View>
 
           {/* Integraties */}
@@ -404,6 +445,21 @@ const styles = StyleSheet.create({
   switchSub: {
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2,
   },
+  voiceToggle: {
+    flexDirection: 'row', backgroundColor: colors.bgSurface,
+    borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSubtle,
+    padding: 3, gap: 3,
+  },
+  voiceToggleBtn: {
+    paddingHorizontal: spacing[2], minHeight: 38,
+    alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm,
+  },
+  voiceToggleBtnActive: { backgroundColor: colors.brandPrimary },
+  voiceToggleLabel: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+  },
+  voiceToggleLabelActive: { color: '#fff' },
   zoneRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing[1.5],
     paddingHorizontal: spacing[2], paddingVertical: spacing[1.5],
