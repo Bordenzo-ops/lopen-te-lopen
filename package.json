@@ -34,6 +34,7 @@
     "react-native": "0.85.3",
     "react-native-gesture-handler": "~2.31.1",
     "react-native-maps": "1.27.2",
+    "react-native-purchases": "^9.4.0",
     "react-native-reanimated": "4.3.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "4.25.2",
@@ -45,4 +46,12 @@
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
-    "@types/react":
+    "@types/react": "~19.2.14",
+    "typescript": "~6.0.3"
+  },
+  "overrides": {
+    "xcode": {
+      "uuid": "^11.1.1"
+    }
+  }
+}

@@ -13,6 +13,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '../src/theme/tokens';
 import { useAppStore } from '../src/store/appStore';
+import { init as initPurchases } from '../src/services/purchaseService';
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -29,6 +30,16 @@ export default function RootLayout() {
     void useAppStore.getState().initBackend();
   }, []);
 
+  // Initialiseer RevenueCat en ververs de premium-status best-effort op de
+  // achtergrond. Faalt stil naar geen premium zonder sleutel of netwerk en
+  // blokkeert de UI nooit.
+  useEffect(() => {
+    void (async () => {
+      await initPurchases();
+      await useAppStore.getState().refreshPremium();
+    })();
+  }, []);
+
   if (!fontsLoaded) return null;
 
   return (
@@ -41,6 +52,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
           <Stack.Screen name="session/active" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="session/summary" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="paywall" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>

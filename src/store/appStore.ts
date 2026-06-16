@@ -6,6 +6,7 @@ import type { GoalType, Session, TrainingWeek } from '../data/trainingPlans';
 import type { RacePlan } from '../data/buildRacePlan';
 import { ensureAnonymousSession, getCurrentSession } from '../services/authService';
 import { syncAll } from '../services/syncService';
+import { isPremiumActive as fetchPremiumActive } from '../services/purchaseService';
 
 // ── Types ─────────────────────────────────────
 export interface UserProfile {
@@ -86,6 +87,21 @@ interface AppState {
   /** Best-effort synchronisatie van profiel en sessies. Blokkeert de UI nooit. */
   syncNow: () => Promise<void>;
 
+  // Premium (RevenueCat, niet persistent als bron van waarheid)
+  /**
+   * Is premium actief volgens RevenueCat (entitlement "premium")? Default
+   * false. Wordt ververst bij app-start en na aankoop of herstel. Wordt
+   * bewust niet gepersisteerd: RevenueCat is de bron van waarheid.
+   */
+  isPremium: boolean;
+  /** Zet de premium-status direct, bijvoorbeeld na een aankoop of herstel. */
+  setPremium: (value: boolean) => void;
+  /**
+   * Ververs de premium-status best-effort bij RevenueCat. Faalt stil naar
+   * de bestaande waarde zonder sleutel of netwerk en blokkeert nooit.
+   */
+  refreshPremium: () => Promise<void>;
+
   // Actions
   completeOnboarding: (profile: UserProfile) => void;
   setRacePlan: (plan: RacePlan | null) => void;
@@ -125,6 +141,20 @@ export const useAppStore = create<AppState>()(
       isSignedIn: false,
       syncStatus: 'idle',
       lastSyncedAt: null,
+
+      // Premium-status (RevenueCat, default geen premium)
+      isPremium: false,
+
+      setPremium: (value) => set({ isPremium: value }),
+
+      refreshPremium: async () => {
+        try {
+          const active = await fetchPremiumActive();
+          set({ isPremium: active });
+        } catch (_) {
+          // Stil falen: behoud de bestaande premium-status
+        }
+      },
 
       initBackend: async () => {
         try {
