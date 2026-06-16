@@ -456,7 +456,7 @@ export default function ActiveSessionScreen() {
           )}
         </SafeAreaView>
 
-        {/* Route preview sheet — verschijnt bovenop GPS-wachtscherm */}
+        {/* Route preview sheet, verschijnt bovenop GPS-wachtscherm */}
         {session && (
           <RoutePreviewSheet
             visible={showRoutePreview}
@@ -554,7 +554,7 @@ export default function ActiveSessionScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Live kaart — alleen als routeplanner actief is */}
+        {/* Live kaart, alleen als routeplanner actief is */}
         {activePlannedRoute && lastPos && (
           <LiveRouteMap
             plannedRoute={activePlannedRoute}
@@ -565,7 +565,7 @@ export default function ActiveSessionScreen() {
           />
         )}
 
-        {/* Coach tip — alleen tonen als er geen kaart is */}
+        {/* Coach tip, alleen tonen als er geen kaart is */}
         {!activePlannedRoute && (
           <View style={styles.tipBanner}>
             <Text style={styles.tipText} numberOfLines={2}>{session.coachTip}</Text>

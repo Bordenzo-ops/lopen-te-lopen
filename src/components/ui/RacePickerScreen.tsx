@@ -150,7 +150,7 @@ function EventGroupRow({
 
   return (
     <View style={[styles.eventGroup, isPast && styles.raceRowPast]}>
-      {/* Hoofd event-rij — klikbaar om sub-races te tonen */}
+      {/* Hoofd event-rij, klikbaar om sub-races te tonen */}
       <TouchableOpacity
         style={styles.eventGroupHeader}
         onPress={onToggle}
@@ -447,7 +447,7 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
 
       <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
 
-        {/* Featured races — uitgelicht bovenaan */}
+        {/* Featured races, uitgelicht bovenaan */}
         {featuredRaces.length > 0 && (
           <View style={styles.featuredSection}>
             <Text style={styles.featuredSectionLabel}>⭐ Ultiem doel</Text>

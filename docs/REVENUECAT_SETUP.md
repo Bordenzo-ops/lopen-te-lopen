@@ -116,3 +116,24 @@ usePremium. Dit document gaat alleen over RevenueCat en de paywall.
 - Premium-status leeft in de store (isPremium) en is op te vragen via de hook
   usePremium. De store persisteert isPremium bewust niet: RevenueCat is de
   bron van waarheid en de status wordt elke app-start opnieuw opgehaald.
+
+## Gevolgen voor de Android-build en Play Console
+
+- Billing-permissie: react-native-purchases voegt de permissie
+  com.android.vending.BILLING automatisch toe aan de samengevoegde
+  AndroidManifest tijdens de build. Je hoeft die dus niet handmatig in
+  app.json onder android.permissions te zetten. Controleer na de eerste
+  build wel even in de Play Console (App-inhoud, of het gebouwde bundel)
+  dat de billing-permissie aanwezig is.
+- Geen extra runtime-toestemming: in-app betalingen vragen niet om een
+  losse runtime-permissie zoals locatie. Er is dus geen nieuwe toestemming
+  die je in de Play Console-vragenlijst (Data safety) hoeft te verklaren
+  vanwege RevenueCat zelf.
+- Wel nodig in de Play Console: een actief betaalprofiel (Merchant account)
+  en de twee abonnementsproducten uit stap 2, plus een gepubliceerde build
+  in minstens een testtrack. Zonder dat kun je niet met echte aankopen testen.
+- Native module: zowel RevenueCat als de Supabase-auth-opslag zijn native
+  afhankelijkheden. Ze werken niet in Expo Go en vereisen een nieuwe EAS
+  dev build (stap 7). De bestaande release-build blijft werken zolang de
+  drie pakketten nog niet geinstalleerd zijn, want de code valt zonder de
+  modules stilletjes terug op offline en geen premium.

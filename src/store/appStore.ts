@@ -34,7 +34,7 @@ export interface UserProfile {
   voiceType?: 'female' | 'male';
   /** Routeplanner standaard aan bij sessiestart (default false) */
   routePlannerEnabled?: boolean;
-  /** Premium-status — default true zolang betaalmuur niet actief is */
+  /** Premium-status: default true zolang betaalmuur niet actief is */
   isPremium?: boolean;
 }
 
@@ -73,7 +73,7 @@ interface AppState {
   completedSessions: CompletedSession[];
   currentWeek: number;
 
-  // Actieve loop-sessie (niet persistent — crash-safe)
+  // Actieve loop-sessie (niet persistent, crash-safe)
   activeSession: ActiveSession | null;
 
   // Wedstrijdschema
@@ -88,7 +88,7 @@ interface AppState {
   /** ISO-datum (maandag) van de week waarin geteld wordt */
   routePlanWeekStart: string | null;
 
-  // Hydration — true zodra AsyncStorage geladen is
+  // Hydration: true zodra AsyncStorage geladen is
   _hasHydrated: boolean;
   setHasHydrated: (v: boolean) => void;
 

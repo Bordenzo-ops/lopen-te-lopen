@@ -12,6 +12,9 @@ import { trainingPlans } from '../../src/data/trainingPlans';
 import { getUpcomingRaces, weeksUntilRace, formatRaceDate } from '../../src/data/rotterdamRaces';
 import type { GoalType } from '../../src/data/trainingPlans';
 import type { RotterdamRace } from '../../src/data/rotterdamRaces';
+import { usePremium } from '../../src/hooks/usePremium';
+import { isRaceDistanceFree } from '../../src/config/premiumConfig';
+import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -37,6 +40,7 @@ const distanceLabel: Record<RotterdamRace['distance'], string> = {
 
 export default function GoalScreen() {
   const [mode, setMode] = useState<'training' | 'race'>('training');
+  const { hasAccess } = usePremium();
 
   // Training-modus
   const [selectedGoal, setSelectedGoal] = useState<GoalType | null>(null);
@@ -115,6 +119,7 @@ export default function GoalScreen() {
             selected={selectedRace}
             onSelect={setSelectedRace}
             onSwitchToTraining={() => switchMode('training')}
+            hasAccess={hasAccess}
           />
         )}
       </ScrollView>
@@ -199,13 +204,20 @@ function TrainingModeContent({
 }
 
 function RaceModeContent({
-  races, selected, onSelect, onSwitchToTraining,
+  races, selected, onSelect, onSwitchToTraining, hasAccess,
 }: {
   races: RotterdamRace[];
   selected: RotterdamRace | null;
   onSelect: (r: RotterdamRace) => void;
   onSwitchToTraining: () => void;
+  hasAccess: boolean;
 }) {
+  // Sommige afstanden zijn later premium. We blokkeren de keuze in de
+  // onboarding bewust niet: een nieuwe gebruiker mag altijd een doel kiezen en
+  // direct een werkend schema krijgen. We tonen wel een eerlijke premium-hint,
+  // zodat het later niet als verrassing voelt. Zolang de betaalmuur uit staat
+  // (hasAccess is dan true) verschijnt er niets.
+  const anyPremiumRace = !hasAccess && races.some(r => !isRaceDistanceFree(r.distance));
   if (races.length === 0) {
     return (
       <View style={styles.emptyBox}>
@@ -229,11 +241,19 @@ function RaceModeContent({
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Kies je wedstrijd</Text>
       <Text style={styles.sectionSub}>Jouw schema wordt automatisch aangepast op de wedstrijddatum.</Text>
+      {anyPremiumRace && (
+        <Text style={styles.racePremiumNote}>
+          Je kunt nu elke wedstrijd kiezen. De halve marathon blijft altijd gratis.
+          Voor andere afstanden, zoals de 5 km, 10 km of marathon, vraagt de app later
+          om premium.
+        </Text>
+      )}
       <View style={styles.cards}>
         {races.map(race => {
           const isSelected = selected?.id === race.id;
           const weeks = weeksUntilRace(race.date);
           const accent = race.accentColor;
+          const locked = !hasAccess && !isRaceDistanceFree(race.distance);
           return (
             <TouchableOpacity
               key={race.id}
@@ -254,10 +274,13 @@ function RaceModeContent({
                     <Text style={[styles.raceName, isSelected && { color: colors.textPrimary }]}>
                       {race.name}
                     </Text>
-                    <View style={[styles.distancePill, { backgroundColor: accent + '22', borderColor: accent + '55' }]}>
-                      <Text style={[styles.distancePillText, { color: accent }]}>
-                        {distanceLabel[race.distance]}
-                      </Text>
+                    <View style={styles.racePillRow}>
+                      <View style={[styles.distancePill, { backgroundColor: accent + '22', borderColor: accent + '55' }]}>
+                        <Text style={[styles.distancePillText, { color: accent }]}>
+                          {distanceLabel[race.distance]}
+                        </Text>
+                      </View>
+                      {locked && <PremiumBadge />}
                     </View>
                   </View>
                   <View style={[styles.checkCircle, isSelected && { backgroundColor: accent, borderColor: accent }]}>
@@ -364,6 +387,18 @@ const styles = StyleSheet.create({
   sectionSub: {
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm,
     color: colors.textSecondary, marginTop: -spacing[1],
+  },
+  racePremiumNote: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
+    color: colors.textSecondary,
+    lineHeight: typography.fontSize.xs * 1.5,
+    backgroundColor: colors.bgCard,
+    borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+    padding: spacing[1.5],
+  },
+  racePillRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing[1], flexWrap: 'wrap',
   },
 
   cards: { gap: spacing[1.5] },
