@@ -20,6 +20,8 @@ import { Button } from '../../src/components/ui/Button';
 import { LiveRouteMap } from '../../src/components/ui/LiveRouteMap';
 import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
 import { PREMIUM_CONFIG } from '../../src/config/premiumConfig';
+import { usePremium } from '../../src/hooks/usePremium';
+import { selectRoutePlansThisWeek } from '../../src/store/appStore';
 import type { PlannedRoute } from '../../src/services/routeService';
 
 // ── Haversine afstandsberekening (meters) ────────────────────────────────────
@@ -63,6 +65,9 @@ export default function ActiveSessionScreen() {
   const cancelSession   = useAppStore(s => s.cancelSession);
   const activeSession   = useAppStore(s => s.activeSession);
   const updateProfile   = useAppStore(s => s.updateProfile);
+  const registerRoutePlan = useAppStore(s => s.registerRoutePlan);
+  const routePlansThisWeek = useAppStore(selectRoutePlansThisWeek);
+  const { hasAccess, promptUpgrade } = usePremium();
 
   const [elapsed, setElapsed]               = useState(0);
   const [isRunning, setIsRunning]           = useState(false);
@@ -74,7 +79,11 @@ export default function ActiveSessionScreen() {
   const [showTypeInfo, setShowTypeInfo]     = useState(false);
 
   // ── Routeplanner ──────────────────────────────────────────────────────────
-  const canUsePlanner = !PREMIUM_CONFIG.PAYWALL_ACTIVE || (profile?.isPremium ?? true);
+  // Gratis gebruikers mogen een beperkt aantal routes per week plannen; premium
+  // is onbeperkt. Offline-first: onbekende premium-status telt als gratis.
+  const routeLimitReached =
+    !hasAccess && routePlansThisWeek >= PREMIUM_CONFIG.FREE_ROUTE_PLANS_PER_WEEK;
+  const canUsePlanner = hasAccess || !routeLimitReached;
   const [showRouteQuestion, setShowRouteQuestion] = useState(false);
   const [showRoutePreview, setShowRoutePreview]   = useState(false);
   const [activePlannedRoute, setActivePlannedRoute] = useState<PlannedRoute | null>(null);
@@ -184,6 +193,13 @@ export default function ActiveSessionScreen() {
               setShowRouteQuestion(true);
             } else if (!routePlanTriggered.current) {
               routePlanTriggered.current = true;
+              // Gratis weeklimiet bereikt: nette upgrade-prompt en zonder route starten
+              if (routeLimitReached) {
+                promptUpgrade(
+                  'Routeplanner-limiet bereikt',
+                  `Met gratis kun je ${PREMIUM_CONFIG.FREE_ROUTE_PLANS_PER_WEEK} routes per week plannen. Met premium plan je onbeperkt routes. Je sessie start gewoon, zonder vooraf geplande route.`,
+                );
+              }
               startSessionNow(null);
             }
           }
@@ -262,6 +278,9 @@ export default function ActiveSessionScreen() {
   const handlePlanRoute = useCallback(() => {
     setShowRouteQuestion(false);
     updateProfile({ routePlannerEnabled: true });
+    // Tel dit als een geplande route voor de gratis weeklimiet (premium telt
+    // ook mee maar wordt nooit begrensd)
+    registerRoutePlan();
     const pos = firstGpsRef.current;
     if (pos) {
       setShowRoutePreview(true);
@@ -269,7 +288,7 @@ export default function ActiveSessionScreen() {
     } else {
       startSessionNow(null);
     }
-  }, [planner, startSessionNow, updateProfile]);
+  }, [planner, startSessionNow, updateProfile, registerRoutePlan]);
 
   const handleSkipRoute = useCallback(() => {
     setShowRouteQuestion(false);
@@ -409,6 +428,11 @@ export default function ActiveSessionScreen() {
                 Voor deze training staat {session.distanceKm} km op het programma. De app kan een
                 route van die lengte voor je uitstippelen vanaf je startpunt.
               </Text>
+              {!hasAccess && (
+                <Text style={styles.routeQuestionLimit}>
+                  Nog {Math.max(0, PREMIUM_CONFIG.FREE_ROUTE_PLANS_PER_WEEK - routePlansThisWeek)} van {PREMIUM_CONFIG.FREE_ROUTE_PLANS_PER_WEEK} gratis routes deze week. Met premium plan je onbeperkt.
+                </Text>
+              )}
               <Button label="Plan mijn route" onPress={handlePlanRoute} fullWidth />
               <Button label="Start zonder route" onPress={handleSkipRoute} variant="secondary" fullWidth />
             </View>
@@ -652,6 +676,11 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.base,
     color: colors.textSecondary,
     lineHeight: typography.fontSize.base * typography.lineHeight.relaxed,
+    marginBottom: spacing[0.5],
+  },
+  routeQuestionLimit: {
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.xs,
+    color: colors.textTertiary,
     marginBottom: spacing[0.5],
   },
 

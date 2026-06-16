@@ -11,6 +11,8 @@ import type { VoiceType } from '../../src/config/voiceConfig';
 import type { GoalType } from '../../src/data/trainingPlans';
 import { ROTTERDAM_RACES } from '../../src/data/rotterdamRaces';
 import { buildRacePlan } from '../../src/data/buildRacePlan';
+import { usePremium } from '../../src/hooks/usePremium';
+import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
 
 export default function VoiceScreen() {
   const { goal, name, age, schemaMode, raceId } =
@@ -20,6 +22,7 @@ export default function VoiceScreen() {
   const completeOnboarding = useAppStore(s => s.completeOnboarding);
   const setSchemaMode     = useAppStore(s => s.setSchemaMode);
   const setRacePlan       = useAppStore(s => s.setRacePlan);
+  const { hasAccess, goToPaywall } = usePremium();
 
   // Korte voorbeeldzin zodat de gebruiker de stem direct hoort
   const previewVoice = (type: VoiceType) => {
@@ -159,6 +162,20 @@ export default function VoiceScreen() {
               </TouchableOpacity>
             </View>
             <Text style={styles.voicePickerHint}>Tik op een stem om die te beluisteren.</Text>
+            {!hasAccess && (
+              <TouchableOpacity
+                onPress={goToPaywall}
+                activeOpacity={0.8}
+                style={styles.premiumVoiceNote}
+                accessibilityRole="button"
+                accessibilityLabel="Premium-stemmen ontgrendelen"
+              >
+                <PremiumBadge />
+                <Text style={styles.premiumVoiceText}>
+                  Premium-stemmen klinken het meest natuurlijk. Gratis gebruik je de stem van je telefoon. Tik om premium te bekijken.
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -245,6 +262,18 @@ const styles = StyleSheet.create({
   voicePickerHint: {
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
     color: colors.textTertiary,
+  },
+  premiumVoiceNote: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing[1],
+    backgroundColor: colors.bgCard, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+    padding: spacing[1.5], marginTop: spacing[1],
+  },
+  premiumVoiceText: {
+    flex: 1,
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
+    color: colors.textSecondary,
+    lineHeight: typography.fontSize.xs * 1.5,
   },
   note: {
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm,

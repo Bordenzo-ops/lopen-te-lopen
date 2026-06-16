@@ -20,6 +20,8 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 // @ts-ignore: wordt geinstalleerd met "npx expo install expo-file-system"
 import { File, Directory, Paths } from 'expo-file-system';
 import { ELEVENLABS, isElevenLabsConfigured, VoiceType } from '../config/voiceConfig';
+import { hasPremiumAccess } from '../config/premiumConfig';
+import { useAppStore } from '../store/appStore';
 
 let currentPlayer: any = null;
 let audioModeReady = false;
@@ -96,7 +98,17 @@ async function fetchTts(voiceId: string, text: string): Promise<Uint8Array> {
 export async function speak(text: string, voice: VoiceType = 'female'): Promise<void> {
   stop();
 
-  if (!isElevenLabsConfigured()) {
+  // Premium-stemmen (ElevenLabs) zitten achter de paywall. Gratis gebruikers
+  // krijgen altijd de ingebouwde telefoonstem. Offline-first: een onbekende
+  // premium-status telt als gratis. Lees de status defensief uit de store.
+  let premiumVoices = false;
+  try {
+    premiumVoices = hasPremiumAccess(useAppStore.getState().isPremium);
+  } catch {
+    premiumVoices = hasPremiumAccess(false);
+  }
+
+  if (!premiumVoices || !isElevenLabsConfigured()) {
     fallbackSpeak(text);
     return;
   }

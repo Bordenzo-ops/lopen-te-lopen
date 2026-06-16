@@ -8,6 +8,20 @@ import { ensureAnonymousSession, getCurrentSession } from '../services/authServi
 import { syncAll } from '../services/syncService';
 import { isPremiumActive as fetchPremiumActive } from '../services/purchaseService';
 
+// ── Hulpfuncties ──────────────────────────────
+/**
+ * Geeft de maandag van de week van een datum als ISO-datumstring (YYYY-MM-DD).
+ * Gebruikt voor de week-reset van de gratis routeplanner-limiet.
+ */
+export function weekStartISO(date = new Date()): string {
+  const d = new Date(date);
+  const day = d.getDay();              // 0 = zondag, 1 = maandag
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString().split('T')[0];
+}
+
 // ── Types ─────────────────────────────────────
 export interface UserProfile {
   name: string;
@@ -68,6 +82,12 @@ interface AppState {
   // Schema-modus: vrij trainen of voor een wedstrijd
   schemaMode: 'training' | 'race';
 
+  // Routeplanner-gebruik (gratis limiet per week, gepersisteerd)
+  /** Aantal geplande routes in de huidige week */
+  routePlanCount: number;
+  /** ISO-datum (maandag) van de week waarin geteld wordt */
+  routePlanWeekStart: string | null;
+
   // Hydration — true zodra AsyncStorage geladen is
   _hasHydrated: boolean;
   setHasHydrated: (v: boolean) => void;
@@ -102,6 +122,12 @@ interface AppState {
    */
   refreshPremium: () => Promise<void>;
 
+  /**
+   * Registreert dat er een route gepland is en hoogt de weekteller op. Reset
+   * de teller automatisch als er een nieuwe week begonnen is. Gepersisteerd.
+   */
+  registerRoutePlan: () => void;
+
   // Actions
   completeOnboarding: (profile: UserProfile) => void;
   setRacePlan: (plan: RacePlan | null) => void;
@@ -135,6 +161,8 @@ export const useAppStore = create<AppState>()(
       activeSession: null,
       racePlan: null,
       schemaMode: 'training',
+      routePlanCount: 0,
+      routePlanWeekStart: null,
       _hasHydrated: false,
 
       // Backend-status (offline-first defaults)
@@ -187,6 +215,17 @@ export const useAppStore = create<AppState>()(
         } catch (_) {
           // Sync is best-effort: nooit crashen
           set({ syncStatus: 'error' });
+        }
+      },
+
+      registerRoutePlan: () => {
+        const thisWeek = weekStartISO();
+        const { routePlanWeekStart, routePlanCount } = get();
+        if (routePlanWeekStart !== thisWeek) {
+          // Nieuwe week: teller resetten en deze plan als eerste tellen
+          set({ routePlanWeekStart: thisWeek, routePlanCount: 1 });
+        } else {
+          set({ routePlanCount: routePlanCount + 1 });
         }
       },
 
@@ -302,6 +341,8 @@ export const useAppStore = create<AppState>()(
         currentWeek:            state.currentWeek,
         racePlan:               state.racePlan,
         schemaMode:             state.schemaMode,
+        routePlanCount:         state.routePlanCount,
+        routePlanWeekStart:     state.routePlanWeekStart,
       }),
       onRehydrateStorage: () => (state) => {
         // Gezet na succesvolle én mislukte rehydratie
@@ -315,6 +356,17 @@ export const useAppStore = create<AppState>()(
 export const useHasHydrated = () => useAppStore(s => s._hasHydrated);
 
 // ── Selectors ─────────────────────────────────
+
+/**
+ * Aantal routes dat deze week al gepland is. Geeft 0 terug zodra er een
+ * nieuwe week begonnen is (de teller wordt pas bij registerRoutePlan echt
+ * gereset, maar de selector houdt al rekening met de weekgrens).
+ */
+export const selectRoutePlansThisWeek = (state: AppState): number => {
+  if (state.routePlanWeekStart !== weekStartISO()) return 0;
+  return state.routePlanCount;
+};
+
 export const selectWeeklyKm = (state: AppState, weekNumber: number): number =>
   state.completedSessions
     .filter(s => s.weekNumber === weekNumber)

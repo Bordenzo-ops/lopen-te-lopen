@@ -12,6 +12,8 @@ import * as voiceService from '../../src/services/voiceService';
 import type { VoiceType } from '../../src/config/voiceConfig';
 import { router } from 'expo-router';
 import { Minus, Plus } from 'lucide-react-native';
+import { usePremium } from '../../src/hooks/usePremium';
+import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
 
 // ── Bewerkbare rij ─────────────────────────────────────────────────────────
 
@@ -151,6 +153,7 @@ export default function SettingsScreen() {
   const profile       = useAppStore(s => s.profile);
   const updateProfile = useAppStore(s => s.updateProfile);
   const resetProgress = useAppStore(s => s.resetProgress);
+  const { hasAccess, goToPaywall } = usePremium();
   if (!profile) return null;
 
   const maxHr = profile.maxHeartRate;
@@ -317,6 +320,20 @@ export default function SettingsScreen() {
                 Tik op een stem om die te beluisteren.
               </Text>
             )}
+            {profile.voiceGuidance && !hasAccess && (
+              <TouchableOpacity
+                onPress={goToPaywall}
+                style={styles.premiumVoiceNote}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Premium-stemmen ontgrendelen"
+              >
+                <PremiumBadge />
+                <Text style={styles.premiumVoiceText}>
+                  Met gratis hoor je de stem van je telefoon. Premium-stemmen klinken natuurlijker en warmer. Tik om premium te bekijken.
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Integraties */}
@@ -460,6 +477,18 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   voiceToggleLabelActive: { color: '#fff' },
+  premiumVoiceNote: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing[1],
+    backgroundColor: colors.bgCard, borderRadius: radius.xl,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+    padding: spacing[1.5], marginTop: spacing[1],
+  },
+  premiumVoiceText: {
+    flex: 1,
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
+    color: colors.textSecondary,
+    lineHeight: typography.fontSize.xs * 1.5,
+  },
   zoneRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing[1.5],
     paddingHorizontal: spacing[2], paddingVertical: spacing[1.5],

@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import {
   ChevronDown, ChevronRight, ChevronLeft,
-  MapPin, Calendar, Clock, Trophy, CheckCircle2, X,
+  MapPin, Calendar, Clock, Trophy, CheckCircle2, X, Lock,
 } from 'lucide-react-native';
 import { colors, palette, typography, spacing, radius, shadows } from '../../theme/tokens';
 import {
@@ -20,6 +20,9 @@ import {
   type Race, type RaceCity, type RaceProvince,
 } from '../../data/rotterdamRaces';
 import { buildRacePlan, canTrainForRace, type RacePlan } from '../../data/buildRacePlan';
+import { usePremium } from '../../hooks/usePremium';
+import { isRaceDistanceFree } from '../../config/premiumConfig';
+import { PremiumBadge } from './PremiumBadge';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Modal } from 'react-native';
 
@@ -79,8 +82,8 @@ function CityRow({
 }
 
 function RaceRow({
-  race, onPress,
-}: { race: Race; onPress: () => void }) {
+  race, onPress, locked,
+}: { race: Race; onPress: () => void; locked?: boolean }) {
   const isPast   = new Date(race.date) <= new Date();
   const weeks    = weeksUntilRace(race.date);
   const { possible } = canTrainForRace(race);
@@ -97,6 +100,7 @@ function RaceRow({
       <View style={styles.raceRowInner}>
         <View style={styles.raceRowTop}>
           <Text style={styles.raceName} numberOfLines={1}>{race.name}</Text>
+          {locked && <PremiumBadge />}
           <View style={[styles.distancePill, { backgroundColor: accent + '22', borderColor: accent + '55' }]}>
             <Text style={[styles.distancePillText, { color: accent }]}>
               {distanceLabel[race.distance]}
@@ -122,7 +126,9 @@ function RaceRow({
         </View>
       </View>
       {!isPast && (
-        <ChevronRight size={15} color={colors.textTertiary} strokeWidth={2} />
+        locked
+          ? <Lock size={14} color={colors.textTertiary} strokeWidth={2} style={{ marginRight: spacing[1.5] }} />
+          : <ChevronRight size={15} color={colors.textTertiary} strokeWidth={2} />
       )}
     </TouchableOpacity>
   );
@@ -131,12 +137,13 @@ function RaceRow({
 // ── Event-groep (meerdere afstanden binnen één event) ────────────────────────
 
 function EventGroupRow({
-  event, isOpen, onToggle, onSelectSub,
+  event, isOpen, onToggle, onSelectSub, isLocked,
 }: {
   event: Race;
   isOpen: boolean;
   onToggle: () => void;
   onSelectSub: (race: Race) => void;
+  isLocked: (race: Race) => boolean;
 }) {
   const accent = event.accentColor;
   const isPast = new Date(event.date) <= new Date();
@@ -186,6 +193,7 @@ function EventGroupRow({
         <View style={styles.subRacesContainer}>
           {event.subRaces!.map((sub, i) => {
             const subAccent = sub.accentColor;
+            const subLocked = isLocked(sub);
             return (
               <TouchableOpacity
                 key={sub.id}
@@ -206,7 +214,10 @@ function EventGroupRow({
                     {distanceLabel[sub.distance]}
                   </Text>
                 </View>
-                <ChevronRight size={13} color={colors.textTertiary} strokeWidth={2} />
+                {subLocked
+                  ? <Lock size={13} color={colors.textTertiary} strokeWidth={2} />
+                  : <ChevronRight size={13} color={colors.textTertiary} strokeWidth={2} />
+                }
               </TouchableOpacity>
             );
           })}
@@ -276,8 +287,8 @@ function ConfirmModal({
 // ── Featured race hero-kaart ──────────────────────────────────────────────────
 
 function FeaturedRaceCard({
-  race, onPress,
-}: { race: Race; onPress: () => void }) {
+  race, onPress, locked,
+}: { race: Race; onPress: () => void; locked?: boolean }) {
   const weeks  = weeksUntilRace(race.date);
   const accent = race.accentColor;
   const months = Math.round(weeks / 4.3);
@@ -297,6 +308,7 @@ function FeaturedRaceCard({
           <Trophy size={12} color={accent} strokeWidth={2} />
           <Text style={[styles.featuredBadgeText, { color: accent }]}>Ultiem doel</Text>
         </View>
+        {locked && <PremiumBadge />}
       </View>
 
       {/* Titel */}
@@ -334,8 +346,13 @@ function FeaturedRaceCard({
 
       {/* CTA */}
       <View style={[styles.featuredCta, { backgroundColor: accent }]}>
-        <Text style={styles.featuredCtaText}>Train voor dit doel</Text>
-        <ChevronRight size={16} color="#fff" strokeWidth={2.5} />
+        <Text style={styles.featuredCtaText}>
+          {locked ? 'Ontgrendel met premium' : 'Train voor dit doel'}
+        </Text>
+        {locked
+          ? <Lock size={15} color="#fff" strokeWidth={2.5} />
+          : <ChevronRight size={16} color="#fff" strokeWidth={2.5} />
+        }
       </View>
     </TouchableOpacity>
   );
@@ -351,6 +368,13 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
   const [openCities,    setOpenCities]    = useState<Set<string>>(new Set(['rotterdam']));
   const [openEvents,    setOpenEvents]    = useState<Set<string>>(new Set());
   const [pendingPlan,   setPendingPlan]   = useState<RacePlan | null>(null);
+
+  const { hasAccess, promptUpgrade } = usePremium();
+
+  // Gratis krijgt de halve marathon als standaardschema; andere afstanden
+  // (en wedstrijden) zijn premium. Offline-first: onbekende status telt als gratis.
+  const isRaceLocked = (race: Race): boolean =>
+    !hasAccess && !isRaceDistanceFree(race.distance);
 
   // Verzamel alle featured races (niet verlopen)
   const featuredRaces = PROVINCES
@@ -385,6 +409,14 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
   }
 
   function handleRacePress(race: Race) {
+    // Premium-gating: vergrendelde wedstrijden leiden naar de paywall
+    if (isRaceLocked(race)) {
+      promptUpgrade(
+        'Premium-wedstrijd',
+        "Met gratis train je voor de halve marathon. Met premium ontgrendel je alle wedstrijden en schema's, van de 5 km tot de marathon.",
+      );
+      return;
+    }
     const plan = buildRacePlan(race);
     if (!plan) {
       const { reason } = canTrainForRace(race);
@@ -424,6 +456,7 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
                 key={race.id}
                 race={race}
                 onPress={() => handleRacePress(race)}
+                locked={isRaceLocked(race)}
               />
             ))}
           </View>
@@ -463,12 +496,14 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
                               isOpen={openEvents.has(race.id)}
                               onToggle={() => toggleEvent(race.id)}
                               onSelectSub={handleRacePress}
+                              isLocked={isRaceLocked}
                             />
                           ) : (
                             <RaceRow
                               key={race.id}
                               race={race}
                               onPress={() => handleRacePress(race)}
+                              locked={isRaceLocked(race)}
                             />
                           )
                         )}
