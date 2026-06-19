@@ -28,6 +28,7 @@
         "backgroundColor": "#0A0F1A"
       },
       "package": "com.lopentelopen.app",
+      "versionCode": 2,
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -75,3 +76,7 @@
       "router": {},
       "eas": {
         "projectId": "77bb6e1a-d692-48e8-8206-3cb6cdcea770"
+      }
+    }
+  }
+}
