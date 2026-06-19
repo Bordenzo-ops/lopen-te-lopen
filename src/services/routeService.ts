@@ -147,10 +147,24 @@ async function orsPost(endpoint: string, body: object): Promise<any> {
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     if (res.status === 403) {
-      throw new Error('Ongeldige API-sleutel. Voeg een geldige ORS-sleutel toe in premiumConfig.ts.');
+      // 403 kan meerdere oorzaken hebben (daglimiet, geweigerde sleutel,
+      // niet-toegestane route). Toon de echte ORS-melding in plaats van te
+      // gokken dat het de sleutel is.
+      let reason = '';
+      try {
+        const json = JSON.parse(text);
+        reason = json?.error?.message ?? json?.error ?? '';
+      } catch {
+        reason = text;
+      }
+      throw new Error(
+        reason
+          ? `Routeplanner geweigerd: ${reason}`
+          : 'Routeplanner geweigerd (403). Mogelijk je ORS-daglimiet of sleutel. Probeer het later opnieuw.',
+      );
     }
     if (res.status === 429) {
-      throw new Error('Dagelijkse limiet bereikt. Probeer het morgen opnieuw.');
+      throw new Error('Te veel aanvragen in korte tijd. Wacht een minuut en probeer het opnieuw.');
     }
     // Probeer de echte ORS-foutmelding uit de response body te halen
     let detail = '';

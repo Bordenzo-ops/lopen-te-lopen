@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getTrainingPlan } from '../data/trainingPlans';
 import type { GoalType, Session, TrainingWeek } from '../data/trainingPlans';
 import type { RacePlan } from '../data/buildRacePlan';
-import { ensureAnonymousSession, getCurrentSession } from '../services/authService';
+import { ensureAnonymousSession } from '../services/authService';
 import { syncAll } from '../services/syncService';
 import { isPremiumActive as fetchPremiumActive } from '../services/purchaseService';
 
@@ -200,7 +200,10 @@ export const useAppStore = create<AppState>()(
 
       syncNow: async () => {
         try {
-          const session = await getCurrentSession();
+          // Zorg zelf voor een (anonieme) sessie. Dit voorkomt dat een sync
+          // wordt overgeslagen wanneer de sessie nog niet klaar was, en is
+          // idempotent: bestaat er al een sessie, dan wordt die hergebruikt.
+          const session = await ensureAnonymousSession();
           if (!session) {
             set({ isSignedIn: false });
             return;
@@ -347,6 +350,9 @@ export const useAppStore = create<AppState>()(
       onRehydrateStorage: () => (state) => {
         // Gezet na succesvolle én mislukte rehydratie
         state?.setHasHydrated(true);
+        // Nu het profiel uit de opslag geladen is, alsnog synchroniseren.
+        // syncNow zorgt zelf voor een anonieme sessie. Best-effort, faalt stil.
+        void state?.syncNow();
       },
     },
   ),
