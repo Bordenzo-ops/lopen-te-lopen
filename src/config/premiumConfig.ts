@@ -24,7 +24,7 @@ export const PREMIUM_CONFIG = {
    * false = iedereen kan alle premium features gebruiken (testfase)
    * true  = gratis gebruikers krijgen de basislaag, premium ontgrendelt alles
    */
-  PAYWALL_ACTIVE: false,
+  PAYWALL_ACTIVE: true,
 
   /**
    * Routeplanner: hoeveel routes mag een gratis gebruiker per week plannen?
