@@ -7,12 +7,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Minus, Plus } from 'lucide-react-native';
 import { colors, typography, spacing, radius } from '../../src/theme/tokens';
 import { Button } from '../../src/components/ui/Button';
+import { DayPicker } from '../../src/components/ui/DayPicker';
+import { DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
 import type { GoalType } from '../../src/data/trainingPlans';
 
 export default function ProfileScreen() {
   const { goal, schemaMode, raceId } = useLocalSearchParams<{ goal: GoalType; schemaMode: string; raceId: string }>();
   const [name, setName] = useState('');
   const [age, setAge] = useState(30);
+  const [trainingDays, setTrainingDays] = useState<number[]>(DEFAULT_TRAINING_DAYS);
+
+  const daysValid = trainingDays.length === 3;
 
   const maxHr = 220 - age;
   const adjustAge = (delta: number) => {
@@ -78,6 +83,15 @@ export default function ProfileScreen() {
             </View>
           </View>
 
+          {/* Trainingsdagen */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Jouw trainingsdagen</Text>
+            <Text style={styles.daysHint}>
+              Kies de 3 dagen waarop je wil trainen. De lange duurloop plannen we op de laatste dag.
+            </Text>
+            <DayPicker value={trainingDays} onChange={setTrainingDays} required={3} />
+          </View>
+
           {/* Hartslagzone preview */}
           <View style={styles.hrCard}>
             <Text style={styles.hrTitle}>Jouw hartslagzones</Text>
@@ -113,8 +127,16 @@ export default function ProfileScreen() {
           label="Volgende"
           onPress={() => router.push({
             pathname: '/(onboarding)/voice',
-            params: { goal, name, age: String(age), schemaMode: schemaMode ?? 'training', raceId: raceId ?? '' },
+            params: {
+              goal,
+              name,
+              age: String(age),
+              schemaMode: schemaMode ?? 'training',
+              raceId: raceId ?? '',
+              trainingDays: trainingDays.join(','),
+            },
           })}
+          disabled={!daysValid}
           fullWidth
           size="lg"
         />
@@ -155,6 +177,10 @@ const styles = StyleSheet.create({
   },
   charCount: {
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs, color: colors.textTertiary,
+  },
+  daysHint: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm,
+    color: colors.textSecondary, lineHeight: typography.fontSize.sm * 1.5,
   },
   input: {
     backgroundColor: colors.bgCard, borderRadius: radius.lg, borderWidth: 1,

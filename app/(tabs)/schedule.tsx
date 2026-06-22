@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { ChevronDown, ChevronRight } from 'lucide-react-native';
+import { ChevronDown, ChevronRight, CalendarDays } from 'lucide-react-native';
 import { colors, typography, spacing, radius } from '../../src/theme/tokens';
 import { useAppStore, selectIsSessionCompleted } from '../../src/store/appStore';
-import { getTrainingPlan, zoneInfo } from '../../src/data/trainingPlans';
+import { getTrainingPlan, zoneInfo, remapWeekDays, DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
+import { DayPicker } from '../../src/components/ui/DayPicker';
 import { weeksUntilRace } from '../../src/data/rotterdamRaces';
 import { Dumbbell, Trophy } from 'lucide-react-native';
 
@@ -18,13 +19,25 @@ export default function ScheduleScreen() {
   const racePlan = useAppStore(s => s.racePlan);
   const schemaMode = useAppStore(s => s.schemaMode);
   const setSchemaMode = useAppStore(s => s.setSchemaMode);
+  const updateProfile = useAppStore(s => s.updateProfile);
   const [expandedWeek, setExpandedWeek] = useState<number>(currentWeek);
+  const [showDayPicker, setShowDayPicker] = useState(false);
+  const [draftDays, setDraftDays] = useState<number[] | null>(null);
 
   if (!profile) return null;
 
+  const trainingDays = profile.trainingDays ?? DEFAULT_TRAINING_DAYS;
+  // Tijdens het bewerken volgen we een lokale concept-selectie, zodat de
+  // gebruiker dagen kan wegklikken voordat er weer 3 gekozen zijn. Pas bij
+  // precies 3 dagen slaan we de wijziging op in het profiel.
+  const pickerDays = draftDays ?? trainingDays;
+
   const fallbackPlan = getTrainingPlan(profile.goal);
   const useRace = schemaMode === 'race' && !!racePlan;
-  const planWeeks = useRace ? racePlan!.weeks : fallbackPlan.plan;
+  // Zet de sessies op de zelfgekozen trainingsdagen. Muteert het schema niet.
+  const planWeeks = (useRace ? racePlan!.weeks : fallbackPlan.plan).map(w =>
+    remapWeekDays(w, trainingDays),
+  );
   const planName  = useRace ? racePlan!.race.name : fallbackPlan.name;
   const planTotal = useRace ? racePlan!.totalWeeks : fallbackPlan.weeks;
   const weeksLeft = useRace ? weeksUntilRace(racePlan!.race.date) : null;
@@ -95,6 +108,45 @@ export default function ScheduleScreen() {
             >
               <Text style={styles.noRaceBtnText}>Kies een wedstrijd</Text>
             </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Trainingsdagen aanpassen */}
+        <TouchableOpacity
+          style={styles.daysToggle}
+          onPress={() => setShowDayPicker(v => !v)}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Trainingsdagen aanpassen"
+          accessibilityState={{ expanded: showDayPicker }}
+        >
+          <CalendarDays size={14} color={colors.brandPrimary} strokeWidth={2} />
+          <Text style={styles.daysToggleText}>
+            Trainingsdagen: {trainingDays.slice().sort((a, b) => a - b).map(d => dayLabel[d]).join(', ')}
+          </Text>
+          {showDayPicker
+            ? <ChevronDown size={16} color={colors.textSecondary} strokeWidth={2} />
+            : <ChevronRight size={16} color={colors.textSecondary} strokeWidth={2} />
+          }
+        </TouchableOpacity>
+
+        {showDayPicker && (
+          <View style={styles.daysPickerBox}>
+            <DayPicker
+              value={pickerDays}
+              onChange={(days) => {
+                setDraftDays(days);
+                // Bewaar pas zodra er precies 3 dagen gekozen zijn.
+                if (days.length === 3) {
+                  updateProfile({ trainingDays: days });
+                  setDraftDays(null);
+                }
+              }}
+              required={3}
+            />
+            <Text style={styles.daysPickerNote}>
+              De lange duurloop komt op je laatste trainingsdag.
+            </Text>
           </View>
         )}
       </View>
@@ -237,6 +289,27 @@ const styles = StyleSheet.create({
   },
   noRaceBtnText: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm, color: '#fff',
+  },
+  daysToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginTop: spacing[1], minHeight: 44,
+    paddingHorizontal: spacing[1.5],
+    backgroundColor: colors.bgCard, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+  },
+  daysToggleText: {
+    flex: 1,
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.sm,
+    color: colors.textPrimary,
+  },
+  daysPickerBox: {
+    marginTop: spacing[1], padding: spacing[1.5], gap: spacing[1],
+    backgroundColor: colors.bgCard, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+  },
+  daysPickerNote: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
+    color: colors.textTertiary,
   },
   zoneLegend: {
     flexDirection: 'row',

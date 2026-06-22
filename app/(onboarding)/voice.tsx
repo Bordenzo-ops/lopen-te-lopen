@@ -9,14 +9,15 @@ import { useAppStore } from '../../src/store/appStore';
 import * as voiceService from '../../src/services/voiceService';
 import type { VoiceType } from '../../src/config/voiceConfig';
 import type { GoalType } from '../../src/data/trainingPlans';
+import { DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
 import { ROTTERDAM_RACES } from '../../src/data/rotterdamRaces';
 import { buildRacePlan } from '../../src/data/buildRacePlan';
 import { usePremium } from '../../src/hooks/usePremium';
 import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
 
 export default function VoiceScreen() {
-  const { goal, name, age, schemaMode, raceId } =
-    useLocalSearchParams<{ goal: GoalType; name: string; age: string; schemaMode: string; raceId: string }>();
+  const { goal, name, age, schemaMode, raceId, trainingDays } =
+    useLocalSearchParams<{ goal: GoalType; name: string; age: string; schemaMode: string; raceId: string; trainingDays: string }>();
   const [voiceGuidance, setVoiceGuidance] = useState(true);
   const [voiceType, setVoiceType]         = useState<VoiceType>('female');
   const completeOnboarding = useAppStore(s => s.completeOnboarding);
@@ -32,6 +33,18 @@ export default function VoiceScreen() {
 
   const handleStart = () => {
     voiceService.stop();
+
+    // Trainingsdagen uit de onboarding-parameter teruglezen. Valt terug op de
+    // standaarddagen bij ontbreken of een ongeldige waarde (geen 3 dagen).
+    const parsedDays = (trainingDays ?? '')
+      .split(',')
+      .map(d => parseInt(d, 10))
+      .filter(d => Number.isInteger(d) && d >= 1 && d <= 7);
+    const chosenDays =
+      parsedDays.length === 3 && new Set(parsedDays).size === 3
+        ? parsedDays
+        : DEFAULT_TRAINING_DAYS;
+
     completeOnboarding({
       name: name || 'Hardloper',
       goal: goal as GoalType,
@@ -40,6 +53,7 @@ export default function VoiceScreen() {
       maxHeartRate: 220 - (parseInt(age) || 30),
       voiceGuidance,
       voiceType,
+      trainingDays: chosenDays,
     });
 
     const mode = schemaMode === 'race' ? 'race' : 'training';

@@ -34,6 +34,11 @@ export interface UserProfile {
   voiceType?: 'female' | 'male';
   /** Routeplanner standaard aan bij sessiestart (default false) */
   routePlannerEnabled?: boolean;
+  /**
+   * Zelfgekozen trainingsdagen: array van 3 weekdagnummers (1=ma t/m 7=zo).
+   * Bij ontbreken of ongeldige waarde wordt DEFAULT_TRAINING_DAYS gebruikt.
+   */
+  trainingDays?: number[];
   /** Premium-status: default true zolang betaalmuur niet actief is */
   isPremium?: boolean;
 }

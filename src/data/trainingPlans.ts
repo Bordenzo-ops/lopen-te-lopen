@@ -467,6 +467,70 @@ export const trainingPlans: TrainingPlan[] = [
   },
 ];
 
+// ── Trainingsdagen ────────────────────────────
+// Standaard trainen op maandag, woensdag en zaterdag.
+// Weekdagnummers: 1=ma, 2=di, 3=wo, 4=do, 5=vr, 6=za, 7=zo.
+export const DEFAULT_TRAINING_DAYS = [1, 3, 6];
+
+/**
+ * Geeft een nieuwe TrainingWeek terug waarin de sessies op de zelfgekozen
+ * trainingsdagen staan. De lange duurloop (type 'long', anders de sessie met
+ * de grootste afstand) komt op de laatst gekozen dag (chronologisch). De
+ * overige sessies behouden hun onderlinge volgorde en komen op de eerdere
+ * gekozen dagen.
+ *
+ * Muteert niets: zowel de week als de sessies worden gekopieerd. Alleen het
+ * veld `day` verandert, de sessie-id's blijven gelijk zodat voltooide-sessie-
+ * matching blijft werken.
+ *
+ * @param week  De originele trainingsweek (3 sessies).
+ * @param days  Drie weekdagnummers (1 t/m 7). Bij een ongeldige of onvolledige
+ *              invoer wordt teruggevallen op DEFAULT_TRAINING_DAYS.
+ */
+export function remapWeekDays(week: TrainingWeek, days?: number[]): TrainingWeek {
+  // Valideer de invoer: precies 3 unieke dagen tussen 1 en 7.
+  const valid =
+    Array.isArray(days) &&
+    days.length === 3 &&
+    days.every(d => Number.isInteger(d) && d >= 1 && d <= 7) &&
+    new Set(days).size === 3;
+
+  const chosen = (valid ? days! : DEFAULT_TRAINING_DAYS).slice().sort((a, b) => a - b);
+
+  // Niet ingrijpen als de week geen 3 sessies heeft (defensief).
+  if (week.sessions.length !== 3) {
+    return { ...week, sessions: week.sessions.map(s => ({ ...s })) };
+  }
+
+  // Bepaal de lange-duurloop-sessie: bij voorkeur type 'long', anders de
+  // sessie met de grootste afstand.
+  let longIndex = week.sessions.findIndex(s => s.type === 'long');
+  if (longIndex === -1) {
+    longIndex = week.sessions.reduce(
+      (maxIdx, s, idx, arr) => (s.distanceKm > arr[maxIdx].distanceKm ? idx : maxIdx),
+      0,
+    );
+  }
+
+  const lastDay = chosen[chosen.length - 1];
+  const earlierDays = chosen.slice(0, chosen.length - 1);
+
+  const remapped: Session[] = week.sessions.map(s => ({ ...s }));
+
+  // Lange duurloop op de laatst gekozen dag.
+  remapped[longIndex] = { ...remapped[longIndex], day: lastDay };
+
+  // Overige sessies op de eerdere dagen, in volgorde.
+  let earlierPos = 0;
+  for (let i = 0; i < remapped.length; i++) {
+    if (i === longIndex) continue;
+    remapped[i] = { ...remapped[i], day: earlierDays[earlierPos] ?? remapped[i].day };
+    earlierPos++;
+  }
+
+  return { ...week, sessions: remapped };
+}
+
 export const getTrainingPlan = (goal: GoalType): TrainingPlan =>
   trainingPlans.find(p => p.id === goal)!;
 

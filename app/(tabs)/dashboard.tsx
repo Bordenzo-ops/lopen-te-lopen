@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Play, TrendingUp, Flame } from 'lucide-react-native';
 import { colors, typography, spacing, radius } from '../../src/theme/tokens';
 import { useAppStore, selectWeeklyKm, selectIsSessionCompleted, selectTotalKm } from '../../src/store/appStore';
-import { getTrainingPlan } from '../../src/data/trainingPlans';
+import { getTrainingPlan, remapWeekDays, DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
 import { SessionCard } from '../../src/components/ui/SessionCard';
 import { StatRing } from '../../src/components/ui/StatRing';
 import { Button } from '../../src/components/ui/Button';
@@ -36,7 +36,12 @@ export default function DashboardScreen() {
   // Werkelijk totaal km van het schema (voor de voortgangsring)
   const planTotalKm = activePlan.reduce((sum, w) => sum + w.totalKm, 0);
 
-  const week = activePlan[currentWeek - 1];
+  const trainingDays = profile.trainingDays ?? DEFAULT_TRAINING_DAYS;
+  // Remap de getoonde week naar de zelfgekozen trainingsdagen. De sessie-id's
+  // blijven gelijk, alleen het dagveld verandert, dus de voltooide-sessie-
+  // matching blijft werken.
+  const rawWeek = activePlan[currentWeek - 1];
+  const week = rawWeek ? remapWeekDays(rawWeek, trainingDays) : rawWeek;
   const weekKm = completedSessions
     .filter(s => s.weekNumber === currentWeek)
     .reduce((sum, s) => sum + s.actualDistanceKm, 0);
