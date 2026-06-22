@@ -84,6 +84,14 @@ interface AppState {
   // Wedstrijdschema
   racePlan: RacePlan | null;
 
+  /**
+   * Doeltijd voor de gekozen wedstrijd in totale seconden. Premium-feature:
+   * hieruit berekent de app een persoonlijk trainingstempo per sessie. Null
+   * als de gebruiker geen doeltijd heeft ingesteld. Gepersisteerd, hoort bij
+   * het opgeslagen racePlan.
+   */
+  raceTargetSeconds: number | null;
+
   // Schema-modus: vrij trainen of voor een wedstrijd
   schemaMode: 'training' | 'race';
 
@@ -136,6 +144,11 @@ interface AppState {
   // Actions
   completeOnboarding: (profile: UserProfile) => void;
   setRacePlan: (plan: RacePlan | null) => void;
+  /**
+   * Leg de doeltijd voor de wedstrijd vast (totale seconden), of wis hem met
+   * null. Premium-feature voor het persoonlijke trainingstempo.
+   */
+  setRaceTargetSeconds: (seconds: number | null) => void;
   setSchemaMode: (mode: 'training' | 'race') => void;
   updateProfile: (updates: Partial<UserProfile>) => void;
   startSession: (session: Session, weekNumber: number) => void;
@@ -165,6 +178,7 @@ export const useAppStore = create<AppState>()(
       currentWeek: 1,
       activeSession: null,
       racePlan: null,
+      raceTargetSeconds: null,
       schemaMode: 'training',
       routePlanCount: 0,
       routePlanWeekStart: null,
@@ -238,7 +252,10 @@ export const useAppStore = create<AppState>()(
       },
 
       setHasHydrated: (v) => set({ _hasHydrated: v }),
-      setRacePlan: (plan) => set({ racePlan: plan }),
+      // Een nieuw (of gewist) wedstrijdschema reset altijd de doeltijd, zodat
+      // een tempo van een vorige wedstrijd nooit blijft hangen.
+      setRacePlan: (plan) => set({ racePlan: plan, raceTargetSeconds: null }),
+      setRaceTargetSeconds: (seconds) => set({ raceTargetSeconds: seconds }),
       setSchemaMode: (mode) => set({ schemaMode: mode }),
 
       completeOnboarding: (profile) => {
@@ -348,6 +365,7 @@ export const useAppStore = create<AppState>()(
         completedSessions:      state.completedSessions,
         currentWeek:            state.currentWeek,
         racePlan:               state.racePlan,
+        raceTargetSeconds:      state.raceTargetSeconds,
         schemaMode:             state.schemaMode,
         routePlanCount:         state.routePlanCount,
         routePlanWeekStart:     state.routePlanWeekStart,

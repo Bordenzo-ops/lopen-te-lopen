@@ -21,6 +21,8 @@ import { LiveRouteMap } from '../../src/components/ui/LiveRouteMap';
 import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
 import { PREMIUM_CONFIG } from '../../src/config/premiumConfig';
 import { usePremium } from '../../src/hooks/usePremium';
+import { useRacePace } from '../../src/hooks/useRacePace';
+import { formatPacePerKm } from '../../src/data/paceModel';
 import { selectRoutePlansThisWeek } from '../../src/store/appStore';
 import type { PlannedRoute } from '../../src/services/routeService';
 
@@ -68,6 +70,7 @@ export default function ActiveSessionScreen() {
   const registerRoutePlan = useAppStore(s => s.registerRoutePlan);
   const routePlansThisWeek = useAppStore(selectRoutePlansThisWeek);
   const { hasAccess, promptUpgrade } = usePremium();
+  const { paceForType } = useRacePace();
 
   const [elapsed, setElapsed]               = useState(0);
   const [isRunning, setIsRunning]           = useState(false);
@@ -302,6 +305,8 @@ export default function ActiveSessionScreen() {
   // ── Afgeleid ──────────────────────────────────────────────────────────────
   const targetPct = session ? Math.min(100, (distanceKm / session.distanceKm) * 100) : 0;
   const zoneColor = session ? zoneInfo[session.zone].color : colors.brandPrimary;
+  // Persoonlijk doeltempo voor deze sessie (premium + ingestelde doeltijd).
+  const targetTrainingPace = session ? paceForType(session.type) : null;
 
   const formatTime = (s: number) => {
     const h   = Math.floor(s / 3600);
@@ -531,7 +536,13 @@ export default function ActiveSessionScreen() {
           <View style={styles.statCell}>
             <Text style={styles.statLabel}>Tempo</Text>
             <Text style={styles.statValue}>{formatPace(paceSecPerKm)}</Text>
-            <Text style={styles.statUnit}>min/km</Text>
+            {targetTrainingPace != null && targetTrainingPace > 0 ? (
+              <Text style={styles.statTargetPace} accessibilityLabel={`Doeltempo ${formatPacePerKm(targetTrainingPace)}`}>
+                doel {formatPacePerKm(targetTrainingPace)}
+              </Text>
+            ) : (
+              <Text style={styles.statUnit}>min/km</Text>
+            )}
           </View>
           <View style={[styles.statCell, styles.statCellCenter]}>
             <Text style={styles.statLabel}>Afstand</Text>
@@ -764,6 +775,10 @@ const styles = StyleSheet.create({
   statUnit: {
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
     color: colors.textTertiary, marginTop: 2,
+  },
+  statTargetPace: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.xs,
+    color: colors.brandLight, marginTop: 2,
   },
   tipBanner: {
     marginHorizontal: spacing[3], backgroundColor: colors.bgSurface,

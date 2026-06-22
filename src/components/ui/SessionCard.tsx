@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { MapPin, Clock, Zap, CheckCircle2, Info } from 'lucide-react-native';
+import { MapPin, Clock, Zap, CheckCircle2, Info, Timer } from 'lucide-react-native';
 import { colors, typography, spacing, radius } from '../../theme/tokens';
 import { ZoneBadge } from './ZoneBadge';
 import { SessionTypeSheet } from './SessionTypeSheet';
+import { formatPacePerKm } from '../../data/paceModel';
 import type { Session } from '../../data/trainingPlans';
 
 interface SessionCardProps {
@@ -11,6 +12,12 @@ interface SessionCardProps {
   isCompleted?: boolean;
   onPress?: () => void;
   variant?: 'default' | 'next';
+  /**
+   * Persoonlijk trainingstempo (sec/km) voor deze sessie. Alleen gevuld bij
+   * premium met ingestelde doeltijd; dan tonen we het tempo naast de
+   * hartslagzone. Null of undefined: er verandert niets aan de weergave.
+   */
+  trainingPaceSecPerKm?: number | null;
 }
 
 const sessionTypeLabel: Record<Session['type'], string> = {
@@ -23,9 +30,10 @@ const sessionTypeLabel: Record<Session['type'], string> = {
 
 const dayLabel = ['', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag', 'Zondag'];
 
-export function SessionCard({ session, isCompleted = false, onPress, variant = 'default' }: SessionCardProps) {
+export function SessionCard({ session, isCompleted = false, onPress, variant = 'default', trainingPaceSecPerKm }: SessionCardProps) {
   const isNext = variant === 'next';
   const [showInfo, setShowInfo] = useState(false);
+  const showPace = trainingPaceSecPerKm != null && trainingPaceSecPerKm > 0;
 
   return (
     <TouchableOpacity
@@ -77,6 +85,13 @@ export function SessionCard({ session, isCompleted = false, onPress, variant = '
           </Text>
         </View>
         <ZoneBadge zone={session.zone} size="sm" />
+        {/* Persoonlijk trainingstempo naast de hartslagzone (premium + doeltijd) */}
+        {showPace && (
+          <View style={styles.paceChip} accessibilityLabel={`Doeltempo ${formatPacePerKm(trainingPaceSecPerKm)}`}>
+            <Timer size={12} color={colors.brandLight} strokeWidth={2} />
+            <Text style={styles.paceChipText}>{formatPacePerKm(trainingPaceSecPerKm)}</Text>
+          </View>
+        )}
       </View>
 
       {/* Coach tip */}
@@ -149,6 +164,23 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.sansMedium,
     fontSize: typography.fontSize.sm,
     color: colors.textSecondary,
+  },
+  paceChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing[1],
+    paddingVertical: 4,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.brandPrimary + '55',
+    backgroundColor: colors.brandPrimary + '1A',
+  },
+  paceChipText: {
+    fontFamily: typography.fontFamily.sansSemi,
+    fontSize: typography.fontSize.xs,
+    color: colors.brandLight,
+    letterSpacing: typography.letterSpacing.wide,
   },
   nextBadge: {
     flexDirection: 'row',

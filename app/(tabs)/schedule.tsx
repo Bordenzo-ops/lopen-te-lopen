@@ -9,6 +9,8 @@ import { getTrainingPlan, zoneInfo, remapWeekDays, DEFAULT_TRAINING_DAYS } from 
 import { DayPicker } from '../../src/components/ui/DayPicker';
 import { weeksUntilRace } from '../../src/data/rotterdamRaces';
 import { Dumbbell, Trophy } from 'lucide-react-native';
+import { useRacePace } from '../../src/hooks/useRacePace';
+import { formatPacePerKm } from '../../src/data/paceModel';
 
 const dayLabel = ['', 'Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'];
 
@@ -20,6 +22,7 @@ export default function ScheduleScreen() {
   const schemaMode = useAppStore(s => s.schemaMode);
   const setSchemaMode = useAppStore(s => s.setSchemaMode);
   const updateProfile = useAppStore(s => s.updateProfile);
+  const { paceForType } = useRacePace();
   const [expandedWeek, setExpandedWeek] = useState<number>(currentWeek);
   const [showDayPicker, setShowDayPicker] = useState(false);
   const [draftDays, setDraftDays] = useState<number[] | null>(null);
@@ -212,6 +215,7 @@ export default function ScheduleScreen() {
                 <View style={styles.sessionList}>
                   {week.sessions.map(session => {
                     const isCompleted = completedSessions.some(c => c.sessionId === session.id);
+                    const pace = paceForType(session.type);
                     return (
                       <View key={session.id} style={[styles.sessionRow, isCompleted && styles.sessionRowDone]}>
                         <View style={[styles.sessionDot, { backgroundColor: zoneInfo[session.zone].color }, isCompleted && styles.sessionDotDone]} />
@@ -219,6 +223,10 @@ export default function ScheduleScreen() {
                         <Text style={[styles.sessionDesc, isCompleted && styles.textMuted]} numberOfLines={1}>
                           {session.description}
                         </Text>
+                        {/* Persoonlijk trainingstempo naast de afstand (premium + doeltijd) */}
+                        {pace != null && pace > 0 && (
+                          <Text style={styles.sessionPace}>{formatPacePerKm(pace)}</Text>
+                        )}
                         <Text style={styles.sessionKm}>{session.distanceKm} km</Text>
                         {isCompleted && <Text style={styles.checkmark}>✓</Text>}
                       </View>
@@ -388,6 +396,10 @@ const styles = StyleSheet.create({
   },
   sessionKm: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm, color: colors.textSecondary,
+  },
+  sessionPace: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.xs,
+    color: colors.brandLight,
   },
   checkmark: { color: colors.success, fontSize: 14, fontFamily: typography.fontFamily.sansBold },
   textMuted: { color: colors.textTertiary },

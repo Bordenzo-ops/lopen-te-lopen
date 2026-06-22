@@ -6,12 +6,15 @@ import { RacePickerScreen } from '../../src/components/ui/RacePickerScreen';
 import type { RacePlan } from '../../src/data/buildRacePlan';
 
 export default function RacesTab() {
-  const setRacePlan    = useAppStore(s => s.setRacePlan);
-  const setSchemaMode  = useAppStore(s => s.setSchemaMode);
-  const updateProfile  = useAppStore(s => s.updateProfile);
+  const setRacePlan          = useAppStore(s => s.setRacePlan);
+  const setSchemaMode        = useAppStore(s => s.setSchemaMode);
+  const updateProfile        = useAppStore(s => s.updateProfile);
+  const setRaceTargetSeconds = useAppStore(s => s.setRaceTargetSeconds);
 
-  function handleSelectRace(plan: RacePlan) {
+  function handleSelectRace(plan: RacePlan, targetSeconds: number | null) {
+    // setRacePlan reset eerst de doeltijd; daarna zetten we de nieuwe (premium).
     setRacePlan(plan);
+    setRaceTargetSeconds(targetSeconds);
     setSchemaMode('race');
     // Sync profile.goal zodat het vrije trainingsschema ook klopt als de
     // gebruiker later terugschakelt naar trainingsmodus

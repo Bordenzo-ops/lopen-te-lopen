@@ -8,11 +8,11 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  LayoutAnimation, Platform, UIManager, Alert,
+  LayoutAnimation, Platform, UIManager, Alert, TextInput,
 } from 'react-native';
 import {
   ChevronDown, ChevronRight, ChevronLeft,
-  MapPin, Calendar, Clock, Trophy, CheckCircle2, X, Lock,
+  MapPin, Calendar, Clock, Trophy, CheckCircle2, X, Lock, Timer, Crown,
 } from 'lucide-react-native';
 import { colors, palette, typography, spacing, radius, shadows } from '../../theme/tokens';
 import {
@@ -22,6 +22,10 @@ import {
 import { buildRacePlan, canTrainForRace, type RacePlan } from '../../data/buildRacePlan';
 import { usePremium } from '../../hooks/usePremium';
 import { isRaceDistanceFree } from '../../config/premiumConfig';
+import {
+  parseTimeToSeconds, parsePaceToSecPerKm, paceToTargetSeconds,
+  raceDistanceToKm, realismHint, racePaceSecPerKm, formatPacePerKm,
+} from '../../data/paceModel';
 import { PremiumBadge } from './PremiumBadge';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Modal } from 'react-native';
@@ -229,10 +233,158 @@ function EventGroupRow({
 
 // ── Bevestigingsmodal ─────────────────────────────────────────────────────────
 
+// ── Doeltijd-invoer (premium) ─────────────────────────────────────────────────
+//
+// De gebruiker kiest tussen een eindtijd (uu:mm:ss) of een tempo per km
+// (mm:ss). Daaruit berekenen we een doel-racetempo. Premium-feature: gratis
+// gebruikers krijgen dit blok als upgrade-uitnodiging te zien.
+
+type TargetMode = 'time' | 'pace';
+
+function TargetTimeInput({
+  raceKm, accent, hasAccess, onChangeSeconds, onUpgrade,
+}: {
+  raceKm: number;
+  accent: string;
+  hasAccess: boolean;
+  onChangeSeconds: (seconds: number | null) => void;
+  onUpgrade: () => void;
+}) {
+  const [mode, setMode]   = useState<TargetMode>('time');
+  const [value, setValue] = useState('');
+
+  // Bereken seconden + hint live mee bij elke invoerwijziging.
+  function handleChange(text: string) {
+    setValue(text);
+    if (!hasAccess) return;
+
+    let seconds: number | null = null;
+    if (mode === 'time') {
+      seconds = parseTimeToSeconds(text);
+    } else {
+      const pace = parsePaceToSecPerKm(text);
+      seconds = pace !== null ? paceToTargetSeconds(pace, raceKm) : null;
+    }
+    onChangeSeconds(seconds);
+  }
+
+  function switchMode(next: TargetMode) {
+    if (next === mode) return;
+    setMode(next);
+    setValue('');
+    onChangeSeconds(null);
+  }
+
+  // Afgeleide weergave voor premium-gebruikers met geldige invoer.
+  const seconds =
+    mode === 'time'
+      ? parseTimeToSeconds(value)
+      : (() => {
+          const p = parsePaceToSecPerKm(value);
+          return p !== null ? paceToTargetSeconds(p, raceKm) : null;
+        })();
+  const pace = seconds !== null ? racePaceSecPerKm(seconds, raceKm) : null;
+  const hint = seconds !== null ? realismHint(seconds, raceKm) : null;
+
+  return (
+    <View style={styles.targetBox}>
+      <View style={styles.targetHeaderRow}>
+        <Timer size={15} color={accent} strokeWidth={2} />
+        <Text style={styles.targetTitle}>Persoonlijk doeltempo</Text>
+        <PremiumBadge />
+      </View>
+
+      {hasAccess ? (
+        <>
+          <Text style={styles.targetSub}>
+            Geef een doel op, dan rekent de app per training een persoonlijk tempo uit naast je hartslagzones.
+          </Text>
+
+          {/* Toggle eindtijd of tempo */}
+          <View style={styles.targetToggle}>
+            <TouchableOpacity
+              style={[styles.targetToggleBtn, mode === 'time' && { backgroundColor: accent }]}
+              onPress={() => switchMode('time')}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Doel als eindtijd invoeren"
+              accessibilityState={{ selected: mode === 'time' }}
+            >
+              <Text style={[styles.targetToggleText, mode === 'time' && styles.targetToggleTextActive]}>
+                Eindtijd
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.targetToggleBtn, mode === 'pace' && { backgroundColor: accent }]}
+              onPress={() => switchMode('pace')}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Doel als tempo per kilometer invoeren"
+              accessibilityState={{ selected: mode === 'pace' }}
+            >
+              <Text style={[styles.targetToggleText, mode === 'pace' && styles.targetToggleTextActive]}>
+                Tempo per km
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <TextInput
+            style={styles.targetInput}
+            value={value}
+            onChangeText={handleChange}
+            placeholder={mode === 'time' ? 'bijv. 1:55:00' : 'bijv. 5:30'}
+            placeholderTextColor={colors.textTertiary}
+            keyboardType="numbers-and-punctuation"
+            accessibilityLabel={mode === 'time' ? 'Doel-eindtijd in uren, minuten, seconden' : 'Doeltempo in minuten en seconden per kilometer'}
+          />
+
+          {pace !== null && (
+            <Text style={[styles.targetResult, { color: accent }]}>
+              Doel-racetempo: {formatPacePerKm(pace)}
+            </Text>
+          )}
+          {hint && (
+            <Text style={styles.targetHint}>{hint}</Text>
+          )}
+          <Text style={styles.targetOptional}>
+            Optioneel. Laat leeg voor het standaard wedstrijdschema.
+          </Text>
+        </>
+      ) : (
+        <>
+          <Text style={styles.targetSub}>
+            Met premium reken je uit elke training een persoonlijk tempo uit, op basis van je gewenste eindtijd of doeltempo.
+          </Text>
+          <TouchableOpacity
+            style={[styles.targetUpgradeBtn, { borderColor: accent + '66' }]}
+            onPress={onUpgrade}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Ontgrendel persoonlijk doeltempo met premium"
+          >
+            <Crown size={14} color={accent} strokeWidth={2.5} />
+            <Text style={[styles.targetUpgradeText, { color: accent }]}>
+              Ontgrendel met premium
+            </Text>
+          </TouchableOpacity>
+        </>
+      )}
+    </View>
+  );
+}
+
 function ConfirmModal({
-  plan, onConfirm, onCancel,
-}: { plan: RacePlan; onConfirm: () => void; onCancel: () => void }) {
+  plan, onConfirm, onCancel, hasAccess, onUpgrade,
+}: {
+  plan: RacePlan;
+  onConfirm: (targetSeconds: number | null) => void;
+  onCancel: () => void;
+  hasAccess: boolean;
+  onUpgrade: () => void;
+}) {
   const accent = plan.race.accentColor;
+  const raceKm = raceDistanceToKm(plan.race.distance);
+  const [targetSeconds, setTargetSeconds] = useState<number | null>(null);
   const startStr = new Date(plan.startDate).toLocaleDateString('nl-NL', {
     day: 'numeric', month: 'long', year: 'numeric',
   });
@@ -240,43 +392,59 @@ function ConfirmModal({
   return (
     <Modal transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.modalBackdrop}>
-        <View style={styles.modalSheet}>
-          <TouchableOpacity style={styles.modalClose} onPress={onCancel} hitSlop={12}>
-            <X size={20} color={colors.textSecondary} strokeWidth={2} />
-          </TouchableOpacity>
+        <ScrollView
+          style={styles.modalScroll}
+          contentContainerStyle={styles.modalScrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.modalSheet}>
+            <TouchableOpacity style={styles.modalClose} onPress={onCancel} hitSlop={12}>
+              <X size={20} color={colors.textSecondary} strokeWidth={2} />
+            </TouchableOpacity>
 
-          <View style={[styles.modalIconBox, { backgroundColor: accent + '22' }]}>
-            <Trophy size={28} color={accent} strokeWidth={1.5} />
+            <View style={[styles.modalIconBox, { backgroundColor: accent + '22' }]}>
+              <Trophy size={28} color={accent} strokeWidth={1.5} />
+            </View>
+            <Text style={styles.modalTitle}>{plan.race.name}</Text>
+            <Text style={styles.modalSub}>{plan.adaptationNote}</Text>
+
+            <View style={styles.modalStats}>
+              {[
+                { label: 'Racedag',   value: formatRaceDate(plan.race.date) },
+                { label: 'Schema',    value: `${plan.totalWeeks} weken` },
+                { label: 'Start',     value: startStr },
+                { label: 'Afstand',   value: distanceLabel[plan.race.distance] },
+              ].map(({ label, value }) => (
+                <View key={label} style={styles.modalStat}>
+                  <Text style={styles.modalStatLabel}>{label}</Text>
+                  <Text style={styles.modalStatValue}>{value}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Doeltijd-invoer (premium) */}
+            <TargetTimeInput
+              raceKm={raceKm}
+              accent={accent}
+              hasAccess={hasAccess}
+              onChangeSeconds={setTargetSeconds}
+              onUpgrade={onUpgrade}
+            />
+
+            <TouchableOpacity
+              style={[styles.confirmBtn, { backgroundColor: accent }]}
+              onPress={() => onConfirm(hasAccess ? targetSeconds : null)}
+              activeOpacity={0.85}
+            >
+              <CheckCircle2 size={18} color="#fff" strokeWidth={2.5} />
+              <Text style={styles.confirmBtnText}>Ja, start dit schema</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
+              <Text style={styles.cancelBtnText}>Annuleren</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.modalTitle}>{plan.race.name}</Text>
-          <Text style={styles.modalSub}>{plan.adaptationNote}</Text>
-
-          <View style={styles.modalStats}>
-            {[
-              { label: 'Racedag',   value: formatRaceDate(plan.race.date) },
-              { label: 'Schema',    value: `${plan.totalWeeks} weken` },
-              { label: 'Start',     value: startStr },
-              { label: 'Afstand',   value: distanceLabel[plan.race.distance] },
-            ].map(({ label, value }) => (
-              <View key={label} style={styles.modalStat}>
-                <Text style={styles.modalStatLabel}>{label}</Text>
-                <Text style={styles.modalStatValue}>{value}</Text>
-              </View>
-            ))}
-          </View>
-
-          <TouchableOpacity
-            style={[styles.confirmBtn, { backgroundColor: accent }]}
-            onPress={onConfirm}
-            activeOpacity={0.85}
-          >
-            <CheckCircle2 size={18} color="#fff" strokeWidth={2.5} />
-            <Text style={styles.confirmBtnText}>Ja, start dit schema</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
-            <Text style={styles.cancelBtnText}>Annuleren</Text>
-          </TouchableOpacity>
-        </View>
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -359,7 +527,11 @@ function FeaturedRaceCard({
 }
 
 export interface RacePickerScreenProps {
-  onSelectRace: (plan: RacePlan) => void;
+  /**
+   * Wordt aangeroepen na bevestiging. targetSeconds is de gekozen doeltijd in
+   * totale seconden (premium), of null als er geen doeltijd is ingesteld.
+   */
+  onSelectRace: (plan: RacePlan, targetSeconds: number | null) => void;
   onBack?: () => void;
 }
 
@@ -369,7 +541,7 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
   const [openEvents,    setOpenEvents]    = useState<Set<string>>(new Set());
   const [pendingPlan,   setPendingPlan]   = useState<RacePlan | null>(null);
 
-  const { hasAccess, promptUpgrade } = usePremium();
+  const { hasAccess, promptUpgrade, goToPaywall } = usePremium();
 
   // Gratis krijgt de halve marathon als standaardschema; andere afstanden
   // (en wedstrijden) zijn premium. Offline-first: onbekende status telt als gratis.
@@ -524,8 +696,10 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
       {pendingPlan && (
         <ConfirmModal
           plan={pendingPlan}
-          onConfirm={() => {
-            onSelectRace(pendingPlan);
+          hasAccess={hasAccess}
+          onUpgrade={goToPaywall}
+          onConfirm={(targetSeconds) => {
+            onSelectRace(pendingPlan, targetSeconds);
             setPendingPlan(null);
           }}
           onCancel={() => setPendingPlan(null)}
@@ -748,10 +922,68 @@ const styles = StyleSheet.create({
 
   // Modal
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  modalScroll: { maxHeight: '92%' },
+  modalScrollContent: { flexGrow: 1, justifyContent: 'flex-end' },
   modalSheet: {
     backgroundColor: colors.bgSurface,
     borderTopLeftRadius: radius['2xl'], borderTopRightRadius: radius['2xl'],
     padding: spacing[3], paddingBottom: spacing[5], alignItems: 'center', gap: spacing[1.5],
+  },
+
+  // Doeltijd-invoer (premium)
+  targetBox: {
+    width: '100%', backgroundColor: colors.bgCard, borderRadius: radius.xl,
+    padding: spacing[2], gap: spacing[1], marginTop: spacing[0.5],
+    borderWidth: 1, borderColor: colors.borderSubtle,
+  },
+  targetHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
+  targetTitle: {
+    flex: 1,
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm, color: colors.textPrimary,
+  },
+  targetSub: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
+    color: colors.textSecondary, lineHeight: typography.fontSize.xs * 1.55,
+  },
+  targetToggle: {
+    flexDirection: 'row', backgroundColor: colors.bgSurface, borderRadius: radius.lg,
+    padding: 3, gap: 3, marginTop: spacing[0.5],
+    borderWidth: 1, borderColor: colors.borderSubtle,
+  },
+  targetToggleBtn: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 9, borderRadius: radius.md, minHeight: 44,
+  },
+  targetToggleText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.xs, color: colors.textSecondary,
+  },
+  targetToggleTextActive: { color: '#fff' },
+  targetInput: {
+    backgroundColor: colors.bgSurface, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.borderDefault,
+    paddingHorizontal: spacing[1.5], minHeight: 44,
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.md,
+    color: colors.textPrimary, marginTop: spacing[0.5],
+  },
+  targetResult: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
+    marginTop: spacing[0.5],
+  },
+  targetHint: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
+    color: palette.warning, lineHeight: typography.fontSize.xs * 1.55,
+  },
+  targetOptional: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
+    color: colors.textTertiary,
+  },
+  targetUpgradeBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    minHeight: 44, borderRadius: radius.lg, borderWidth: 1, marginTop: spacing[0.5],
+    paddingHorizontal: spacing[2],
+  },
+  targetUpgradeText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
   },
   modalClose: { alignSelf: 'flex-end', padding: 4 },
   modalIconBox: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },

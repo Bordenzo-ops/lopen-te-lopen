@@ -9,6 +9,7 @@ import { getTrainingPlan, remapWeekDays, DEFAULT_TRAINING_DAYS } from '../../src
 import { SessionCard } from '../../src/components/ui/SessionCard';
 import { StatRing } from '../../src/components/ui/StatRing';
 import { Button } from '../../src/components/ui/Button';
+import { useRacePace } from '../../src/hooks/useRacePace';
 
 const goalLabel = {
   '5km': '5 KM',
@@ -24,6 +25,7 @@ export default function DashboardScreen() {
   const totalKm = useAppStore(selectTotalKm);
   const racePlan   = useAppStore(s => s.racePlan);
   const schemaMode = useAppStore(s => s.schemaMode);
+  const { paceForType } = useRacePace();
 
   if (!profile) return null;
 
@@ -110,6 +112,7 @@ export default function DashboardScreen() {
             <SessionCard
               session={nextSession}
               variant="next"
+              trainingPaceSecPerKm={paceForType(nextSession.type)}
               onPress={() =>
                 router.push({
                   pathname: '/session/active',
@@ -160,6 +163,7 @@ export default function DashboardScreen() {
                     key={session.id}
                     session={session}
                     isCompleted={isCompleted}
+                    trainingPaceSecPerKm={paceForType(session.type)}
                     onPress={
                       !isCompleted
                         ? () => router.push({
