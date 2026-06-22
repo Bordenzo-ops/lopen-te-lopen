@@ -36,10 +36,12 @@ export const PREMIUM_CONFIG = {
 
   /**
    * Wedstrijdschema's: welke afstanden mag een gratis gebruiker als
-   * wedstrijddoel kiezen? Gratis krijgt toegang tot de halve marathon als
-   * standaardschema. Premium ontgrendelt alle afstanden en wedstrijden.
+   * wedstrijddoel kiezen? Alle standaardschema's per wedstrijd zijn gratis,
+   * zodat de gratis laag volwaardig blijft. Premium zit in de personalisatie
+   * (doeltijd-gestuurde tempo's), de premium-stemmen, onbeperkt routes plannen
+   * en later de geavanceerde statistieken, niet in de basis-schema's.
    */
-  FREE_RACE_DISTANCES: ['half_marathon'] as RaceDistance[],
+  FREE_RACE_DISTANCES: ['5km', '10km', 'half_marathon', 'marathon'] as RaceDistance[],
 } as const;
 
 /**
