@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CheckCircle2, Home, Share2 } from 'lucide-react-native';
-import { colors, typography, spacing, radius, shadows } from '../../src/theme/tokens';
+import { CheckCircle2, Home, Share2, Trophy } from 'lucide-react-native';
+import { typography, spacing, radius, shadows, type ThemeColors } from '../../src/theme/tokens';
+import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
 import { getTrainingPlan, zoneInfo } from '../../src/data/trainingPlans';
 import type { TrainingWeek } from '../../src/data/trainingPlans';
 import { selectTotalKm } from '../../src/store/appStore';
+import { detectPersonalRecords } from '../../src/data/achievements';
 import { Button } from '../../src/components/ui/Button';
 import { ZoneBadge } from '../../src/components/ui/ZoneBadge';
 import { ShareRunSheet } from '../../src/components/ui/ShareRunSheet';
@@ -31,10 +33,25 @@ export default function SummaryScreen() {
   const completedInWeek = useAppStore(s =>
     s.completedSessions.filter(c => c.weekNumber === parseInt(weekNumber ?? '1')).length
   );
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   if (!profile) return null;
 
   const lastSession = completedSessions[completedSessions.length - 1];
+
+  // Persoonlijke records detecteren: vergelijk de zojuist voltooide run met alle
+  // eerdere runs (lastSession zit al in completedSessions, dus die sluiten we uit).
+  const pr = lastSession
+    ? detectPersonalRecords(lastSession, completedSessions.slice(0, -1))
+    : { longestRun: false, fastestPace: false };
+  const prText = pr.longestRun && pr.fastestPace
+    ? 'Nieuw record: je langste én snelste run tot nu toe!'
+    : pr.longestRun
+    ? 'Nieuw record: je langste run tot nu toe!'
+    : pr.fastestPace
+    ? 'Nieuw record: je snelste gemiddelde tempo tot nu toe!'
+    : null;
 
   // Zoek week en sessie op in het juiste plan (vrij of race)
   const weekNum = parseInt(weekNumber ?? '1');
@@ -102,6 +119,14 @@ export default function SummaryScreen() {
           <Text style={styles.bigStatValue}>{km.toFixed(2)}</Text>
           <Text style={styles.bigStatUnit}>kilometer</Text>
         </View>
+
+        {/* Persoonlijk record */}
+        {prText && (
+          <View style={styles.prBanner}>
+            <Trophy size={18} color={colors.premium} strokeWidth={2} />
+            <Text style={styles.prBannerText}>{prText}</Text>
+          </View>
+        )}
 
         {/* Stats grid */}
         <View style={styles.statsGrid}>
@@ -195,7 +220,7 @@ export default function SummaryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   scroll: { paddingHorizontal: spacing[3], paddingTop: spacing[4], paddingBottom: spacing[3], gap: spacing[3] },
   hero: { alignItems: 'center', gap: spacing[1.5] },
@@ -220,6 +245,16 @@ const styles = StyleSheet.create({
   bigStatUnit: {
     fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.md,
     color: colors.textSecondary, marginTop: -4,
+  },
+  prBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[1],
+    backgroundColor: colors.premium + '1A',
+    borderWidth: 1, borderColor: colors.premium + '44',
+    borderRadius: radius.lg, paddingVertical: spacing[1.5], paddingHorizontal: spacing[2],
+  },
+  prBannerText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
+    color: colors.textPrimary, flexShrink: 1,
   },
   statsGrid: {
     flexDirection: 'row', backgroundColor: colors.bgCard,

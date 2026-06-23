@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Volume2, EyeOff } from 'lucide-react-native';
-import { colors, typography, spacing, radius } from '../../src/theme/tokens';
+import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
+import { useThemeColors } from '../../src/theme/useTheme';
 import { Button } from '../../src/components/ui/Button';
 import { useAppStore } from '../../src/store/appStore';
 import * as voiceService from '../../src/services/voiceService';
@@ -24,6 +25,8 @@ export default function VoiceScreen() {
   const setSchemaMode     = useAppStore(s => s.setSchemaMode);
   const setRacePlan       = useAppStore(s => s.setRacePlan);
   const { hasAccess, goToPaywall } = usePremium();
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   // Korte voorbeeldzin zodat de gebruiker de stem direct hoort
   const previewVoice = (type: VoiceType) => {
@@ -205,7 +208,7 @@ export default function VoiceScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

@@ -47,6 +47,7 @@ import type { RaceDistance } from './rotterdamRaces';
 export const RACE_DISTANCE_KM: Record<RaceDistance, number> = {
   '5km':           5,
   '10km':          10,
+  '15km':          15,
   'half_marathon': 21.0975,
   'marathon':      42.195,
 };

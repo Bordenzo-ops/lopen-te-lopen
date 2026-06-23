@@ -5,13 +5,14 @@
  * Verschijnt als de gebruiker op de sessie-titel tikt.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity,
   TouchableWithoutFeedback, ScrollView, Platform,
 } from 'react-native';
 import { X } from 'lucide-react-native';
-import { colors, palette, typography, spacing, radius, shadows } from '../../theme/tokens';
+import { palette, typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
+import { useThemeColors } from '../../theme/useTheme';
 import type { Session } from '../../data/trainingPlans';
 
 // ── Content per sessie-type ───────────────────────────────────────────────────
@@ -110,6 +111,8 @@ interface SessionTypeSheetProps {
 }
 
 export function SessionTypeSheet({ sessionType, onClose }: SessionTypeSheetProps) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   if (!sessionType) return null;
   const info = SESSION_TYPE_INFO[sessionType];
   const accent = info.accentColor;
@@ -179,7 +182,7 @@ export function SessionTypeSheet({ sessionType, onClose }: SessionTypeSheetProps
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.6)',

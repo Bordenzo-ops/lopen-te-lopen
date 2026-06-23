@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, Switch, TouchableOpacity, StyleSheet, ScrollView,
   Alert, TextInput, KeyboardAvoidingView, Platform, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink } from 'lucide-react-native';
-import { colors, typography, spacing, radius } from '../../src/theme/tokens';
+import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone } from 'lucide-react-native';
+import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
+import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
 import { zoneInfo } from '../../src/data/trainingPlans';
 import * as voiceService from '../../src/services/voiceService';
@@ -32,6 +33,8 @@ function EditableRow({
   maxLength?: number;
   suffix?: string;
 }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [editing, setEditing]   = useState(false);
   const [draft, setDraft]       = useState(value);
 
@@ -100,6 +103,8 @@ function AgeStepperRow({
   age,
   onSave,
 }: { age: number; onSave: (v: number) => void }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft]     = useState(age);
 
@@ -153,7 +158,11 @@ export default function SettingsScreen() {
   const profile       = useAppStore(s => s.profile);
   const updateProfile = useAppStore(s => s.updateProfile);
   const resetProgress = useAppStore(s => s.resetProgress);
+  const themePreference = useAppStore(s => s.themePreference);
+  const setThemePreference = useAppStore(s => s.setThemePreference);
   const { hasAccess, goToPaywall } = usePremium();
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   if (!profile) return null;
 
   const maxHr = profile.maxHeartRate;
@@ -262,6 +271,40 @@ export default function SettingsScreen() {
             </View>
           </View>
 
+          {/* Weergave */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Weergave</Text>
+            <View style={styles.card}>
+              <View style={styles.themeRow}>
+                {([
+                  { key: 'system', label: 'Systeem', icon: Smartphone },
+                  { key: 'light',  label: 'Licht',   icon: Sun },
+                  { key: 'dark',   label: 'Donker',  icon: Moon },
+                ] as const).map(opt => {
+                  const active = themePreference === opt.key;
+                  const Icon = opt.icon;
+                  return (
+                    <TouchableOpacity
+                      key={opt.key}
+                      style={[styles.themeBtn, active && styles.themeBtnActive]}
+                      onPress={() => setThemePreference(opt.key)}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Thema ${opt.label}`}
+                      accessibilityState={{ selected: active }}
+                    >
+                      <Icon size={18} color={active ? '#fff' : colors.textSecondary} strokeWidth={2} />
+                      <Text style={[styles.themeBtnText, active && styles.themeBtnTextActive]}>{opt.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+            <Text style={styles.fieldNote}>
+              Kies Licht voor betere leesbaarheid buiten in fel daglicht. Systeem volgt de instelling van je telefoon.
+            </Text>
+          </View>
+
           {/* Begeleiding */}
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Begeleiding tijdens het lopen</Text>
@@ -336,28 +379,16 @@ export default function SettingsScreen() {
             )}
           </View>
 
-          {/* Integraties */}
+          {/* Koppelingen */}
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Integraties (binnenkort)</Text>
+            <Text style={styles.sectionLabel}>Koppelingen</Text>
             <View style={styles.card}>
-              {[
-                { name: 'Strava',            icon: '🟠' },
-                { name: 'Garmin Connect',    icon: '🟢' },
-                { name: 'Apple Health',      icon: '❤️' },
-                { name: 'Google Fit',        icon: '🔵' },
-                { name: 'Xiaomi Mi Fitness', icon: '🟡' },
-              ].map((integration, i, arr) => (
-                <React.Fragment key={integration.name}>
-                  <View style={[styles.integrationRow, styles.integrationRowDisabled]}>
-                    <Text style={styles.integrationIcon}>{integration.icon}</Text>
-                    <Text style={[styles.integrationName, styles.integrationNameMuted]}>{integration.name}</Text>
-                    <View style={styles.soonPill}>
-                      <Text style={styles.soonPillText}>binnenkort</Text>
-                    </View>
-                  </View>
-                  {i < arr.length - 1 && <Divider />}
-                </React.Fragment>
-              ))}
+              <View style={styles.integrationRow}>
+                <Link2 size={18} color={colors.textSecondary} strokeWidth={2} />
+                <Text style={styles.integrationInfo}>
+                  Koppelingen met Strava, Garmin, Apple Health, Google Fit en Mi Fitness volgen later.
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -389,12 +420,26 @@ export default function SettingsScreen() {
 }
 
 function Divider() {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return <View style={styles.divider} />;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   scroll: { paddingHorizontal: spacing[3], paddingTop: spacing[2], paddingBottom: spacing[8], gap: spacing[2] },
+
+  themeRow: { flexDirection: 'row', gap: spacing[1], padding: spacing[1.5] },
+  themeBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, minHeight: 44, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.borderDefault, backgroundColor: colors.bgSurface,
+  },
+  themeBtnActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  themeBtnText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm, color: colors.textSecondary,
+  },
+  themeBtnTextActive: { color: '#fff' },
   title: {
     fontFamily: typography.fontFamily.display, fontSize: typography.fontSize['2xl'],
     color: colors.textPrimary, letterSpacing: typography.letterSpacing.tight, marginBottom: spacing[1],
@@ -508,20 +553,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: spacing[1.5],
     paddingHorizontal: spacing[2], paddingVertical: spacing[1.5],
   },
-  integrationRowDisabled: { opacity: 0.6 },
-  integrationIcon: { fontSize: 20 },
-  integrationName: {
-    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.base, color: colors.textPrimary, flex: 1,
-  },
-  integrationNameMuted: { color: colors.textSecondary },
-  soonPill: {
-    backgroundColor: colors.brandPrimary + '22',
-    borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2,
-    borderWidth: 1, borderColor: colors.brandPrimary + '44',
-  },
-  soonPillText: {
-    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.xs,
-    color: colors.brandPrimary, letterSpacing: 0.3,
+  integrationInfo: {
+    flex: 1,
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm,
+    color: colors.textSecondary, lineHeight: typography.fontSize.sm * 1.5,
   },
   dangerRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing[1.5],

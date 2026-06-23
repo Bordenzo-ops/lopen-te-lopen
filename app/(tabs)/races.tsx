@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { SafeAreaView, StyleSheet } from 'react-native';
-import { colors } from '../../src/theme/tokens';
+import { type ThemeColors } from '../../src/theme/tokens';
+import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
 import { RacePickerScreen } from '../../src/components/ui/RacePickerScreen';
 import type { RacePlan } from '../../src/data/buildRacePlan';
 
 export default function RacesTab() {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const setRacePlan          = useAppStore(s => s.setRacePlan);
   const setSchemaMode        = useAppStore(s => s.setSchemaMode);
   const updateProfile        = useAppStore(s => s.updateProfile);
@@ -28,6 +31,6 @@ export default function RacesTab() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
 });

@@ -15,7 +15,7 @@
  *   />
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -28,7 +28,8 @@ import {
   Platform,
 } from 'react-native';
 import { Share2, Download, X, Camera } from 'lucide-react-native';
-import { colors, palette, typography, spacing, radius, shadows } from '../../theme/tokens';
+import { palette, typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
+import { useThemeColors } from '../../theme/useTheme';
 import { ShareRunCard, CARD_WIDTH, CARD_HEIGHT } from './ShareRunCard';
 import { useShareRun } from '../../hooks/useShareRun';
 import type { CompletedSession } from '../../store/appStore';
@@ -58,6 +59,8 @@ export function ShareRunSheet({
   onClose,
 }: ShareRunSheetProps) {
   const { cardRef, isSharing, share, saveToLibrary, captureCard } = useShareRun();
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const handleInstagram = useCallback(async () => {
     const result = await share();
@@ -197,7 +200,7 @@ export function ShareRunSheet({
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.65)',

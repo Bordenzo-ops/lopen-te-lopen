@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { colors, typography, spacing, radius } from '../../theme/tokens';
+import { typography, spacing, radius, type ThemeColors } from '../../theme/tokens';
+import { useThemeColors } from '../../theme/useTheme';
 
 // Weekdagnummers: 1=ma t/m 7=zo.
 const WEEK_DAYS: { value: number; short: string; long: string }[] = [
@@ -30,6 +31,8 @@ interface DayPickerProps {
  */
 export function DayPicker({ value, onChange, required = 3 }: DayPickerProps) {
   const isComplete = value.length === required;
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   function toggleDay(day: number) {
     if (value.includes(day)) {
@@ -76,7 +79,7 @@ export function DayPicker({ value, onChange, required = 3 }: DayPickerProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   wrap: { gap: spacing[1] },
   row: { flexDirection: 'row', gap: 6, justifyContent: 'space-between' },
   dayBtn: {

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { MapPin, Clock, Zap, CheckCircle2, Info, Timer } from 'lucide-react-native';
-import { colors, typography, spacing, radius } from '../../theme/tokens';
+import { MapPin, Clock, Zap, CheckCircle2, Info, Timer, MinusCircle } from 'lucide-react-native';
+import { typography, spacing, radius, type ThemeColors } from '../../theme/tokens';
+import { useThemeColors } from '../../theme/useTheme';
 import { ZoneBadge } from './ZoneBadge';
 import { SessionTypeSheet } from './SessionTypeSheet';
 import { formatPacePerKm } from '../../data/paceModel';
@@ -10,6 +11,8 @@ import type { Session } from '../../data/trainingPlans';
 interface SessionCardProps {
   session: Session;
   isCompleted?: boolean;
+  /** Bewust overgeslagen: toont een rustige "Overgeslagen"-markering. */
+  isSkipped?: boolean;
   onPress?: () => void;
   variant?: 'default' | 'next';
   /**
@@ -30,10 +33,12 @@ const sessionTypeLabel: Record<Session['type'], string> = {
 
 const dayLabel = ['', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag', 'Zondag'];
 
-export function SessionCard({ session, isCompleted = false, onPress, variant = 'default', trainingPaceSecPerKm }: SessionCardProps) {
+export function SessionCard({ session, isCompleted = false, isSkipped = false, onPress, variant = 'default', trainingPaceSecPerKm }: SessionCardProps) {
   const isNext = variant === 'next';
   const [showInfo, setShowInfo] = useState(false);
   const showPace = trainingPaceSecPerKm != null && trainingPaceSecPerKm > 0;
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
     <TouchableOpacity
@@ -42,13 +47,13 @@ export function SessionCard({ session, isCompleted = false, onPress, variant = '
       style={[
         styles.container,
         isNext && styles.containerNext,
-        isCompleted && styles.containerCompleted,
+        (isCompleted || isSkipped) && styles.containerCompleted,
       ]}
     >
       {/* Header row */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={[styles.day, isCompleted && styles.textMuted]}>
+          <Text style={[styles.day, (isCompleted || isSkipped) && styles.textMuted]}>
             {dayLabel[session.day]}
           </Text>
           <TouchableOpacity
@@ -59,7 +64,7 @@ export function SessionCard({ session, isCompleted = false, onPress, variant = '
             accessibilityRole="button"
             accessibilityLabel={`Uitleg over ${sessionTypeLabel[session.type]}`}
           >
-            <Text style={[styles.type, isCompleted && styles.textMuted]}>
+            <Text style={[styles.type, (isCompleted || isSkipped) && styles.textMuted]}>
               {sessionTypeLabel[session.type]}
             </Text>
             <Info size={13} color={colors.textTertiary} strokeWidth={2} />
@@ -68,7 +73,13 @@ export function SessionCard({ session, isCompleted = false, onPress, variant = '
         {isCompleted && (
           <CheckCircle2 size={22} color={colors.success} strokeWidth={2} />
         )}
-        {isNext && !isCompleted && (
+        {isSkipped && !isCompleted && (
+          <View style={styles.skippedTag}>
+            <MinusCircle size={11} color={colors.textTertiary} strokeWidth={2} />
+            <Text style={styles.skippedLabel}>Overgeslagen</Text>
+          </View>
+        )}
+        {isNext && !isCompleted && !isSkipped && (
           <View style={styles.nextBadge}>
             <Zap size={11} color={colors.brandPrimary} strokeWidth={2.5} />
             <Text style={styles.nextLabel}>Volgende</Text>
@@ -109,7 +120,7 @@ export function SessionCard({ session, isCompleted = false, onPress, variant = '
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     backgroundColor: colors.bgCard,
     borderRadius: radius.xl,
@@ -197,6 +208,23 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.sansSemi,
     fontSize: typography.fontSize.xs,
     color: colors.brandPrimary,
+    letterSpacing: typography.letterSpacing.wide,
+  },
+  skippedTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.bgSurface,
+    paddingHorizontal: spacing[1],
+    paddingVertical: 3,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+  },
+  skippedLabel: {
+    fontFamily: typography.fontFamily.sansSemi,
+    fontSize: typography.fontSize.xs,
+    color: colors.textTertiary,
     letterSpacing: typography.letterSpacing.wide,
   },
   tipContainer: {

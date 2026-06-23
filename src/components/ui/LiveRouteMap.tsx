@@ -14,7 +14,7 @@
  *     android.config.googleMaps.apiKey = "YOUR_KEY"
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -29,7 +29,8 @@ import MapView, {
   PROVIDER_GOOGLE,
 } from 'react-native-maps';
 import { ChevronUp, ChevronDown, Navigation } from 'lucide-react-native';
-import { colors, typography, spacing, radius, shadows } from '../../theme/tokens';
+import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
+import { useThemeColors, useIsLightTheme } from '../../theme/useTheme';
 import type { PlannedRoute } from '../../services/routeService';
 
 // ── Constanten ────────────────────────────────────────────────────────────────
@@ -58,6 +59,9 @@ export function LiveRouteMap({
 }: LiveRouteMapProps) {
   const [expanded, setExpanded] = useState(false);
   const mapRef = useRef<MapView>(null);
+  const colors = useThemeColors();
+  const isLight = useIsLightTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const plannedCoords = plannedRoute.waypoints.map(wp => ({
     latitude:  wp.lat,
@@ -100,7 +104,7 @@ export function LiveRouteMap({
         zoomEnabled={expanded}
         rotateEnabled={false}
         pitchEnabled={false}
-        userInterfaceStyle="dark"
+        userInterfaceStyle={isLight ? 'light' : 'dark'}
       >
         {/* Geplande route — subtiele stippellijn */}
         <Polyline
@@ -174,7 +178,7 @@ export function LiveRouteMap({
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     marginHorizontal: spacing[3],
     marginBottom:     spacing[2],

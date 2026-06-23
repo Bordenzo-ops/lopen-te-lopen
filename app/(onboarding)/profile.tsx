@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Minus, Plus } from 'lucide-react-native';
-import { colors, typography, spacing, radius } from '../../src/theme/tokens';
+import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
+import { useThemeColors } from '../../src/theme/useTheme';
 import { Button } from '../../src/components/ui/Button';
 import { DayPicker } from '../../src/components/ui/DayPicker';
 import { DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
@@ -16,6 +17,8 @@ export default function ProfileScreen() {
   const [name, setName] = useState('');
   const [age, setAge] = useState(30);
   const [trainingDays, setTrainingDays] = useState<number[]>(DEFAULT_TRAINING_DAYS);
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const daysValid = trainingDays.length === 3;
 
@@ -103,11 +106,11 @@ export default function ProfileScreen() {
             </Text>
             <View style={styles.zones}>
               {([
-                { zone: 'Z1', label: 'Herstel',  pct: [0.50, 0.60], color: '#60A5FA' },
-                { zone: 'Z2', label: 'Aeroob',   pct: [0.61, 0.70], color: '#34D399' },
-                { zone: 'Z3', label: 'Tempo',    pct: [0.71, 0.80], color: '#FBBF24' },
-                { zone: 'Z4', label: 'Drempel',  pct: [0.81, 0.90], color: '#F97316' },
-                { zone: 'Z5', label: 'Maximaal', pct: [0.91, 1.00], color: '#EF4444' },
+                { zone: 'Z1', label: 'Herstel',  pct: [0.50, 0.60], color: colors.zone1 },
+                { zone: 'Z2', label: 'Aeroob',   pct: [0.61, 0.70], color: colors.zone2 },
+                { zone: 'Z3', label: 'Tempo',    pct: [0.71, 0.80], color: colors.zone3 },
+                { zone: 'Z4', label: 'Drempel',  pct: [0.81, 0.90], color: colors.zone4 },
+                { zone: 'Z5', label: 'Maximaal', pct: [0.91, 1.00], color: colors.zone5 },
               ] as const).map(z => (
                 <View key={z.zone} style={styles.zoneRow}>
                   <View style={[styles.zoneDot, { backgroundColor: z.color }]} />
@@ -145,7 +148,7 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

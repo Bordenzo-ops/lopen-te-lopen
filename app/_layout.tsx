@@ -11,8 +11,8 @@ import {
 } from '@expo-google-fonts/inter';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { colors } from '../src/theme/tokens';
 import { useAppStore } from '../src/store/appStore';
+import { useIsLightTheme } from '../src/theme/useTheme';
 import { init as initPurchases } from '../src/services/purchaseService';
 
 export default function RootLayout() {
@@ -40,12 +40,14 @@ export default function RootLayout() {
     })();
   }, []);
 
+  const isLight = useIsLightTheme();
+
   if (!fontsLoaded) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <StatusBar style="light" />
+        <StatusBar style={isLight ? 'dark' : 'light'} />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
           <Stack.Screen name="(onboarding)" options={{ animation: 'fade' }} />

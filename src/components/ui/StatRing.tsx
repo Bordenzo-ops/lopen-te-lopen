@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { colors, typography } from '../../theme/tokens';
+import { typography, type ThemeColors } from '../../theme/tokens';
+import { useThemeColors } from '../../theme/useTheme';
 
 interface StatRingProps {
   value: number;       // 0-100 (percentage)
@@ -16,10 +17,13 @@ export function StatRing({
   value,
   size = 120,
   strokeWidth = 10,
-  color = colors.brandPrimary,
+  color,
   label,
   sublabel,
 }: StatRingProps) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const strokeColor = color ?? colors.brandPrimary;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const progress = Math.min(100, Math.max(0, value));
@@ -43,7 +47,7 @@ export function StatRing({
           cx={center}
           cy={center}
           r={radius}
-          stroke={color}
+          stroke={strokeColor}
           strokeWidth={strokeWidth}
           fill="transparent"
           strokeDasharray={circumference}
@@ -60,7 +64,7 @@ export function StatRing({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',

@@ -1,12 +1,13 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Alert, BackHandler, ActivityIndicator,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Pause, Play, Square, ChevronDown, MapPin, Map, Info } from 'lucide-react-native';
+import { Pause, Play, Square, ChevronDown, MapPin, Map, Info, Lock } from 'lucide-react-native';
 import * as Location from 'expo-location';
-import { colors, typography, spacing, radius, shadows } from '../../src/theme/tokens';
+import { typography, spacing, radius, shadows, type ThemeColors } from '../../src/theme/tokens';
+import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
 import { getTrainingPlan, zoneInfo } from '../../src/data/trainingPlans';
 import type { TrainingWeek } from '../../src/data/trainingPlans';
@@ -56,6 +57,17 @@ function calcRollingPace(
   return secs / (distM / 1000); // sec/km
 }
 
+// Korte, begrijpelijke omschrijving van het trainingstype. Leidt op het actieve
+// scherm boven de hartslagzone, zodat een beginner meteen snapt wat de bedoeling
+// is. De zonecode blijft als ondersteuning zichtbaar.
+const sessionTypeShort: Record<string, string> = {
+  easy:  'Rustig',
+  tempo: 'Tempo',
+  long:  'Lang',
+  rest:  'Rust',
+  cross: 'Cross',
+};
+
 // ── Scherm ────────────────────────────────────────────────────────────────────
 export default function ActiveSessionScreen() {
   const { sessionId, weekNumber } = useLocalSearchParams<{ sessionId: string; weekNumber: string }>();
@@ -80,6 +92,12 @@ export default function ActiveSessionScreen() {
   const [gpsError, setGpsError]             = useState<string | null>(null);
   const [sessionStarted, setSessionStarted] = useState(false);
   const [showTypeInfo, setShowTypeInfo]     = useState(false);
+  // Schermvergrendeling: voorkomt dat een veeg of broekzak de run onderbreekt.
+  // De ref houdt de actuele waarde vast voor de hardware-terugknop-handler.
+  const [isLocked, setIsLocked]             = useState(false);
+  const isLockedRef                         = useRef(false);
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   // ── Routeplanner ──────────────────────────────────────────────────────────
   // Gratis gebruikers mogen een beperkt aantal routes per week plannen; premium
@@ -255,6 +273,9 @@ export default function ActiveSessionScreen() {
   // ── Android hardware-terugknop ────────────────────────────────────────────
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      // Tijdens vergrendeling negeren we de terugknop, zodat de run niet per
+      // ongeluk afgebroken wordt.
+      if (isLockedRef.current) return true;
       handleCancel();
       return true;
     });
@@ -486,6 +507,8 @@ export default function ActiveSessionScreen() {
 
   // ── Actief sessie-scherm ──────────────────────────────────────────────────
   const lastPos = routeRef.current[routeRef.current.length - 1];
+  // Houd de ref gelijk met de state voor de terugknop-handler.
+  isLockedRef.current = isLocked;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bgBase }]}>
@@ -554,14 +577,14 @@ export default function ActiveSessionScreen() {
             onPress={() => setShowTypeInfo(true)}
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel={`Zone ${session.zone}, ${zoneInfo[session.zone].label}. Uitleg over deze training`}
+            accessibilityLabel={`Type training: ${sessionTypeShort[session.type] ?? zoneInfo[session.zone].label}, zone ${session.zone}, ${zoneInfo[session.zone].label}. Uitleg over deze training`}
           >
             <View style={styles.statLabelRow}>
-              <Text style={[styles.statLabel, { marginBottom: 0 }]}>Zone</Text>
+              <Text style={[styles.statLabel, { marginBottom: 0 }]}>Type</Text>
               <Info size={11} color={colors.textTertiary} strokeWidth={2} />
             </View>
-            <Text style={[styles.statValue, { color: zoneColor }]}>{session.zone}</Text>
-            <Text style={styles.statUnit}>{zoneInfo[session.zone].label}</Text>
+            <Text style={[styles.statValue, { color: zoneColor }]}>{sessionTypeShort[session.type] ?? session.zone}</Text>
+            <Text style={styles.statUnit}>{session.zone} {zoneInfo[session.zone].label}</Text>
           </TouchableOpacity>
         </View>
 
@@ -585,6 +608,16 @@ export default function ActiveSessionScreen() {
 
         {/* Knoppen */}
         <View style={styles.controls}>
+          <TouchableOpacity
+            onPress={() => setIsLocked(true)}
+            style={styles.lockBtn}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Scherm vergrendelen"
+          >
+            <Lock size={22} color={colors.textSecondary} strokeWidth={2} />
+          </TouchableOpacity>
+
           <TouchableOpacity
             onPress={() => {
               const next = !isRunning;
@@ -614,13 +647,35 @@ export default function ActiveSessionScreen() {
           onClose={() => setShowTypeInfo(false)}
         />
       </SafeAreaView>
+
+      {/* Vergrendel-overlay: vangt alle aanrakingen op zodat de run doorloopt.
+          Ontgrendelen gaat bewust met ingedrukt houden, niet met een enkele tik. */}
+      {isLocked && (
+        <View style={styles.lockOverlay}>
+          <View style={styles.lockCard}>
+            <Lock size={30} color={colors.textPrimary} strokeWidth={2} />
+            <Text style={styles.lockTitle}>Scherm vergrendeld</Text>
+            <Text style={styles.lockSub}>Je training loopt gewoon door.</Text>
+            <TouchableOpacity
+              onLongPress={() => setIsLocked(false)}
+              delayLongPress={600}
+              activeOpacity={0.8}
+              style={styles.unlockBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Houd ingedrukt om te ontgrendelen"
+            >
+              <Text style={styles.unlockBtnText}>Houd ingedrukt om te ontgrendelen</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1 },
 
   loadingBg: {
@@ -794,10 +849,48 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: spacing[3], paddingHorizontal: spacing[3],
   },
+  lockBtn: {
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.borderDefault,
+    alignItems: 'center', justifyContent: 'center', ...shadows.sm,
+  },
   pauseBtn: {
     width: 72, height: 72, borderRadius: 36,
     backgroundColor: colors.bgCard, borderWidth: 2,
     alignItems: 'center', justifyContent: 'center', ...shadows.md,
+  },
+  lockOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: colors.bgOverlay,
+    alignItems: 'center', justifyContent: 'flex-end',
+    paddingBottom: spacing[8],
+    zIndex: 20,
+  },
+  lockCard: {
+    alignItems: 'center', gap: spacing[1],
+    paddingHorizontal: spacing[3], paddingVertical: spacing[3],
+    marginHorizontal: spacing[3],
+    borderRadius: radius.xl,
+    backgroundColor: colors.bgCard,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+  },
+  lockTitle: {
+    fontFamily: typography.fontFamily.sansBold, fontSize: typography.fontSize.lg,
+    color: colors.textPrimary, marginTop: spacing[1],
+  },
+  lockSub: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm,
+    color: colors.textSecondary, marginBottom: spacing[2],
+  },
+  unlockBtn: {
+    minHeight: 52, justifyContent: 'center', alignItems: 'center',
+    paddingHorizontal: spacing[3],
+    borderRadius: radius.full, borderWidth: 1, borderColor: colors.borderStrong,
+    backgroundColor: colors.bgCard,
+  },
+  unlockBtnText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base,
+    color: colors.textPrimary,
   },
   stopBtn: {
     flexDirection: 'row', alignItems: 'center', gap: spacing[1],

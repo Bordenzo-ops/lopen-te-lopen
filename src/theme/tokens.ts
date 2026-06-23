@@ -54,6 +54,8 @@ export const palette = {
   warning: '#FBBF24',
   error:   '#EF4444',
   info:    '#60A5FA',
+  // Premium-accent (goud)
+  gold:    '#F59E0B',
 };
 
 export const colors = {
@@ -92,7 +94,63 @@ export const colors = {
   warning: palette.warning,
   error:   palette.error,
   info:    palette.info,
+
+  // Premium-accent (goud), gebruikt op de paywall en premium-hints
+  premium: palette.gold,
 };
+
+// ── Lichte kleurenset ─────────────────────────
+// Zelfde sleutels als `colors` (de donkere set), maar afgestemd op een lichte
+// achtergrond voor leesbaarheid in fel daglicht. Brand-oranje blijft gelijk;
+// accenttekst (brandLight) wordt donkerder zodat het op licht leesbaar blijft.
+export const lightColors: typeof colors = {
+  // Backgrounds
+  bgBase:       palette.neutral[100],
+  bgSurface:    palette.neutral[0],
+  bgCard:       palette.neutral[0],
+  bgCardHover:  palette.neutral[100],
+  bgOverlay:    'rgba(17,24,39,0.45)',
+
+  // Text
+  textPrimary:   palette.neutral[900],
+  textSecondary: palette.neutral[600],
+  textTertiary:  palette.neutral[500],
+  // Donkere labelkleur op de oranje knoppen, gelijk aan het donkere thema zodat
+  // knoppen er in beide modi hetzelfde uitzien.
+  textInverse:   palette.neutral[950],
+
+  // Brand
+  brandPrimary:  palette.primary[500],
+  brandLight:    palette.primary[600],
+  brandDark:     palette.primary[700],
+
+  // Borders
+  borderSubtle:  palette.neutral[200],
+  borderDefault: palette.neutral[300],
+  borderStrong:  palette.neutral[400],
+
+  // Zones (gelijk; midtonen werken op beide achtergronden)
+  zone1: palette.zone.z1,
+  zone2: palette.zone.z2,
+  zone3: palette.zone.z3,
+  zone4: palette.zone.z4,
+  zone5: palette.zone.z5,
+
+  // Semantic
+  success: palette.success,
+  warning: palette.warning,
+  error:   palette.error,
+  info:    palette.info,
+
+  // Premium-accent (goud)
+  premium: palette.gold,
+};
+
+/** De donkere set is de standaard (`colors`). */
+export const darkColors = colors;
+
+/** Type van een complete kleurenset, voor themabewuste stijlfuncties. */
+export type ThemeColors = typeof colors;
 
 // ── Typografie ────────────────────────────────
 export const typography = {

@@ -1,11 +1,15 @@
+import { useMemo } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Redirect } from 'expo-router';
 import { useAppStore, useHasHydrated } from '../src/store/appStore';
-import { colors } from '../src/theme/tokens';
+import { type ThemeColors } from '../src/theme/tokens';
+import { useThemeColors } from '../src/theme/useTheme';
 
 export default function Index() {
   const hasHydrated             = useHasHydrated();
   const hasCompletedOnboarding  = useAppStore(s => s.hasCompletedOnboarding);
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   // Wacht tot AsyncStorage volledig geladen is om een verkeerde redirect te voorkomen
   if (!hasHydrated) {
@@ -23,7 +27,7 @@ export default function Index() {
   return <Redirect href="/(tabs)/dashboard" />;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   loading: {
     flex: 1,
     backgroundColor: colors.bgBase,

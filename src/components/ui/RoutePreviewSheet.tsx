@@ -21,7 +21,7 @@
  *   />
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -39,7 +39,8 @@ import MapView, {
   PROVIDER_GOOGLE,
 } from 'react-native-maps';
 import { X, RefreshCw, Navigation, ArrowRight, MapPin } from 'lucide-react-native';
-import { colors, typography, spacing, radius, shadows } from '../../theme/tokens';
+import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
+import { useThemeColors, useIsLightTheme } from '../../theme/useTheme';
 import { PremiumBadge } from './PremiumBadge';
 import type { PlannedRoute } from '../../services/routeService';
 import type { RouteType } from '../../hooks/useRoutePlanner';
@@ -93,6 +94,9 @@ export function RoutePreviewSheet({
   onStartWithoutRoute,
   onClose,
 }: RoutePreviewSheetProps) {
+  const colors = useThemeColors();
+  const isLight = useIsLightTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const mapCoords = plannedRoute?.waypoints.map(wp => ({
     latitude:  wp.lat,
     longitude: wp.lon,
@@ -187,7 +191,7 @@ export function RoutePreviewSheet({
                 pitchEnabled={false}
                 showsUserLocation={false}
                 showsCompass={false}
-                userInterfaceStyle="dark"
+                userInterfaceStyle={isLight ? 'light' : 'dark'}
               >
                 <Polyline
                   coordinates={mapCoords}
@@ -274,7 +278,7 @@ export function RoutePreviewSheet({
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.6)',

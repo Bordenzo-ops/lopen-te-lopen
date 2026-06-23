@@ -5,7 +5,7 @@
  * Elke laag toont een dropdown/accordion.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   LayoutAnimation, Platform, UIManager, Alert, TextInput,
@@ -14,7 +14,8 @@ import {
   ChevronDown, ChevronRight, ChevronLeft,
   MapPin, Calendar, Clock, Trophy, CheckCircle2, X, Lock, Timer, Crown,
 } from 'lucide-react-native';
-import { colors, palette, typography, spacing, radius, shadows } from '../../theme/tokens';
+import { palette, typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
+import { useThemeColors } from '../../theme/useTheme';
 import {
   PROVINCES, weeksUntilRace, formatRaceDate,
   type Race, type RaceCity, type RaceProvince,
@@ -35,7 +36,7 @@ if (Platform.OS === 'android') {
 }
 
 const distanceLabel: Record<Race['distance'], string> = {
-  '5km': '5 KM', '10km': '10 KM',
+  '5km': '5 KM', '10km': '10 KM', '15km': '15 KM',
   'half_marathon': 'Halve Marathon', 'marathon': 'Marathon',
 };
 
@@ -44,6 +45,8 @@ const distanceLabel: Record<Race['distance'], string> = {
 function ProvinceRow({
   province, isOpen, onToggle,
 }: { province: RaceProvince; isOpen: boolean; onToggle: () => void }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const totalRaces = province.cities.reduce((s, c) => s + c.races.length, 0);
   return (
     <TouchableOpacity style={styles.provinceRow} onPress={onToggle} activeOpacity={0.8}>
@@ -67,6 +70,8 @@ function ProvinceRow({
 function CityRow({
   city, isOpen, onToggle,
 }: { city: RaceCity; isOpen: boolean; onToggle: () => void }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const upcoming = city.races.filter(r => new Date(r.date) > new Date()).length;
   return (
     <TouchableOpacity style={styles.cityRow} onPress={onToggle} activeOpacity={0.8}>
@@ -88,6 +93,8 @@ function CityRow({
 function RaceRow({
   race, onPress, locked,
 }: { race: Race; onPress: () => void; locked?: boolean }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const isPast   = new Date(race.date) <= new Date();
   const weeks    = weeksUntilRace(race.date);
   const { possible } = canTrainForRace(race);
@@ -149,6 +156,8 @@ function EventGroupRow({
   onSelectSub: (race: Race) => void;
   isLocked: (race: Race) => boolean;
 }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const accent = event.accentColor;
   const isPast = new Date(event.date) <= new Date();
 
@@ -250,6 +259,8 @@ function TargetTimeInput({
   onChangeSeconds: (seconds: number | null) => void;
   onUpgrade: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [mode, setMode]   = useState<TargetMode>('time');
   const [value, setValue] = useState('');
 
@@ -382,6 +393,8 @@ function ConfirmModal({
   hasAccess: boolean;
   onUpgrade: () => void;
 }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const accent = plan.race.accentColor;
   const raceKm = raceDistanceToKm(plan.race.distance);
   const [targetSeconds, setTargetSeconds] = useState<number | null>(null);
@@ -457,6 +470,8 @@ function ConfirmModal({
 function FeaturedRaceCard({
   race, onPress, locked,
 }: { race: Race; onPress: () => void; locked?: boolean }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const weeks  = weeksUntilRace(race.date);
   const accent = race.accentColor;
   const months = Math.round(weeks / 4.3);
@@ -536,6 +551,8 @@ export interface RacePickerScreenProps {
 }
 
 export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [openProvinces, setOpenProvinces] = useState<Set<string>>(new Set(['zuid-holland']));
   const [openCities,    setOpenCities]    = useState<Set<string>>(new Set(['rotterdam']));
   const [openEvents,    setOpenEvents]    = useState<Set<string>>(new Set());
@@ -711,7 +728,7 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bgBase },
 
   header: {

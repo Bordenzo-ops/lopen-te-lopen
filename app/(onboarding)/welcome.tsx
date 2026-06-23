@@ -1,11 +1,15 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image } from 'react-native';
+import React, { useMemo } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, typography, spacing } from '../../src/theme/tokens';
+import { CalendarDays, HeartPulse, MapPin, Link2 } from 'lucide-react-native';
+import { typography, spacing, type ThemeColors } from '../../src/theme/tokens';
+import { useThemeColors } from '../../src/theme/useTheme';
 import { Button } from '../../src/components/ui/Button';
 
 export default function WelcomeScreen() {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
@@ -23,13 +27,13 @@ export default function WelcomeScreen() {
         {/* Features */}
         <View style={styles.features}>
           {[
-            { icon: '📅', text: 'Persoonlijk weekschema',          soon: false },
-            { icon: '❤️', text: 'Training op hartslag',             soon: false },
-            { icon: '📍', text: 'GPS-tracking en live-tempo',      soon: false },
-            { icon: '🔗', text: 'Strava, Garmin & Apple Health',   soon: true  },
+            { icon: <CalendarDays size={22} color={colors.brandLight} strokeWidth={2} />, text: 'Persoonlijk weekschema',        soon: false },
+            { icon: <HeartPulse size={22} color={colors.brandLight} strokeWidth={2} />,   text: 'Training op hartslag',           soon: false },
+            { icon: <MapPin size={22} color={colors.brandLight} strokeWidth={2} />,       text: 'GPS-tracking en live-tempo',     soon: false },
+            { icon: <Link2 size={22} color={colors.brandLight} strokeWidth={2} />,        text: 'Strava, Garmin en Apple Health', soon: true  },
           ].map((f, i) => (
             <View key={i} style={styles.feature}>
-              <Text style={styles.featureIcon}>{f.icon}</Text>
+              <View style={styles.featureIcon}>{f.icon}</View>
               <Text style={styles.featureText}>{f.text}</Text>
               {f.soon && (
                 <View style={styles.soonBadge}>
@@ -57,7 +61,7 @@ export default function WelcomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.bgBase,
@@ -118,7 +122,8 @@ const styles = StyleSheet.create({
     borderColor: colors.borderSubtle,
   },
   featureIcon: {
-    fontSize: 24,
+    width: 26,
+    alignItems: 'center',
   },
   featureText: {
     fontFamily: typography.fontFamily.sansMedium,

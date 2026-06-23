@@ -55,6 +55,17 @@ export interface CompletedSession {
   source: 'app' | 'strava' | 'garmin' | 'apple_health' | 'google_fit' | 'mi_fitness';
 }
 
+/**
+ * Een bewust overgeslagen sessie. Telt mee als "afgehandeld" voor de
+ * weekvoortgang, zodat een mindere week de gebruiker niet laat vastlopen.
+ * Wordt nadrukkelijk niet als prestatie geteld (geen afstand of tempo).
+ */
+export interface SkippedSession {
+  sessionId: string;
+  weekNumber: number;
+  skippedAt: string;       // ISO date string
+}
+
 export interface ActiveSession {
   session: Session;
   weekNumber: number;
@@ -76,6 +87,8 @@ interface AppState {
 
   // Voortgang
   completedSessions: CompletedSession[];
+  /** Bewust overgeslagen sessies (telt als afgehandeld, niet als prestatie) */
+  skippedSessions: SkippedSession[];
   currentWeek: number;
 
   // Actieve loop-sessie (niet persistent, crash-safe)
@@ -94,6 +107,10 @@ interface AppState {
 
   // Schema-modus: vrij trainen of voor een wedstrijd
   schemaMode: 'training' | 'race';
+
+  // Thema-voorkeur: volg het systeem, of forceer licht of donker. Gepersisteerd.
+  themePreference: 'system' | 'light' | 'dark';
+  setThemePreference: (preference: 'system' | 'light' | 'dark') => void;
 
   // Routeplanner-gebruik (gratis limiet per week, gepersisteerd)
   /** Aantal geplande routes in de huidige week */
@@ -165,6 +182,17 @@ interface AppState {
     weekSessions: TrainingWeek['sessions'],
   ) => void;
   cancelSession: () => void;
+  /**
+   * Slaat een sessie bewust over (bijvoorbeeld bij ziekte of een drukke week).
+   * De sessie telt daarna als afgehandeld voor de weekvoortgang en blokkeert de
+   * voortgang niet, maar telt niet als gelopen kilometers of prestatie. Hoogt
+   * currentWeek op als alle sessies van de week afgehandeld zijn.
+   */
+  skipSession: (
+    sessionId: string,
+    weekNumber: number,
+    weekSessions: TrainingWeek['sessions'],
+  ) => void;
   /** Wist voortgang én de persistente opslag */
   resetProgress: () => Promise<void>;
 }
@@ -175,11 +203,13 @@ export const useAppStore = create<AppState>()(
       hasCompletedOnboarding: false,
       profile: null,
       completedSessions: [],
+      skippedSessions: [],
       currentWeek: 1,
       activeSession: null,
       racePlan: null,
       raceTargetSeconds: null,
       schemaMode: 'training',
+      themePreference: 'system',
       routePlanCount: 0,
       routePlanWeekStart: null,
       _hasHydrated: false,
@@ -257,6 +287,7 @@ export const useAppStore = create<AppState>()(
       setRacePlan: (plan) => set({ racePlan: plan, raceTargetSeconds: null }),
       setRaceTargetSeconds: (seconds) => set({ raceTargetSeconds: seconds }),
       setSchemaMode: (mode) => set({ schemaMode: mode }),
+      setThemePreference: (preference) => set({ themePreference: preference }),
 
       completeOnboarding: (profile) => {
         set({ profile, hasCompletedOnboarding: true, currentWeek: 1 });
@@ -345,8 +376,44 @@ export const useAppStore = create<AppState>()(
 
       cancelSession: () => set({ activeSession: null }),
 
+      skipSession: (sessionId, weekNumber, weekSessions) => {
+        const { skippedSessions, completedSessions, currentWeek, racePlan, schemaMode, profile } = get();
+
+        // Al voltooid of al overgeslagen: niets doen
+        const alreadyHandled =
+          completedSessions.some(c => c.sessionId === sessionId) ||
+          skippedSessions.some(s => s.sessionId === sessionId);
+        if (alreadyHandled) return;
+
+        const updatedSkipped: SkippedSession[] = [
+          ...skippedSessions,
+          { sessionId, weekNumber, skippedAt: new Date().toISOString() },
+        ];
+
+        // Een week is afgehandeld zodra elke sessie ervan voltooid of
+        // overgeslagen is. Zo loopt de gebruiker na een mindere week gewoon door.
+        const handledIds = new Set<string>([
+          ...completedSessions.map(c => c.sessionId),
+          ...updatedSkipped.map(s => s.sessionId),
+        ]);
+        const weekDone = weekSessions.every(s => handledIds.has(s.id));
+
+        const totalWeeks =
+          schemaMode === 'race' && racePlan
+            ? racePlan.totalWeeks
+            : profile
+            ? getTrainingPlan(profile.goal).weeks
+            : currentWeek;
+
+        const nextWeek = weekDone
+          ? Math.min(currentWeek + 1, totalWeeks)
+          : currentWeek;
+
+        set({ skippedSessions: updatedSkipped, currentWeek: nextWeek });
+      },
+
       resetProgress: async () => {
-        set({ completedSessions: [], currentWeek: 1, activeSession: null });
+        set({ completedSessions: [], skippedSessions: [], currentWeek: 1, activeSession: null });
         // Wis ook de persistente opslag zodat een herstart schoon begint
         try {
           await AsyncStorage.removeItem('app-store');
@@ -363,10 +430,12 @@ export const useAppStore = create<AppState>()(
         hasCompletedOnboarding: state.hasCompletedOnboarding,
         profile:                state.profile,
         completedSessions:      state.completedSessions,
+        skippedSessions:        state.skippedSessions,
         currentWeek:            state.currentWeek,
         racePlan:               state.racePlan,
         raceTargetSeconds:      state.raceTargetSeconds,
         schemaMode:             state.schemaMode,
+        themePreference:        state.themePreference,
         routePlanCount:         state.routePlanCount,
         routePlanWeekStart:     state.routePlanWeekStart,
       }),
@@ -405,6 +474,11 @@ export const selectIsSessionCompleted = (
   state: AppState,
   sessionId: string,
 ): boolean => state.completedSessions.some(s => s.sessionId === sessionId);
+
+export const selectIsSessionSkipped = (
+  state: AppState,
+  sessionId: string,
+): boolean => state.skippedSessions.some(s => s.sessionId === sessionId);
 
 export const selectTotalKm = (state: AppState): number =>
   state.completedSessions.reduce((sum, s) => sum + s.actualDistanceKm, 0);

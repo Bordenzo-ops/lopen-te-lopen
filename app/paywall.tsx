@@ -13,7 +13,7 @@
  * laag via usePremium. Hier staat alleen de paywall zelf.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -26,7 +26,8 @@ import {
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Check, Crown } from 'lucide-react-native';
-import { colors, typography, spacing, radius, shadows } from '../src/theme/tokens';
+import { colors, typography, spacing, radius, shadows, type ThemeColors } from '../src/theme/tokens';
+import { useThemeColors } from '../src/theme/useTheme';
 import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
 import { useAppStore } from '../src/store/appStore';
@@ -40,7 +41,7 @@ import {
   type PurchasesPackage,
 } from '../src/services/purchaseService';
 
-const GOLD = '#F59E0B';
+const GOLD = colors.premium;
 
 const VOORDELEN = [
   'Onbeperkt routes plannen',
@@ -60,6 +61,8 @@ interface PlanOption {
 }
 
 export default function PaywallScreen() {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const setPremium = useAppStore(s => s.setPremium);
   const refreshPremium = useAppStore(s => s.refreshPremium);
 
@@ -256,6 +259,8 @@ interface PlanCardProps {
 }
 
 function PlanCard({ option, highlighted, busy, disabled, onPress }: PlanCardProps) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -304,7 +309,7 @@ function PlanCard({ option, highlighted, busy, disabled, onPress }: PlanCardProp
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.bgBase,

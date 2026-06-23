@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ChevronDown, ChevronRight, CalendarDays } from 'lucide-react-native';
-import { colors, typography, spacing, radius } from '../../src/theme/tokens';
+import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
+import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore, selectIsSessionCompleted } from '../../src/store/appStore';
 import { getTrainingPlan, zoneInfo, remapWeekDays, DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
 import { DayPicker } from '../../src/components/ui/DayPicker';
@@ -18,6 +19,7 @@ export default function ScheduleScreen() {
   const profile = useAppStore(s => s.profile);
   const currentWeek = useAppStore(s => s.currentWeek);
   const completedSessions = useAppStore(s => s.completedSessions);
+  const skippedSessions = useAppStore(s => s.skippedSessions);
   const racePlan = useAppStore(s => s.racePlan);
   const schemaMode = useAppStore(s => s.schemaMode);
   const setSchemaMode = useAppStore(s => s.setSchemaMode);
@@ -26,6 +28,8 @@ export default function ScheduleScreen() {
   const [expandedWeek, setExpandedWeek] = useState<number>(currentWeek);
   const [showDayPicker, setShowDayPicker] = useState(false);
   const [draftDays, setDraftDays] = useState<number[] | null>(null);
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   if (!profile) return null;
 
@@ -179,7 +183,14 @@ export default function ScheduleScreen() {
           const completedCount = weekSessionIds.filter(
             id => completedSessions.some(c => c.sessionId === id),
           ).length;
-          const allDone = completedCount === week.sessions.length;
+          // Een week telt als afgehandeld zodra elke sessie voltooid of bewust
+          // overgeslagen is, zodat een overgeslagen training de week niet open laat.
+          const handledCount = weekSessionIds.filter(
+            id =>
+              completedSessions.some(c => c.sessionId === id) ||
+              skippedSessions.some(sk => sk.sessionId === id),
+          ).length;
+          const allDone = handledCount === week.sessions.length;
 
           return (
             <View style={[styles.weekBlock, isCurrent && styles.weekBlockCurrent, allDone && styles.weekBlockDone]}>
@@ -215,19 +226,24 @@ export default function ScheduleScreen() {
                 <View style={styles.sessionList}>
                   {week.sessions.map(session => {
                     const isCompleted = completedSessions.some(c => c.sessionId === session.id);
+                    const isSkipped = skippedSessions.some(sk => sk.sessionId === session.id);
+                    const isHandled = isCompleted || isSkipped;
                     const pace = paceForType(session.type);
                     return (
-                      <View key={session.id} style={[styles.sessionRow, isCompleted && styles.sessionRowDone]}>
-                        <View style={[styles.sessionDot, { backgroundColor: zoneInfo[session.zone].color }, isCompleted && styles.sessionDotDone]} />
+                      <View key={session.id} style={[styles.sessionRow, isHandled && styles.sessionRowDone]}>
+                        <View style={[styles.sessionDot, { backgroundColor: zoneInfo[session.zone].color }, isHandled && styles.sessionDotDone]} />
                         <Text style={styles.sessionDay}>{dayLabel[session.day]}</Text>
-                        <Text style={[styles.sessionDesc, isCompleted && styles.textMuted]} numberOfLines={1}>
+                        <Text style={[styles.sessionDesc, isHandled && styles.textMuted]} numberOfLines={1}>
                           {session.description}
                         </Text>
                         {/* Persoonlijk trainingstempo naast de afstand (premium + doeltijd) */}
-                        {pace != null && pace > 0 && (
+                        {pace != null && pace > 0 && !isSkipped && (
                           <Text style={styles.sessionPace}>{formatPacePerKm(pace)}</Text>
                         )}
-                        <Text style={styles.sessionKm}>{session.distanceKm} km</Text>
+                        {isSkipped
+                          ? <Text style={styles.skippedMark}>overgeslagen</Text>
+                          : <Text style={styles.sessionKm}>{session.distanceKm} km</Text>
+                        }
                         {isCompleted && <Text style={styles.checkmark}>✓</Text>}
                       </View>
                     );
@@ -242,7 +258,7 @@ export default function ScheduleScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   header: { paddingHorizontal: spacing[3], paddingTop: spacing[2], paddingBottom: spacing[1] },
   title: {
@@ -402,5 +418,9 @@ const styles = StyleSheet.create({
     color: colors.brandLight,
   },
   checkmark: { color: colors.success, fontSize: 14, fontFamily: typography.fontFamily.sansBold },
+  skippedMark: {
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.xs,
+    color: colors.textTertiary, fontStyle: 'italic',
+  },
   textMuted: { color: colors.textTertiary },
 });

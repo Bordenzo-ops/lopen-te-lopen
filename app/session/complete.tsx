@@ -6,12 +6,13 @@
  * te kiezen of terug te gaan naar het dashboard.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Trophy, Share2, RefreshCw, ChevronRight } from 'lucide-react-native';
-import { colors, typography, spacing, radius, shadows } from '../../src/theme/tokens';
+import { typography, spacing, radius, shadows, type ThemeColors } from '../../src/theme/tokens';
+import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
 import { Button } from '../../src/components/ui/Button';
 import { ShareRunSheet } from '../../src/components/ui/ShareRunSheet';
@@ -46,6 +47,8 @@ export default function SchemaCompleteScreen() {
   const racePlan          = useAppStore(s => s.racePlan);
   const schemaMode        = useAppStore(s => s.schemaMode);
   const [showShare, setShowShare] = useState(false);
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   if (!profile) return null;
 
@@ -166,7 +169,7 @@ export default function SchemaCompleteScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   scroll: {
     paddingHorizontal: spacing[3], paddingTop: spacing[4],

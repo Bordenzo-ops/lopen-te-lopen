@@ -1,12 +1,13 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, Animated, LayoutAnimation, Platform, UIManager,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Check, Trophy, Dumbbell, Calendar, Clock } from 'lucide-react-native';
-import { colors, palette, typography, spacing, radius, shadows } from '../../src/theme/tokens';
+import { ChevronLeft, Check, Trophy, Dumbbell, Calendar, Clock, Target, Medal } from 'lucide-react-native';
+import { colors, palette, typography, spacing, radius, shadows, type ThemeColors } from '../../src/theme/tokens';
+import { useThemeColors } from '../../src/theme/useTheme';
 import { Button } from '../../src/components/ui/Button';
 import { trainingPlans } from '../../src/data/trainingPlans';
 import { getUpcomingRaces, weeksUntilRace, formatRaceDate } from '../../src/data/rotterdamRaces';
@@ -22,16 +23,17 @@ if (Platform.OS === 'android') {
 
 // ── Meta ──────────────────────────────────────────────────────────────────────
 
-const goalMeta: Record<GoalType, { emoji: string; tagline: string }> = {
-  '5km':           { emoji: '🎯', tagline: 'Ideaal als eerste doel' },
-  '10km':          { emoji: '💪', tagline: 'De klassieke uitdaging' },
-  'half_marathon': { emoji: '🏅', tagline: 'Het ultieme doel' },
-  'marathon':      { emoji: '🏆', tagline: 'Voor de echte avonturier' },
+const goalMeta: Record<GoalType, { icon: React.ReactNode; tagline: string }> = {
+  '5km':           { icon: <Target size={26} color={colors.brandLight} strokeWidth={2} />,   tagline: 'Ideaal als eerste doel' },
+  '10km':          { icon: <Dumbbell size={26} color={colors.brandLight} strokeWidth={2} />, tagline: 'De klassieke uitdaging' },
+  'half_marathon': { icon: <Medal size={26} color={colors.brandLight} strokeWidth={2} />,    tagline: 'Het ultieme doel' },
+  'marathon':      { icon: <Trophy size={26} color={colors.brandLight} strokeWidth={2} />,   tagline: 'Voor de echte avonturier' },
 };
 
 const distanceLabel: Record<RotterdamRace['distance'], string> = {
   '5km':           '5 KM',
   '10km':          '10 KM',
+  '15km':          '15 KM',
   'half_marathon': 'Halve Marathon',
   'marathon':      'Marathon',
 };
@@ -39,6 +41,8 @@ const distanceLabel: Record<RotterdamRace['distance'], string> = {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function GoalScreen() {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [mode, setMode] = useState<'training' | 'race'>('training');
   const { hasAccess } = usePremium();
 
@@ -142,6 +146,8 @@ export default function GoalScreen() {
 function ModeTab({
   icon, label, active, onPress,
 }: { icon: React.ReactNode; label: string; active: boolean; onPress: () => void }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <TouchableOpacity
       style={[styles.modeTabBtn, active && styles.modeTabBtnActive]}
@@ -160,6 +166,8 @@ function ModeTab({
 function TrainingModeContent({
   selected, onSelect,
 }: { selected: GoalType | null; onSelect: (g: GoalType) => void }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Kies je doel</Text>
@@ -175,7 +183,7 @@ function TrainingModeContent({
               style={[styles.goalCard, isSelected && styles.goalCardSelected]}
             >
               <View style={styles.goalLeft}>
-                <Text style={styles.goalEmoji}>{meta.emoji}</Text>
+                <View style={styles.goalEmoji}>{meta.icon}</View>
                 <View style={styles.goalText}>
                   <Text style={[styles.goalName, isSelected && styles.goalNameSelected]}>
                     {plan.name}
@@ -212,6 +220,8 @@ function RaceModeContent({
   onSwitchToTraining: () => void;
   hasAccess: boolean;
 }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   // Sommige afstanden zijn later premium. We blokkeren de keuze in de
   // onboarding bewust niet: een nieuwe gebruiker mag altijd een doel kiezen en
   // direct een werkend schema krijgen. We tonen wel een eerlijke premium-hint,
@@ -317,7 +327,7 @@ function RaceModeContent({
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
 
   navHeader: {
@@ -411,7 +421,7 @@ const styles = StyleSheet.create({
   },
   goalCardSelected: { borderColor: colors.brandPrimary, backgroundColor: colors.brandPrimary + '11' },
   goalLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing[1.5] },
-  goalEmoji: { fontSize: 32 },
+  goalEmoji: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.brandPrimary + '14', alignItems: 'center', justifyContent: 'center' },
   goalText: { gap: 3 },
   goalName: {
     fontFamily: typography.fontFamily.sansBold, fontSize: typography.fontSize.md, color: colors.textPrimary,
