@@ -123,6 +123,12 @@ interface AppState {
   setHasHydrated: (v: boolean) => void;
 
   // Backend (offline-first, additief)
+  /**
+   * Heeft de gebruiker cloudsync expliciet ingeschakeld? Default false.
+   * Zonder toestemming start de app geen anonieme sessie en syncet niets.
+   */
+  cloudSyncEnabled: boolean;
+  setCloudSyncEnabled: (v: boolean) => void;
   /** Is er een actieve Supabase-sessie? Default false (offline). */
   isSignedIn: boolean;
   /** Status van de laatste synchronisatiepoging */
@@ -215,6 +221,7 @@ export const useAppStore = create<AppState>()(
       _hasHydrated: false,
 
       // Backend-status (offline-first defaults)
+      cloudSyncEnabled: false,
       isSignedIn: false,
       syncStatus: 'idle',
       lastSyncedAt: null,
@@ -223,6 +230,17 @@ export const useAppStore = create<AppState>()(
       isPremium: false,
 
       setPremium: (value) => set({ isPremium: value }),
+
+      setCloudSyncEnabled: (v) => {
+        set({ cloudSyncEnabled: v });
+        // Zodra de gebruiker sync aanzet, start de backend.
+        // Zodra hij het uitzet, wis de Supabase-sessie.
+        if (v) {
+          void get().initBackend();
+        } else {
+          set({ isSignedIn: false, syncStatus: 'idle' });
+        }
+      },
 
       refreshPremium: async () => {
         try {
@@ -234,6 +252,7 @@ export const useAppStore = create<AppState>()(
       },
 
       initBackend: async () => {
+        if (!get().cloudSyncEnabled) return;
         try {
           const session = await ensureAnonymousSession();
           set({ isSignedIn: !!session });
@@ -248,6 +267,7 @@ export const useAppStore = create<AppState>()(
       },
 
       syncNow: async () => {
+        if (!get().cloudSyncEnabled) return;
         try {
           // Zorg zelf voor een (anonieme) sessie. Dit voorkomt dat een sync
           // wordt overgeslagen wanneer de sessie nog niet klaar was, en is

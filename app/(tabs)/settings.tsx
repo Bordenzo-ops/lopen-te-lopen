@@ -4,7 +4,7 @@ import {
   Alert, TextInput, KeyboardAvoidingView, Platform, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone } from 'lucide-react-native';
+import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone, Cloud } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
@@ -161,6 +161,10 @@ export default function SettingsScreen() {
   const themePreference = useAppStore(s => s.themePreference);
   const setThemePreference = useAppStore(s => s.setThemePreference);
   const { hasAccess, goToPaywall } = usePremium();
+  const cloudSyncEnabled    = useAppStore(s => s.cloudSyncEnabled);
+  const setCloudSyncEnabled = useAppStore(s => s.setCloudSyncEnabled);
+  const syncStatus          = useAppStore(s => s.syncStatus);
+  const lastSyncedAt        = useAppStore(s => s.lastSyncedAt);
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   if (!profile) return null;
@@ -390,6 +394,38 @@ export default function SettingsScreen() {
                 </Text>
               </View>
             </View>
+          </View>
+
+          {/* Cloudsync */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Gegevens</Text>
+            <View style={styles.card}>
+              <View style={styles.switchRow}>
+                <Cloud size={18} color={colors.textSecondary} strokeWidth={2} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.switchLabel}>Cloudsync</Text>
+                  <Text style={styles.switchSub}>
+                    {cloudSyncEnabled
+                      ? syncStatus === 'synced' && lastSyncedAt
+                        ? `Gesynchroniseerd om ${new Date(lastSyncedAt).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`
+                        : syncStatus === 'syncing' ? 'Bezig met synchroniseren...'
+                        : syncStatus === 'error' ? 'Synchronisatie mislukt'
+                        : 'Trainingdata wordt opgeslagen in de cloud'
+                      : 'Trainingsdata blijft alleen lokaal op dit apparaat'}
+                  </Text>
+                </View>
+                <Switch
+                  value={cloudSyncEnabled}
+                  onValueChange={setCloudSyncEnabled}
+                  accessibilityLabel="Cloudsync"
+                  trackColor={{ false: colors.borderDefault, true: colors.brandPrimary + '88' }}
+                  thumbColor={cloudSyncEnabled ? colors.brandPrimary : colors.textTertiary}
+                />
+              </View>
+            </View>
+            <Text style={styles.fieldNote}>
+              Als cloudsync aan staat, worden je profiel en trainingsresultaten versleuteld opgeslagen bij Supabase (EU). Routes worden niet gesynchroniseerd. Zie het privacybeleid voor details.
+            </Text>
           </View>
 
           {/* Overige */}
