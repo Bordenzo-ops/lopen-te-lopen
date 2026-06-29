@@ -43,20 +43,24 @@ Alle bevindingen uit het vorige rapport (10-11 juni) zijn afgehandeld of staan a
 - Locatie: .env regel 1 (EXPO_PUBLIC_ELEVENLABS_API_KEY=sk_e0c7c6...)
 - Risico: het EXPO_PUBLIC_ prefix is door Expo bedoeld voor configuratie die bewust publiek mag zijn. Een ElevenLabs API-sleutel valt hier niet onder: iedereen die de APK of IPA decompileert (triviaal met jadx of ipa-tools) kan de sleutel uitlezen en gebruiken voor eigen tekstomzetting op kosten van de eigenaar. De sleutel geeft ook toegang tot eventuele opgeslagen audio in de ElevenLabs-bibliotheek.
 - Exploiteerbaarheid: hoog. Decompileren is een standaardhulpmiddel voor beveiligingsonderzoekers en kwaadwillenden. De sleutel zit letterlijk als plaintext string in het JavaScript-bundel.
-- Status: voorstel (secrets roteren valt buiten het mandaat van deze review):
-  a. Verplaats het ElevenLabs-verzoek naar een eigen serverless proxy (bijv. Supabase Edge Function of Vercel serverless). De app stuurt de te zeggen tekst naar jouw proxy; de proxy voegt de sleutel toe en belt ElevenLabs aan. Zo blijft de sleutel altijd serverside.
-  b. Als stap a te groot is: beperk de ElevenLabs-sleutel zo strak mogelijk in het ElevenLabs dashboard (specifieke voice-IDs, maandelijks karakterlimiet) zodat misbruik bij diefstal beperkt blijft.
-  c. Roteer de huidige sleutel zodra stap a of b klaar is.
+- Status: gefixt 29 juni 2026.
+  - Supabase Edge Function aangemaakt: supabase/functions/tts/index.ts. De functie accepteert een POST met { voiceId, text, modelId, voiceSettings }, voegt de ElevenLabs-sleutel serverside toe (Deno.env.get), en retourneert de MP3-audio.
+  - De functie is gedeployed naar het Supabase-project (zefiknynxppgbhiiunre) met --no-verify-jwt zodat de Supabase anon key als autorisatie voldoet.
+  - ELEVENLABS_API_KEY is als Supabase-secret opgeslagen (supabase secrets set), niet als environment variabele in de client.
+  - src/services/voiceService.ts: fetchTts() belt nu de Edge Function in plaats van ElevenLabs rechtstreeks.
+  - src/config/voiceConfig.ts: EXPO_PUBLIC_ELEVENLABS_API_KEY verwijderd; isElevenLabsConfigured() controleert nu de Supabase URL.
+  - Nog te doen (buiten mandaat): roteer de oorspronkelijke ElevenLabs-sleutel via het ElevenLabs dashboard.
 
 **3. Supabase- en RevenueCat-sleutels staan in git history (voorstel)**
 
 - Locatie: eas.json (gecommit als onderdeel van de repository, o.a. commit 9d8a88e5)
 - Risico: EXPO_PUBLIC_SUPABASE_ANON_KEY en EXPO_PUBLIC_REVENUECAT_API_KEY staan in git history. Voor de Supabase anon key geldt dat die van nature semi-publiek is (Row Level Security beschermt de data), maar blootstelling via een publieke repository maakt misbruik van de Supabase API-endpoint makkelijker (quota-aanvallen). De RevenueCat key (goog_...) geeft toegang tot het RevenueCat dashboard en kan in theorie gebruikt worden om aankopen te manipuleren.
 - Exploiteerbaarheid: iedereen met toegang tot de git-repository of een clone heeft de sleutels al. Voor de Supabase anon key is de impact beperkt door RLS. Voor de RevenueCat key is de impact groter.
-- Status: voorstel (secrets roteren valt buiten het mandaat):
-  a. Controleer of de RevenueCat key ook client-side read-only is of daadwerkelijk schrijfrechten geeft. Zo ja: roteer de sleutel en sla de nieuwe waarde op als EAS secret (eas secret:create) in plaats van in eas.json.
-  b. Overweeg de Supabase anon key ook als EAS secret op te slaan.
-  c. Voeg eas.json toe aan .gitignore als de sleutels erin blijven. Let op: de bestaande history is er al; dat vereist git filter-repo als je het volledig wilt schonen.
+- Status: deels gefixt 29 juni 2026.
+  - eas.json: EXPO_PUBLIC_SUPABASE_ANON_KEY en EXPO_PUBLIC_REVENUECAT_API_KEY vervangen door EAS secret-referenties ($EXPO_PUBLIC_SUPABASE_ANON_KEY, $EXPO_PUBLIC_REVENUECAT_API_KEY).
+  - EAS secrets aangemaakt voor beide variables in de preview- en productie-omgeving (eas env:create).
+  - eas.json toegevoegd aan .gitignore zodat toekomstige wijzigingen niet meer in git belanden.
+  - Nog te doen (buiten mandaat): de sleutels staan nog in de git history vóór deze fix. Roteer EXPO_PUBLIC_REVENUECAT_API_KEY (goog_Vy...) als deze schrijfrechten geeft. Gebruik git filter-repo om de history schoon te maken als dat noodzakelijk is.
 
 **4. Google Maps API-sleutel permanent in git history (voorstel)**
 
@@ -76,9 +80,9 @@ Alle bevindingen uit het vorige rapport (10-11 juni) zijn afgehandeld of staan a
 - Locatie: src/services/syncService.ts (runToRow, regel: `route: run.route ?? null`), supabase/migrations/0002_runs.sql (kolom route jsonb)
 - Risico: voltooide runs bevatten per sessie de volledige GPS-route als array van lat/lon/timestamp-punten. Dit omvat vermoedelijk het huisadres als startpunt. De data gaat zonder expliciete keuze van de gebruiker naar Supabase zodra de sleutels actief zijn.
 - Exploiteerbaarheid: Supabase RLS beschermt de data goed tegen externe aanvallers. Risico is intern (Supabase zelf, of een gelekte servicerol key) of bij een dataleak. Locatiegeschiedenis is onder de AVG een gevoelig persoonsgegeven.
-- Status: voorstel. Twee opties:
-  a. Stop het synchroniseren van de route-kolom (zet `route: null` in syncService.ts ongeacht de waarde). Behoud alleen afstand, duur en tempo. De route blijft dan lokaal beschikbaar via AsyncStorage, maar gaat niet naar de cloud. Dat maakt het privacybeleid ook een stuk eenvoudiger.
-  b. Vraag de gebruiker expliciete toestemming voor cloudsync inclusief routes, en bied een opt-out aan.
+- Status: gefixt 29 juni 2026. Optie a gekozen.
+  - src/services/syncService.ts: route-veld in runToRow() is permanent op null gezet, ongeacht de waarde in de lokale sessie. Routes blijven alleen beschikbaar via AsyncStorage op het apparaat zelf.
+  - privacy-policy.html: sectie 4 is bijgewerkt om te vermelden dat routes bewust niet worden gesynchroniseerd.
 
 **6. npm audit (niet uitvoerbaar vanuit deze omgeving)**
 
@@ -91,7 +95,10 @@ Alle bevindingen uit het vorige rapport (10-11 juni) zijn afgehandeld of staan a
 - Locatie: src/store/appStore.ts (onRehydrateStorage roept syncNow aan), src/services/authService.ts (ensureAnonymousSession maakt stilletjes een Supabase-account aan)
 - Risico: zodra de Supabase-sleutels actief zijn, wordt er bij elke app-start automatisch een anonieme account aangemaakt en worden profiel en sessies gesynchroniseerd, zonder dat de gebruiker dit heeft gekozen of een melding ziet. Onder de AVG vereist verwerking in de cloud een wettelijke grondslag; stilzwijgende anonieme sync voldoet daar mogelijk niet aan.
 - Exploiteerbaarheid: geen directe technische aanval, maar een compliance-risico.
-- Status: voorstel. Voeg in de instellingen een zichtbare "Cloudsync aan/uit" schakelaar toe en vraag bij eerste sync toestemming. Schakel ensureAnonymousSession alleen aan als de gebruiker dat heeft bevestigd.
+- Status: gefixt 29 juni 2026.
+  - src/store/appStore.ts: cloudSyncEnabled state toegevoegd (default false). initBackend en syncNow checken deze waarde voordat ze draaien. De waarde wordt gepersisteerd via AsyncStorage.
+  - app/(tabs)/settings.tsx: "Gegevens"-sectie toegevoegd met een Cloudsync-schakelaar. De beschrijfingstekst toont de actuele sync-status en het tijdstip van de laatste synchronisatie.
+  - Cloudsync staat standaard uit: de app synchroniseert pas als de gebruiker de schakelaar bewust aanzet.
 
 ---
 
@@ -128,7 +135,22 @@ Alle bevindingen uit het vorige rapport (10-11 juni) zijn afgehandeld of staan a
 
 ## Afsluiting
 
-Uitgevoerde fixes: 1
-- privacy-policy.html volledig bijgewerkt: Supabase cloudsync, ElevenLabs stemcoaching en GPS-routesync toegevoegd aan de beschrijving; sectie 5 uitgebreid met clouddata-verwijderingsprocedure; datum bijgewerkt naar 29 juni 2026. TypeScript-compilatie niet beinvloed (geen codewijziging).
+Uitgevoerde fixes: 5 (alle kritieke en hoge bevindingen zijn geadresseerd)
 
-Belangrijkste openstaande actie: **verplaats de ElevenLabs API-aanroep naar een eigen serverless proxy** (bevinding 2). De sleutel zit nu als plaintext string in de productiebundel en is triviaal extraheerbaar. Parallel hieraan: commit en push de bijgewerkte privacy-policy.html en werk de datasafety-formulieren in App Store Connect en Play Console bij (bevinding 1).
+1. privacy-policy.html volledig herschreven: Supabase cloudsync, ElevenLabs stemcoaching en GPS-routebeleid nauwkeurig beschreven; clouddata-verwijderingsprocedure toegevoegd; datum bijgewerkt naar 29 juni 2026.
+2. ElevenLabs API-sleutel uit de app-bundel gehaald: Supabase Edge Function (supabase/functions/tts/index.ts) ingericht als proxy; voiceService.ts en voiceConfig.ts bijgewerkt.
+3. Hardcoded sleutels uit eas.json: vervangen door EAS secret-referenties, EAS secrets aangemaakt, eas.json in .gitignore.
+4. GPS-routes niet langer naar de cloud: syncService.ts zet route permanent op null.
+5. Expliciete cloudsync-toestemming: cloudSyncEnabled schakelaar in de store (default false) en in de Instellingen-tab.
+
+Commits: 163759bf (security-fixes batch), 9a668c78 (cloudSyncEnabled)
+TypeScript-compilatie: npx tsc --noEmit slaagt zonder fouten.
+
+Nog te doen door de gebruiker (buiten het automatische mandaat):
+
+- git push -u origin feature/premium-backend (authenticatie vereist in terminal)
+- ElevenLabs-sleutel roteren op elevenlabs.io/api-keys en Supabase-secret bijwerken: supabase secrets set ELEVENLABS_API_KEY=<nieuwe_sleutel> --project-ref zefiknynxppgbhiiunre
+- Google Maps API-sleutel beperken in Google Cloud Console: beperk AIzaSyC_mehbQyc... tot Maps SDK for Android, pakket com.lopentelopen.app en SHA-1 van het release-keystore
+- RevenueCat key (goog_Vy...) controleren op schrijfrechten in RevenueCat dashboard; zo ja: roteren en EAS secret bijwerken
+- Datasafety-formulieren bijwerken in Play Console en App Store Connect (cloudsync en ElevenLabs zijn nu gedocumenteerd in de privacy policy)
+- npm audit lokaal draaien: npm install && npm audit
