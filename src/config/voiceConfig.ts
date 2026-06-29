@@ -2,23 +2,15 @@
  * ElevenLabs spraakconfiguratie
  *
  * De coaching en routebegeleiding gebruiken ElevenLabs text-to-speech
- * voor een natuurlijke stem. Zonder API-sleutel valt de app automatisch
- * terug op de ingebouwde telefoonstem (expo-speech).
+ * voor een natuurlijke stem. De API-aanroep loopt via een Supabase Edge
+ * Function (supabase/functions/tts) zodat de ElevenLabs-sleutel nooit
+ * in de app-bundel terechtkomt. Zonder actieve Supabase-configuratie
+ * valt de app automatisch terug op de ingebouwde telefoonstem (expo-speech).
  */
 
 export type VoiceType = 'female' | 'male';
 
 export const ELEVENLABS = {
-  /**
-   * De API-sleutel komt uit het .env-bestand in de projectroot
-   * (EXPO_PUBLIC_ELEVENLABS_API_KEY). Zie .env.example voor de opzet.
-   * Geen sleutel? Dan gebruikt de app de ingebouwde telefoonstem.
-   *
-   * Let op: na het aanpassen van .env moet de Metro-server opnieuw
-   * gestart worden (npx expo start) om de nieuwe waarde te laden.
-   */
-  apiKey: process.env.EXPO_PUBLIC_ELEVENLABS_API_KEY ?? '',
-
   /** Meertalig model met goede ondersteuning voor Nederlands */
   modelId: 'eleven_multilingual_v2',
 
@@ -45,4 +37,10 @@ export const ELEVENLABS = {
   },
 };
 
-export const isElevenLabsConfigured = (): boolean => ELEVENLABS.apiKey.length > 0;
+/**
+ * TTS is beschikbaar zodra de Supabase Edge Function bereikbaar is.
+ * De Supabase URL is publiek (EXPO_PUBLIC_), de ElevenLabs-sleutel
+ * staat serverside als Supabase Secret en zit nooit in de bundel.
+ */
+export const isElevenLabsConfigured = (): boolean =>
+  (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').length > 0;

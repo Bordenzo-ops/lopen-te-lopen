@@ -1,107 +1,134 @@
 # Security review Lopen te Lopen
-Datum: 10 juni 2026
-Scope: Expo/React Native app in projectmap, inclusief app.json, eas.json, dependencies, dataopslag, netwerk en privacy-policy.html
-Vorig rapport: geen (dit is de eerste review, de map reviews/ bestond nog niet)
+Datum: 29 juni 2026
+Scope: Expo/React Native app (SDK 56, TypeScript), inclusief app.json, eas.json, .env, dependencies, dataopslag, netwerk, permissies en privacy-policy.html
+Vorig rapport: 2026-06-security-review.md (10 juni 2026, herzien 11 juni 2026)
 
-## Samenvatting
-Geen kritieke bevindingen. De app werkt volledig lokaal, gebruikt uitsluitend HTTPS en bevat geen hardcoded secrets. De belangrijkste bevinding is dat het privacybeleid niet klopt met de routeplanner, die locatiedata naar een externe dienst stuurt. Daarnaast vroeg de app meer permissies dan de code gebruikt; dat is opgeschoond.
+## Vergelijking met vorig rapport
+
+Alle bevindingen uit het vorige rapport (10-11 juni) zijn afgehandeld of staan al als open actie geregistreerd. Nieuwe bevindingen in deze ronde zijn het gevolg van de Supabase-backend en ElevenLabs-integratie die na de vorige review zijn toegevoegd:
+
+- Privacybeleid klopte niet meer met de daadwerkelijke datastromen (KRITIEK, zie bevinding 1 - gefixt)
+- EXPO_PUBLIC_ ElevenLabs API-sleutel is uit de .env-bundel extraheerbaar (HOOG, voorstel)
+- Supabase- en RevenueCat-sleutels staan in git history via eas.json (HOOG, voorstel)
+- Google Maps API-sleutel in git history via app.json (HOOG, voorstel - was al Middel in vorig rapport)
+- GPS-routes worden naar Supabase gesynchroniseerd zonder privacybeleidsdekking (KRITIEK, gefixt)
+
+---
 
 ## Bevindingen
 
+### Kritiek
+
+**1. Privacybeleid klopte niet met cloudsync en ElevenLabs (gefixt 29 juni 2026)**
+
+- Locatie: privacy-policy.html vs. src/services/syncService.ts, src/services/authService.ts, src/services/voiceService.ts
+- Risico: het privacybeleid beweerde "Alle gegevens worden lokaal opgeslagen. Er is geen gebruikersaccount en geen cloud-synchronisatie." Ondertussen:
+  - De app maakt automatisch een anonieme Supabase-sessie aan (signInAnonymously) en synchroniseert best-effort naam, leeftijd, doel, trainingsdata en GPS-routes naar Supabase-servers (EU, AWS Frankfurt) zonder dat de gebruiker dit weet of toestemming geeft.
+  - Premium-gebruikers sturen coachteksten naar ElevenLabs (VS) voor spraaksynthese.
+- Exploiteerbaarheid: directe AVG/GDPR-overtreding. Toezichthouder of storereviewer kan de app blokkeren; ook Apple- en Google-reviewers controleren of het privacybeleid klopt met het daadwerkelijke datagebruik.
+- Status: gefixt. privacy-policy.html is volledig herschreven:
+  - Sectie 2 beschrijft nu de offline-first opslag plus de optionele cloudsync naar Supabase (EU, RLS-beveiliging).
+  - Sectie 3 noemt drie externe diensten: Supabase (cloudsync), openrouteservice.org (routeplanner) en ElevenLabs (stemcoaching, alleen premium).
+  - Sectie 4 vermeldt expliciet dat routes ook in de cloud worden opgeslagen als sync actief is.
+  - Sectie 5 voegt een procedure toe voor clouddata-verwijdering.
+  - Datum bijgewerkt naar 29 juni 2026.
+- Nog te doen: commit en push naar GitHub (Pages worden daarna automatisch bijgewerkt), datasafety-formulieren in App Store Connect en Play Console bijwerken.
+
+---
+
 ### Hoog
 
-**1. Privacybeleid klopt niet met de routeplanner (gefixt op 11 juni 2026)**
-- Locatie: src/services/routeService.ts (orsPost, generateLoopRoute, generateOutAndBackRoute) tegenover privacy-policy.html sectie 2 en 3
-- Risico: de routeplanner stuurt de actuele GPS-positie van de gebruiker naar api.openrouteservice.org om routes te genereren. Het privacybeleid stelt letterlijk dat de app geen persoonlijke gegevens naar externe servers verstuurt en niets met derden deelt. Dat is onjuist zodra de routeplanner gebruikt wordt. Locatiedata is onder de AVG een persoonsgegeven.
-- Exploiteerbaarheid: geen directe aanval, maar wel een reëel compliance- en storereviewrisico (Apple en Google controleren of de privacyverklaring klopt met het daadwerkelijke datagedrag).
-- Status: gefixt op 11 juni 2026. privacy-policy.html is aangevuld met een paragraaf over de routeplanner en openrouteservice.org (welke data, waarvoor, link naar het privacybeleid van HeiGIT) en gecommit naar GitHub (commit 7c5fbf7 op main), waarmee de gepubliceerde versie op GitHub Pages wordt bijgewerkt. Nog te doen: de datasafety-formulieren in de App Store en Play Store hierop aanpassen.
+**2. EXPO_PUBLIC_ ElevenLabs API-sleutel wordt in de app-bundel meegeleverd (voorstel)**
+
+- Locatie: .env regel 1 (EXPO_PUBLIC_ELEVENLABS_API_KEY=sk_e0c7c6...)
+- Risico: het EXPO_PUBLIC_ prefix is door Expo bedoeld voor configuratie die bewust publiek mag zijn. Een ElevenLabs API-sleutel valt hier niet onder: iedereen die de APK of IPA decompileert (triviaal met jadx of ipa-tools) kan de sleutel uitlezen en gebruiken voor eigen tekstomzetting op kosten van de eigenaar. De sleutel geeft ook toegang tot eventuele opgeslagen audio in de ElevenLabs-bibliotheek.
+- Exploiteerbaarheid: hoog. Decompileren is een standaardhulpmiddel voor beveiligingsonderzoekers en kwaadwillenden. De sleutel zit letterlijk als plaintext string in het JavaScript-bundel.
+- Status: voorstel (secrets roteren valt buiten het mandaat van deze review):
+  a. Verplaats het ElevenLabs-verzoek naar een eigen serverless proxy (bijv. Supabase Edge Function of Vercel serverless). De app stuurt de te zeggen tekst naar jouw proxy; de proxy voegt de sleutel toe en belt ElevenLabs aan. Zo blijft de sleutel altijd serverside.
+  b. Als stap a te groot is: beperk de ElevenLabs-sleutel zo strak mogelijk in het ElevenLabs dashboard (specifieke voice-IDs, maandelijks karakterlimiet) zodat misbruik bij diefstal beperkt blijft.
+  c. Roteer de huidige sleutel zodra stap a of b klaar is.
+
+**3. Supabase- en RevenueCat-sleutels staan in git history (voorstel)**
+
+- Locatie: eas.json (gecommit als onderdeel van de repository, o.a. commit 9d8a88e5)
+- Risico: EXPO_PUBLIC_SUPABASE_ANON_KEY en EXPO_PUBLIC_REVENUECAT_API_KEY staan in git history. Voor de Supabase anon key geldt dat die van nature semi-publiek is (Row Level Security beschermt de data), maar blootstelling via een publieke repository maakt misbruik van de Supabase API-endpoint makkelijker (quota-aanvallen). De RevenueCat key (goog_...) geeft toegang tot het RevenueCat dashboard en kan in theorie gebruikt worden om aankopen te manipuleren.
+- Exploiteerbaarheid: iedereen met toegang tot de git-repository of een clone heeft de sleutels al. Voor de Supabase anon key is de impact beperkt door RLS. Voor de RevenueCat key is de impact groter.
+- Status: voorstel (secrets roteren valt buiten het mandaat):
+  a. Controleer of de RevenueCat key ook client-side read-only is of daadwerkelijk schrijfrechten geeft. Zo ja: roteer de sleutel en sla de nieuwe waarde op als EAS secret (eas secret:create) in plaats van in eas.json.
+  b. Overweeg de Supabase anon key ook als EAS secret op te slaan.
+  c. Voeg eas.json toe aan .gitignore als de sleutels erin blijven. Let op: de bestaande history is er al; dat vereist git filter-repo als je het volledig wilt schonen.
+
+**4. Google Maps API-sleutel permanent in git history (voorstel)**
+
+- Locatie: app.json (commit b78f4c57 e.v., sleutel AIzaSyC_mehbQyc...)
+- Risico: de sleutel is publiek voor iedereen met repository-toegang. Onbeperkt gebruik is een direct kosten- en misbruikrisico.
+- Exploiteerbaarheid: onmiddellijk beschikbaar voor iedereen met repo-toegang.
+- Status: voorstel (ook al in vorig rapport vermeld, nog niet afgehandeld):
+  - Beperk de sleutel in Google Cloud Console tot de Maps SDK for Android, package com.lopentelopen.app en de SHA-1 fingerprint van het release-keystore. Daarmee wordt misbruik voor andere Google APIs geblokkeerd, ook al kent iemand de sleutel.
+  - Roteer de sleutel als de beperking niet snel kan worden ingevoerd.
+
+---
 
 ### Middel
 
-**Aanvulling 11 juni 2026: npm audit resultaten (voorstel)**
-- De gebruiker heeft npm audit lokaal gedraaid: 12 kwetsbaarheden, allemaal severity moderate, geen kritiek of hoog.
-- Het gaat om 2 onderliggende issues in transitieve dependencies van expo:
-  - postcss kleiner dan 8.5.10: XSS via niet-geescapete style-tag in CSS-output (GHSA-qx2v-qp2m-jg93), via @expo/metro-config en @expo/cli
-  - uuid kleiner dan 11.1.1: ontbrekende buffer bounds check in v3/v5/v6 (GHSA-w5hq-g745-h8pq), via xcode en @expo/config-plugins
-- Praktische relevantie is beperkt: beide zitten in build-tooling (metro-config, prebuild, xcode-projectgeneratie) en niet in code die op het toestel van de eindgebruiker draait. Geen directe exploiteerbaarheid in de app zelf.
-- Er is geen fix zonder breaking change: npm audit fix lost niets op, alleen npm audit fix --force naar expo@56.0.9 verhelpt het. Dat is een major upgrade (project zit op expo 54) en valt daarmee buiten het mandaat van deze review, dus niet uitgevoerd.
-- Status: voorstel. Plan een gecontroleerde upgrade naar Expo SDK 56 (via npx expo install expo@^56 en npx expo install --fix, daarna testen), in plaats van npm audit fix --force.
+**5. GPS-routes worden gesynchroniseerd naar Supabase (voorstel)**
 
-**2. Locatiegeschiedenis onversleuteld in AsyncStorage (voorstel)**
-- Locatie: src/store/appStore.ts (zustand persist met AsyncStorage, key "app-store")
-- Risico: completedSessions bevat per sessie de volledige route als lat/lon/timestamp-punten. AsyncStorage is onversleutelde opslag; op een gecompromitteerd of geroot toestel is de volledige loopgeschiedenis (inclusief vermoedelijk huisadres als startpunt) uitleesbaar.
-- Exploiteerbaarheid: vereist fysieke of malware-toegang tot het toestel, dus beperkt. Maar locatiegeschiedenis is gevoelige data.
-- Status: voorstel (opslagmigratie valt buiten het mandaat van deze review). SecureStore is ongeschikt voor routes (limiet circa 2 KB per entry). Beter: routes opslaan in expo-sqlite (staat al in package.json maar wordt nergens gebruikt), of routes helemaal niet persistent bewaren en alleen afstand/duur/tempo opslaan. Dat laatste maakt het privacybeleid ("locatiegegevens worden niet bewaard buiten de sessiesamenvatting") ook letterlijk waar.
+- Locatie: src/services/syncService.ts (runToRow, regel: `route: run.route ?? null`), supabase/migrations/0002_runs.sql (kolom route jsonb)
+- Risico: voltooide runs bevatten per sessie de volledige GPS-route als array van lat/lon/timestamp-punten. Dit omvat vermoedelijk het huisadres als startpunt. De data gaat zonder expliciete keuze van de gebruiker naar Supabase zodra de sleutels actief zijn.
+- Exploiteerbaarheid: Supabase RLS beschermt de data goed tegen externe aanvallers. Risico is intern (Supabase zelf, of een gelekte servicerol key) of bij een dataleak. Locatiegeschiedenis is onder de AVG een gevoelig persoonsgegeven.
+- Status: voorstel. Twee opties:
+  a. Stop het synchroniseren van de route-kolom (zet `route: null` in syncService.ts ongeacht de waarde). Behoud alleen afstand, duur en tempo. De route blijft dan lokaal beschikbaar via AsyncStorage, maar gaat niet naar de cloud. Dat maakt het privacybeleid ook een stuk eenvoudiger.
+  b. Vraag de gebruiker expliciete toestemming voor cloudsync inclusief routes, en bied een opt-out aan.
 
-**3. ORS API-sleutel wordt in de app-bundel meegeleverd (voorstel)**
-- Locatie: src/config/premiumConfig.ts (ORS_API_KEY, nu nog de placeholder YOUR_ORS_API_KEY_HERE)
-- Risico: zodra hier een echte sleutel staat, is die door iedereen uit de app-bundel te extraheren en te misbruiken (quota-uitputting, kosten).
-- Exploiteerbaarheid: triviaal voor iedereen die de APK/IPA decompileert.
-- Status: voorstel. Acceptabel voor een gratis ORS-sleutel met lage limieten, maar zet er nooit een betaalde sleutel in. Structurele oplossing: een eigen proxy die de sleutel serverside houdt. Positief: de sleutel gaat via de Authorization-header en niet als URL-parameter, dus hij lekt niet via logs of proxies.
+**6. npm audit (niet uitvoerbaar vanuit deze omgeving)**
 
-**4. Google Maps API-sleutel in app.json (voorstel)**
-- Locatie: app.json, android.config.googleMaps.apiKey (nu nog placeholder)
-- Risico: deze sleutel komt in de gebouwde app terecht; dat is bij de Maps SDK onvermijdelijk, maar een onbeperkte sleutel kan misbruikt worden voor andere Google APIs.
-- Status: voorstel. Beperk de sleutel in Google Cloud Console tot de Maps SDK for Android en tot het package com.lopentelopen.app met de bijbehorende SHA-1 fingerprint.
+- Locatie: package.json
+- Risico: het npm-auditendpoint is geblokkeerd in deze sandbox. De override `xcode > uuid ^11.1.1` staat correct in package.json (toegevoegd in vorig rapport).
+- Status: draai lokaal `npm install && npm audit` om te controleren of de uuid-kwetsbaarheid inderdaad is verholpen. Verwacht 0 kwetsbaarheden. Expo SDK 56.0.12 is de huidige versie; controleer periodiek of er een nieuwere patch-release is.
+
+**7. Anonieme cloudsync zonder expliciete gebruikerstoestemming (voorstel)**
+
+- Locatie: src/store/appStore.ts (onRehydrateStorage roept syncNow aan), src/services/authService.ts (ensureAnonymousSession maakt stilletjes een Supabase-account aan)
+- Risico: zodra de Supabase-sleutels actief zijn, wordt er bij elke app-start automatisch een anonieme account aangemaakt en worden profiel en sessies gesynchroniseerd, zonder dat de gebruiker dit heeft gekozen of een melding ziet. Onder de AVG vereist verwerking in de cloud een wettelijke grondslag; stilzwijgende anonieme sync voldoet daar mogelijk niet aan.
+- Exploiteerbaarheid: geen directe technische aanval, maar een compliance-risico.
+- Status: voorstel. Voeg in de instellingen een zichtbare "Cloudsync aan/uit" schakelaar toe en vraag bij eerste sync toestemming. Schakel ensureAnonymousSession alleen aan als de gebruiker dat heeft bevestigd.
+
+---
 
 ### Laag
 
-**5. Overbodige permissies in app.json (gefixt)**
-- Locatie: app.json
-- Risico: meer permissies dan de code gebruikt betekent onnodig dataminimalisatierisico en lastige storereviews.
-- Uitgevoerde fixes:
-  - ACTIVITY_RECOGNITION (Android) verwijderd: nergens in de code wordt een stappenteller of activiteitsherkenning gebruikt
-  - NSMotionUsageDescription (iOS) verwijderd: er is geen motion/pedometer-code
-  - NSLocationAlwaysUsageDescription (iOS) verwijderd: de app vraagt alleen requestForegroundPermissionsAsync, nooit always-toegang
-  - Dubbele entries android.permission.ACCESS_COARSE_LOCATION en android.permission.ACCESS_FINE_LOCATION verwijderd (stonden er twee keer in, met en zonder prefix)
-  - isAccessMediaLocationEnabled van de expo-media-library plugin uitgezet: de app leest geen EXIF-locaties van foto's, ze slaat alleen run-kaarten op
-- Status: gefixt. app.json blijft geldige JSON.
+**8. AsyncStorage bevat GPS-routes onversleuteld (voorstel, ook in vorig rapport)**
 
-**6. Mediatoegang breder dan nodig (gefixt op 11 juni 2026)**
-- Locatie: src/hooks/useShareRun.ts regel 125 en app.json (READ_MEDIA_IMAGES, READ_EXTERNAL_STORAGE)
-- Risico: de app slaat alleen afbeeldingen op (saveToLibraryAsync) maar vroeg via requestPermissionsAsync() volledige leestoegang tot de fotobibliotheek.
-- Status: gefixt. useShareRun.ts gebruikt nu MediaLibrary.requestPermissionsAsync(true) (writeOnly) en READ_MEDIA_IMAGES en READ_EXTERNAL_STORAGE zijn uit app.json gehaald. WRITE_EXTERNAL_STORAGE blijft staan voor oudere Android-versies. Test het delen van een run-kaart even op een fysiek toestel.
+- Locatie: src/store/appStore.ts (completedSessions wordt gepersisteerd via AsyncStorage)
+- Risico: op een geroot of gecompromitteerd toestel zijn GPS-routes uitleesbaar. SecureStore is ongeschikt (limiet 2 KB per entry). Alternatief: routes niet lokaal bewaren (sla alleen afstand/duur/tempo op) of bewaren in expo-sqlite met versleuteling.
+- Status: open voorstel uit vorig rapport, nog niet geimplementeerd. Zie ook bevinding 5: als routes ook niet naar de cloud gaan, is de blootstelling beperkt tot het lokale toestel en zakt het risico verder.
 
-**7. Inconsistente iOS background-locatieconfiguratie (voorstel)**
-- Locatie: app.json: UIBackgroundModes bevat "location", terwijl de expo-location plugin isIosBackgroundLocationEnabled op false heeft staan
-- Risico: geen beveiligingslek, wel reviewrisico bij Apple. UIBackgroundModes "location" is functioneel nodig om GPS-tracking door te laten lopen als het scherm vergrendeld is tijdens een run, daarom is hij bewust blijven staan.
-- Status: gefixt op 11 juni 2026. isIosBackgroundLocationEnabled staat nu op true, consistent met UIBackgroundModes. Wees bij de Apple-review voorbereid op de vraag waarom background location nodig is (antwoord: GPS-tracking tijdens een actieve hardloopsessie met vergrendeld scherm).
-
-**8. Ongebruikte dependencies (voorstel)**
-- Locatie: package.json: expo-av en expo-sqlite worden nergens in src/ of app/ geïmporteerd
-- Risico: onnodig groot aanvalsoppervlak en bundelgrootte.
-- Status: gefixt op 11 juni 2026. Beide verwijderd via npm uninstall (package.json en package-lock.json bijgewerkt). Als je bevinding 2 oppakt met SQLite, installeer expo-sqlite dan opnieuw via npx expo install expo-sqlite.
-
-**9. Rommelbestanden in de projectroot (voorstel)**
-- Locatie: lege bestanden met namen als "navigation.goBack()}", "setShowShare(false)}" en "{"
-- Risico: geen, maar het zijn duidelijk per ongeluk aangemaakte bestanden.
-- Status: gefixt op 11 juni 2026. Alle drie verwijderd.
+---
 
 ## Wat in orde is
-- Netwerk: alle externe calls gaan over HTTPS (openrouteservice.org); geen http:// in de codebase
-- Secrets: geen hardcoded API-sleutels, tokens of wachtwoorden gevonden in code, app.json of eas.json (alleen bewuste placeholders); de git-repository heeft nog geen commits, dus ook geen secrets in de historie
-- Logging: slechts 1 console.error (useShareRun) en die logt alleen een foutobject, geen locatie- of gebruikersdata
-- URL-parameters: geen gevoelige data in URLs; de ORS-sleutel gaat via een header
-- Dataverwijdering: "Voortgang resetten" wist de persistente opslag daadwerkelijk (AsyncStorage.removeItem)
-- eas.json: serviceAccountKeyPath verwijst naar ./google-service-account.json; dat bestand staat niet in de projectmap, dus er lekt nu niets. Op 11 juni 2026 is google-service-account.json preventief aan .gitignore toegevoegd zodat het nooit per ongeluk in git belandt
+
+- Netwerk: alle externe calls gaan over HTTPS (Supabase, ElevenLabs, openrouteservice.org). Geen enkel http://-endpoint gevonden.
+- Logging: slechts 1 console.error in useShareRun.ts (logt alleen een foutobject, geen locatie- of gebruikersdata). Geen gevoelige data in logs.
+- URL-parameters: de ElevenLabs-sleutel gaat via een xi-api-key header, de ORS-sleutel via een Authorization-header. Geen secrets in URL-parameters.
+- Permissies app.json: schoongemaakt in vorige review. Huidige permissies (ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION, FOREGROUND_SERVICE, FOREGROUND_SERVICE_LOCATION, WRITE_EXTERNAL_STORAGE) zijn allen aantoonbaar in gebruik.
+- Row Level Security: de Supabase-tabellen profiles en runs hebben RLS ingeschakeld. Een gebruiker kan alleen zijn eigen data lezen, schrijven en verwijderen.
+- .env staat correct in .gitignore; de ElevenLabs-sleutel staat dan ook niet in de git history (alleen in de app-bundel van een gebouwde release).
+- TypeScript-compilatie: npx tsc --noEmit slaagt zonder fouten na de wijzigingen in deze review.
+- isAccessMediaLocationEnabled: uit (gefixt vorig rapport).
+- Ongebruikte dependencies expo-av en expo-sqlite: verwijderd in vorig rapport.
+
+---
 
 ## Beperkingen van deze run
-- npm audit kon tijdens de geautomatiseerde run niet draaien: het audit-endpoint van de npm-registry wordt geblokkeerd door de netwerk-allowlist van deze omgeving. De gebruiker heeft de audit op 11 juni 2026 lokaal gedraaid; de resultaten zijn verwerkt als bevinding onder Middel.
-- npx tsc --noEmit gaf in deze omgeving valse syntaxfouten doordat de bestandssynchronisatie van de sandbox meerdere bronbestanden afgekapt aanleverde. De echte bestanden op schijf zijn handmatig gecontroleerd en compleet en intact. De uitgevoerde fix raakt uitsluitend app.json (configuratie, geen TypeScript), dus de compilatie wordt er niet door beïnvloed; app.json is gevalideerd als geldige JSON.
+
+- npm audit kon niet draaien (registry geblokkeerd door netwerk-allowlist van deze sandbox). Draai lokaal.
+- Git history-analyse is beperkt tot de lokale kloon (geen toegang tot remote zoals GitHub). Als de repository op een remote staat, geldt dat sleutels in de history daar ook beschikbaar zijn voor iedereen met leesrechten.
+
+---
 
 ## Afsluiting
-Uitgevoerde fixes: 12 in totaal.
-- 5 opschoningen in app.json (overbodige en dubbele permissies plus de EXIF-locatievlag)
-- Privacybeleid in lijn gebracht met de routeplanner en gepubliceerd via GitHub (commit 7c5fbf7)
-- Mediatoegang beperkt tot writeOnly (useShareRun.ts) en READ-permissies uit app.json
-- iOS background-locatieconfiguratie consistent gemaakt (isIosBackgroundLocationEnabled: true)
-- Ongebruikte dependencies expo-av en expo-sqlite verwijderd
-- 3 rommelbestanden in de projectroot verwijderd
-- google-service-account.json aan .gitignore toegevoegd
 
-Resterende acties, status per 11 juni 2026 (tweede controle):
-1. Expo SDK 56 upgrade: AFGEROND. package.json staat op expo ~56.0.11 met react-native 0.85.3. De npm audit van 11 juni 2026 (na de upgrade) laat zien dat de postcss-kwetsbaarheid is opgelost. Wat overblijft is 1 onderliggend issue: uuid kleiner dan 11.1.1 via het xcode-pakket in de Expo build-tooling (12 meldingen, allemaal moderate, allemaal dezelfde wortel, alleen build-tooling, niet exploiteerbaar in de app zelf). Daarvoor is op 11 juni 2026 een npm override toegevoegd aan package.json (xcode > uuid ^11.1.1). De override kon vanuit deze omgeving niet geinstalleerd worden (registry geblokkeerd): draai lokaal "npm install" en daarna "npm audit"; verwacht dan 0 kwetsbaarheden. Volg niet het advies van npm audit fix --force (dat downgradet expo-splash-screen en breekt SDK 56). Verwijder de override weer zodra Expo zelf een gefixte @expo/config-plugins meelevert.
-2. Datasafety-formulieren in App Store Connect en Play Console: NOG OPEN. Vermeld dat locatiedata bij gebruik van de routeplanner naar openrouteservice.org gaat. Niet controleerbaar vanuit deze omgeving.
-3. API-sleutels: DEELS OPEN. Er staat inmiddels een echte Google Maps sleutel in app.json; controleer in Google Cloud Console dat die beperkt is tot de Maps SDK for Android en het package com.lopentelopen.app met SHA-1 fingerprint. De ORS-sleutel is nog een placeholder, dus daar is nu niets nodig.
-4. Optioneel (bevinding 2): NOG OPEN. completedSessions inclusief routes staat nog in AsyncStorage.
-5. Compilatie en testen: compilatie AFGEROND, npx tsc --noEmit slaagt zonder fouten na alle wijzigingen inclusief de Expo 56 upgrade. NOG OPEN: handmatig testen op een toestel (run-kaart delen, locatietracking met vergrendeld scherm).
+Uitgevoerde fixes: 1
+- privacy-policy.html volledig bijgewerkt: Supabase cloudsync, ElevenLabs stemcoaching en GPS-routesync toegevoegd aan de beschrijving; sectie 5 uitgebreid met clouddata-verwijderingsprocedure; datum bijgewerkt naar 29 juni 2026. TypeScript-compilatie niet beinvloed (geen codewijziging).
+
+Belangrijkste openstaande actie: **verplaats de ElevenLabs API-aanroep naar een eigen serverless proxy** (bevinding 2). De sleutel zit nu als plaintext string in de productiebundel en is triviaal extraheerbaar. Parallel hieraan: commit en push de bijgewerkte privacy-policy.html en werk de datasafety-formulieren in App Store Connect en Play Console bij (bevinding 1).

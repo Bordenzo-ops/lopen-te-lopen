@@ -65,7 +65,10 @@ function runToRow(userId: string, run: CompletedSession) {
     duration_seconds: run.durationSeconds,
     avg_pace_sec_per_km: run.avgPaceSecPerKm,
     avg_heart_rate: run.avgHeartRate ?? null,
-    route: run.route ?? null,
+    // GPS-routes worden bewust niet naar de cloud gesynchroniseerd.
+    // Ze blijven lokaal in AsyncStorage. Zo gaat locatiegeschiedenis
+    // nooit een apparaat uit zonder expliciete keuze van de gebruiker.
+    route: null,
     source: run.source,
   };
 }

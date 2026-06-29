@@ -68,24 +68,27 @@ function getCacheFile(voiceId: string, text: string): any {
   return new File(dir, `${voiceId}-${hashText(text)}.mp3`);
 }
 
-/** Haalt mp3-audio op bij ElevenLabs */
+/** Haalt mp3-audio op via de Supabase TTS Edge Function (sleutel blijft serverside) */
 async function fetchTts(voiceId: string, text: string): Promise<Uint8Array> {
-  const res = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_64`,
-    {
-      method: 'POST',
-      headers: {
-        'xi-api-key': ELEVENLABS.apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        text,
-        model_id: ELEVENLABS.modelId,
-        voice_settings: ELEVENLABS.voiceSettings,
-      }),
+  const supabaseUrl  = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+  const supabaseAnon = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+
+  if (!supabaseUrl) throw new Error('Supabase URL niet geconfigureerd');
+
+  const res = await fetch(`${supabaseUrl}/functions/v1/tts`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${supabaseAnon}`,
+      'Content-Type': 'application/json',
     },
-  );
-  if (!res.ok) throw new Error(`ElevenLabs antwoordde met status ${res.status}`);
+    body: JSON.stringify({
+      voiceId,
+      text,
+      modelId: ELEVENLABS.modelId,
+      voiceSettings: ELEVENLABS.voiceSettings,
+    }),
+  });
+  if (!res.ok) throw new Error(`TTS-proxy antwoordde met status ${res.status}`);
   return new Uint8Array(await res.arrayBuffer());
 }
 

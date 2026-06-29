@@ -24,7 +24,7 @@
 <body>
 
   <h1>Privacybeleid</h1>
-  <p class="meta">Lopen te Lopen | Laatste update: juni 2026</p>
+  <p class="meta">Lopen te Lopen | Laatste update: 29 juni 2026</p>
 
   <p>
     Lopen te Lopen respecteert jouw privacy. In dit beleid leggen we uit welke gegevens de app
@@ -41,17 +41,27 @@
 
   <h2>2. Waar worden de gegevens opgeslagen?</h2>
   <p>
-    Alle gegevens worden <strong>lokaal op jouw apparaat</strong> opgeslagen.
-    Er is geen gebruikersaccount en geen cloud-synchronisatie. De enige uitzondering is de
-    optionele routeplanner, zie punt 3.
+    Trainingsdata wordt primair <strong>lokaal op jouw apparaat</strong> opgeslagen (offline-first).
+    Zijn de cloudsleutels actief, dan synchroniseert de app jouw profiel en voltooide sessies
+    best-effort naar een beveiligde cloudopslag (Supabase, servers in de EU) zodat je data
+    hersteld kan worden op een nieuw toestel. De verbinding is versleuteld (HTTPS). Zie ook punt 3.
   </p>
 
   <h2>3. Delen we gegevens met derden?</h2>
   <p>
     Lopen te Lopen bevat geen advertenties en gebruikt geen tracking- of analysediensten van derden.
-    Er is &eacute;&eacute;n functie die een externe dienst gebruikt:
+    De volgende externe diensten kunnen worden gebruikt:
   </p>
   <ul>
+    <li>
+      <strong>Cloudsync (Supabase, optioneel):</strong> als cloudsynchronisatie is ingesteld,
+      worden jouw profiel (naam, leeftijd, doel), voltooide sessies (afstand, duur, tempo,
+      eventueel hartslaggemiddelde en gelopen route als GPS-punten) en een anonieme gebruikers-id
+      opgeslagen bij <a href="https://supabase.com" rel="noopener">Supabase Inc.</a> (servers in de EU via AWS Frankfurt).
+      Jouw data is met Row Level Security beschermd: alleen jij hebt toegang. Zie het
+      <a href="https://supabase.com/privacy" rel="noopener">privacybeleid van Supabase</a>.
+      Zonder ingestelde cloudsleutels verlaat geen enkel gegeven jouw apparaat via deze dienst.
+    </li>
     <li>
       <strong>Routeplanner (optioneel):</strong> als je een hardlooproute laat genereren, stuurt de app
       je actuele GPS-positie en de gewenste afstand naar
@@ -59,7 +69,15 @@
       (HeiGIT gGmbH, Heidelberg, Duitsland) om een route te berekenen. Er worden daarbij geen naam,
       leeftijd of andere identificerende gegevens meegestuurd. De verbinding is versleuteld (HTTPS).
       Zie het <a href="https://heigit.org/legal-notice-privacy-policy/" rel="noopener">privacybeleid van HeiGIT</a>.
-      Gebruik je de routeplanner niet, dan verlaat geen enkel gegeven je apparaat.
+    </li>
+    <li>
+      <strong>Gesproken coaching (ElevenLabs, alleen premium):</strong> als je een premium-abonnement
+      hebt en de gesproken coaching is ingeschakeld, worden de coachteksten die worden uitgesproken
+      verstuurd naar <a href="https://elevenlabs.io" rel="noopener">ElevenLabs Inc.</a> (VS) om natuurlijke
+      spraak te genereren. Er worden geen persoonlijke gegevens zoals naam of locatie meegestuurd.
+      De verbinding is versleuteld (HTTPS). Gegenereerde audio wordt lokaal gecachet om herhaalde
+      verzoeken te beperken. Zonder premium-abonnement gebruikt de app de ingebouwde telefoonstem.
+      Zie het <a href="https://elevenlabs.io/privacy" rel="noopener">privacybeleid van ElevenLabs</a>.
     </li>
   </ul>
 
@@ -69,7 +87,7 @@
     De locatiegegevens worden gebruikt om je route, afstand en tempo bij te houden en, als je de
     routeplanner gebruikt, om een route voor je te berekenen (zie punt 3).
     Je gelopen routes worden als onderdeel van je trainingsgeschiedenis lokaal op je apparaat
-    bewaard en worden nergens anders opgeslagen of gedeeld.
+    bewaard. Als cloudsync actief is, worden routes ook in de cloud opgeslagen (zie punt 3).
   </p>
   <p>
     Je kunt de locatietoestemming op elk moment intrekken via de instellingen van je apparaat.
@@ -77,10 +95,11 @@
   </p>
 
   <h2>5. Jouw rechten (AVG/GDPR)</h2>
-  <p>Omdat alle gegevens lokaal op jouw apparaat staan, heb jij volledige controle. Je kunt:</p>
+  <p>Je kunt jouw gegevens op de volgende manieren beheren en verwijderen:</p>
   <ul>
-    <li>Al je trainingsdata verwijderen via Instellingen &gt; Voortgang resetten.</li>
+    <li>Lokale trainingsdata verwijderen via Instellingen &gt; Voortgang resetten.</li>
     <li>De app verwijderen om alle lokale gegevens te wissen.</li>
+    <li>Voor verwijdering van clouddata (Supabase): stuur een e-mail naar <a href="mailto:larsvdb1@hotmail.com">larsvdb1@hotmail.com</a>. We verwijderen jouw account en bijbehorende data binnen 30 dagen.</li>
   </ul>
 
   <h2>6. Kinderen</h2>

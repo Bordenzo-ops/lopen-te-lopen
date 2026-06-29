@@ -22,6 +22,8 @@ android/
 .env.*
 !.env.example
 google-service-account.json
+# eas.json bevat mogelijk omgevingsvariabelen; gebruik EAS Secrets voor sleutels
+eas.json
 
 # macOS / Windows
 .DS_Store
