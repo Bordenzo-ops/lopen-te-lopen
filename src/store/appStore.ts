@@ -138,6 +138,15 @@ interface AppState {
   /** Haalt een sessionId uit de uploadwachtrij (na succesvolle upload) */
   dequeueStravaUpload: (sessionId: string) => void;
 
+  // Health Connect-koppeling (offline-first, additief)
+  /**
+   * Schrijf voltooide runs weg naar Health Connect (Android)? Default false:
+   * de gebruiker moet dit bewust aanzetten via Instellingen, waarna eerst
+   * toestemming gevraagd wordt via de Health Connect-permissiedialoog.
+   */
+  healthConnectEnabled: boolean;
+  setHealthConnectEnabled: (enabled: boolean) => void;
+
   // Backend (offline-first, additief)
   /**
    * Heeft de gebruiker cloudsync expliciet ingeschakeld? Default false.
@@ -258,6 +267,10 @@ export const useAppStore = create<AppState>()(
         set(state => ({
           stravaUploadQueue: state.stravaUploadQueue.filter(id => id !== sessionId),
         })),
+
+      // Health Connect-koppeling (offline-first defaults)
+      healthConnectEnabled: false,
+      setHealthConnectEnabled: (enabled) => set({ healthConnectEnabled: enabled }),
 
       // Backend-status (offline-first defaults)
       cloudSyncEnabled: false,
@@ -443,6 +456,17 @@ export const useAppStore = create<AppState>()(
             })
             .catch(() => get().enqueueStravaUpload(completed.sessionId));
         }
+
+        // Best-effort wegschrijven naar Health Connect. Lokale schrijfactie,
+        // geen wachtrij nodig: bij een fout is er niets om later opnieuw te
+        // proberen, de app blijft gewoon werken zonder deze koppeling.
+        if (get().healthConnectEnabled) {
+          import('../services/healthConnectService')
+            .then(({ writeRunToHealthConnect }) => writeRunToHealthConnect(completed))
+            .catch(() => {
+              // Stil falen: schrijven naar Health Connect mag nooit crashen
+            });
+        }
       },
 
       cancelSession: () => set({ activeSession: null }),
@@ -513,6 +537,7 @@ export const useAppStore = create<AppState>()(
         stravaAthleteName:      state.stravaAthleteName,
         stravaAutoUpload:       state.stravaAutoUpload,
         stravaUploadQueue:      state.stravaUploadQueue,
+        healthConnectEnabled:   state.healthConnectEnabled,
       }),
       onRehydrateStorage: () => (state) => {
         // Gezet na succesvolle én mislukte rehydratie

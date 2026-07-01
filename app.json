@@ -34,7 +34,9 @@
         "ACCESS_COARSE_LOCATION",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_LOCATION",
-        "WRITE_EXTERNAL_STORAGE"
+        "WRITE_EXTERNAL_STORAGE",
+        "android.permission.health.WRITE_EXERCISE",
+        "android.permission.health.WRITE_DISTANCE"
       ],
       "config": {
         "googleMaps": {
@@ -70,7 +72,8 @@
           "backgroundColor": "#0A0F1A"
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "react-native-health-connect"
     ],
     "extra": {
       "router": {},

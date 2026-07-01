@@ -16,6 +16,7 @@ import { Minus, Plus } from 'lucide-react-native';
 import { usePremium } from '../../src/hooks/usePremium';
 import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
 import { connectStrava, disconnectStrava, isStravaConfigured } from '../../src/services/stravaService';
+import { enableHealthConnect, isHealthConnectAvailable } from '../../src/services/healthConnectService';
 
 // ── Bewerkbare rij ─────────────────────────────────────────────────────────
 
@@ -171,6 +172,9 @@ export default function SettingsScreen() {
   const stravaAutoUpload    = useAppStore(s => s.stravaAutoUpload);
   const setStravaAutoUpload = useAppStore(s => s.setStravaAutoUpload);
   const [stravaBusy, setStravaBusy] = useState(false);
+  const healthConnectEnabled    = useAppStore(s => s.healthConnectEnabled);
+  const setHealthConnectEnabled = useAppStore(s => s.setHealthConnectEnabled);
+  const [healthConnectBusy, setHealthConnectBusy] = useState(false);
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   if (!profile) return null;
@@ -239,6 +243,28 @@ export default function SettingsScreen() {
         },
       ],
     );
+  }
+
+  async function handleToggleHealthConnect(value: boolean) {
+    if (!value) {
+      setHealthConnectEnabled(false);
+      return;
+    }
+    setHealthConnectBusy(true);
+    try {
+      const success = await enableHealthConnect();
+      if (success) {
+        setHealthConnectEnabled(true);
+      } else {
+        setHealthConnectEnabled(false);
+        Alert.alert(
+          'Health Connect niet ingeschakeld',
+          'We konden geen toestemming krijgen voor Health Connect. Controleer of Health Connect op je toestel geinstalleerd is en of je toestemming hebt gegeven.',
+        );
+      }
+    } finally {
+      setHealthConnectBusy(false);
+    }
   }
 
   function saveName(name: string) {
@@ -493,9 +519,29 @@ export default function SettingsScreen() {
                   </TouchableOpacity>
                 </>
               )}
+              <Divider />
+              <View style={[styles.switchRow, !isHealthConnectAvailable() && styles.rowDisabled]}>
+                <Activity size={18} color={colors.textSecondary} strokeWidth={2} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.switchLabel}>Schrijf runs naar Health Connect</Text>
+                  <Text style={styles.switchSub}>
+                    {isHealthConnectAvailable()
+                      ? 'Runs zijn dan ook zichtbaar in Mi Fitness en andere apps die Health Connect lezen.'
+                      : 'Hiervoor is een nieuwe app-build nodig. Nog niet beschikbaar in deze versie.'}
+                  </Text>
+                </View>
+                <Switch
+                  value={healthConnectEnabled}
+                  onValueChange={handleToggleHealthConnect}
+                  disabled={!isHealthConnectAvailable() || healthConnectBusy}
+                  accessibilityLabel="Schrijf runs naar Health Connect"
+                  trackColor={{ false: colors.borderDefault, true: colors.brandPrimary + '88' }}
+                  thumbColor={healthConnectEnabled ? colors.brandPrimary : colors.textTertiary}
+                />
+              </View>
             </View>
             <Text style={styles.fieldNote}>
-              Garmin werkt via GPX-export op het samenvattingsscherm na elke training. Health Connect en Apple Health: eigen rij komt nog.
+              Garmin werkt via GPX-export op het samenvattingsscherm na elke training. Apple Health volgt pas bij een iOS-versie van de app.
             </Text>
           </View>
 
@@ -602,6 +648,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing[2], paddingVertical: spacing[1.5],
   },
   rowValueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  rowDisabled: { opacity: 0.5 },
   rowLabel: {
     fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.base, color: colors.textSecondary,
   },
