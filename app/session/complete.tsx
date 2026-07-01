@@ -10,7 +10,7 @@ import React, { useState, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Trophy, Share2, RefreshCw, ChevronRight } from 'lucide-react-native';
+import { Trophy, Share2, RefreshCw, ChevronRight, Dumbbell, Medal } from 'lucide-react-native';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
@@ -120,9 +120,13 @@ export default function SchemaCompleteScreen() {
               activeOpacity={0.8}
             >
               <View style={styles.nextGoalLeft}>
-                <Text style={styles.nextGoalEmoji}>
-                  {nextGoal === '10km' ? '💪' : nextGoal === 'half_marathon' ? '🏅' : '🏆'}
-                </Text>
+                <View style={styles.nextGoalIcon}>
+                  {nextGoal === '10km'
+                    ? <Dumbbell size={22} color={colors.brandLight} strokeWidth={2} />
+                    : nextGoal === 'half_marathon'
+                      ? <Medal size={22} color={colors.brandLight} strokeWidth={2} />
+                      : <Trophy size={22} color={colors.brandLight} strokeWidth={2} />}
+                </View>
                 <View>
                   <Text style={styles.nextGoalTitle}>{goalLabel[nextGoal]}</Text>
                   <Text style={styles.nextGoalSub}>Start een nieuw schema</Text>
@@ -260,7 +264,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: spacing[2],
   },
   nextGoalLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing[1.5] },
-  nextGoalEmoji: { fontSize: 32 },
+  nextGoalIcon: {
+    width: 44, height: 44, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.brandPrimary + '18',
+  },
   nextGoalTitle: {
     fontFamily: typography.fontFamily.sansBold,
     fontSize: typography.fontSize.lg,

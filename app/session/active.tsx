@@ -426,6 +426,17 @@ export default function ActiveSessionScreen() {
         <SafeAreaView style={styles.loadingInner}>
           {!showRouteQuestion && (
             <>
+              {/* Workout-briefing: korte, persoonlijke voorbereiding vlak voor de start,
+                  zodat het wachten op GPS niet leeg aanvoelt en de gebruiker weet wat
+                  deze training van hem vraagt. */}
+              <View style={styles.briefingCard}>
+                <Text style={styles.briefingGreeting}>{profile.name}, dit is jouw training</Text>
+                <Text style={styles.briefingType}>
+                  {sessionTypeShort[session.type] ?? zoneInfo[session.zone].label} · {session.distanceKm} km
+                </Text>
+                <Text style={styles.briefingTip} numberOfLines={3}>{session.coachTip}</Text>
+              </View>
+
               <View style={styles.gpsIconBox}>
                 <MapPin size={36} color={colors.brandPrimary} strokeWidth={1.5} />
               </View>
@@ -714,6 +725,30 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.base,
     color: colors.textSecondary, textAlign: 'center', maxWidth: 280,
     lineHeight: typography.fontSize.base * typography.lineHeight.relaxed,
+  },
+
+  // Workout-briefing (GPS-wachtscherm)
+  briefingCard: {
+    backgroundColor: colors.bgCard,
+    borderRadius: radius.xl,
+    padding: spacing[2.5],
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    width: '88%',
+    gap: 4,
+  },
+  briefingGreeting: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base,
+    color: colors.textPrimary,
+  },
+  briefingType: {
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.sm,
+    color: colors.brandLight, textTransform: 'uppercase', letterSpacing: typography.letterSpacing.wide,
+  },
+  briefingTip: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm,
+    color: colors.textSecondary, fontStyle: 'italic', marginTop: 4,
+    lineHeight: typography.fontSize.sm * typography.lineHeight.normal,
   },
 
   // Routevraag card

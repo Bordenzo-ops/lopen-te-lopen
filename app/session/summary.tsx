@@ -2,14 +2,14 @@ import React, { useState, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CheckCircle2, Home, Share2, Trophy } from 'lucide-react-native';
+import { CheckCircle2, Home, Share2, Trophy, Sparkles } from 'lucide-react-native';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
 import { getTrainingPlan, zoneInfo } from '../../src/data/trainingPlans';
 import type { TrainingWeek } from '../../src/data/trainingPlans';
 import { selectTotalKm } from '../../src/store/appStore';
-import { detectPersonalRecords } from '../../src/data/achievements';
+import { detectPersonalRecords, detectCumulativeMilestone } from '../../src/data/achievements';
 import { Button } from '../../src/components/ui/Button';
 import { ZoneBadge } from '../../src/components/ui/ZoneBadge';
 import { ShareRunSheet } from '../../src/components/ui/ShareRunSheet';
@@ -52,6 +52,21 @@ export default function SummaryScreen() {
     : pr.fastestPace
     ? 'Nieuw record: je snelste gemiddelde tempo tot nu toe!'
     : null;
+
+  // Vroeg, laagdrempelig mijlpaal-moment: de allereerste training, of de
+  // cumulatieve afstand die net over 5 km resp. 10 km heen gaat. Dit geeft ook
+  // wie nog geen reeks of persoonlijk record heeft toch iets om trots op te zijn.
+  const cumulativeMilestone = lastSession
+    ? detectCumulativeMilestone(lastSession, completedSessions.slice(0, -1))
+    : null;
+  const milestoneText =
+    cumulativeMilestone === 'first-run'
+      ? 'Je eerste training staat op de teller. Dit is het begin van iets moois!'
+      : cumulativeMilestone === 'km-5'
+      ? 'Mijlpaal: je hebt nu samen 5 km gelopen!'
+      : cumulativeMilestone === 'km-10'
+      ? 'Mijlpaal: je hebt nu samen 10 km gelopen!'
+      : null;
 
   // Zoek week en sessie op in het juiste plan (vrij of race)
   const weekNum = parseInt(weekNumber ?? '1');
@@ -125,6 +140,14 @@ export default function SummaryScreen() {
           <View style={styles.prBanner}>
             <Trophy size={18} color={colors.premium} strokeWidth={2} />
             <Text style={styles.prBannerText}>{prText}</Text>
+          </View>
+        )}
+
+        {/* Vroeg mijlpaal-moment: eerste training of 5/10 km cumulatief */}
+        {milestoneText && (
+          <View style={styles.milestoneBanner}>
+            <Sparkles size={18} color={colors.brandPrimary} strokeWidth={2} />
+            <Text style={styles.milestoneBannerText}>{milestoneText}</Text>
           </View>
         )}
 
@@ -253,6 +276,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: radius.lg, paddingVertical: spacing[1.5], paddingHorizontal: spacing[2],
   },
   prBannerText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
+    color: colors.textPrimary, flexShrink: 1,
+  },
+  milestoneBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[1],
+    backgroundColor: colors.brandPrimary + '14',
+    borderWidth: 1, borderColor: colors.brandPrimary + '44',
+    borderRadius: radius.lg, paddingVertical: spacing[1.5], paddingHorizontal: spacing[2],
+  },
+  milestoneBannerText: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
     color: colors.textPrimary, flexShrink: 1,
   },

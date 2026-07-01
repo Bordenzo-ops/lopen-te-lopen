@@ -1,11 +1,13 @@
 import { Tabs } from 'expo-router';
-import { colors, spacing, typography } from '../../src/theme/tokens';
+import { spacing, typography } from '../../src/theme/tokens';
+import { useThemeColors } from '../../src/theme/useTheme';
 import { Home, Calendar, Settings, Trophy } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = 60 + insets.bottom;
+  const colors = useThemeColors();
 
   return (
     <Tabs

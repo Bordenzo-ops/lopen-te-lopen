@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { zoneInfo } from '../../data/trainingPlans';
 import type { HeartRateZone } from '../../data/trainingPlans';
-import { typography, spacing, radius } from '../../theme/tokens';
+import { typography, spacing, radius, type ThemeColors } from '../../theme/tokens';
+import { useThemeColors } from '../../theme/useTheme';
 
 interface ZoneBadgeProps {
   zone: HeartRateZone;
@@ -11,6 +12,8 @@ interface ZoneBadgeProps {
 }
 
 export function ZoneBadge({ zone, showLabel = true, size = 'md' }: ZoneBadgeProps) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const info = zoneInfo[zone];
   const isSm = size === 'sm';
 
@@ -26,7 +29,7 @@ export function ZoneBadge({ zone, showLabel = true, size = 'md' }: ZoneBadgeProp
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',

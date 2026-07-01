@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CalendarDays, HeartPulse, MapPin, Link2 } from 'lucide-react-native';
+import { CalendarDays, HeartPulse, MapPin } from 'lucide-react-native';
 import { typography, spacing, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { Button } from '../../src/components/ui/Button';
@@ -27,19 +27,13 @@ export default function WelcomeScreen() {
         {/* Features */}
         <View style={styles.features}>
           {[
-            { icon: <CalendarDays size={22} color={colors.brandLight} strokeWidth={2} />, text: 'Persoonlijk weekschema',        soon: false },
-            { icon: <HeartPulse size={22} color={colors.brandLight} strokeWidth={2} />,   text: 'Training op hartslag',           soon: false },
-            { icon: <MapPin size={22} color={colors.brandLight} strokeWidth={2} />,       text: 'GPS-tracking en live-tempo',     soon: false },
-            { icon: <Link2 size={22} color={colors.brandLight} strokeWidth={2} />,        text: 'Strava, Garmin en Apple Health', soon: true  },
+            { icon: <CalendarDays size={22} color={colors.brandLight} strokeWidth={2} />, text: 'Persoonlijk weekschema' },
+            { icon: <HeartPulse size={22} color={colors.brandLight} strokeWidth={2} />,   text: 'Training op hartslag' },
+            { icon: <MapPin size={22} color={colors.brandLight} strokeWidth={2} />,       text: 'GPS-tracking en live-tempo' },
           ].map((f, i) => (
             <View key={i} style={styles.feature}>
               <View style={styles.featureIcon}>{f.icon}</View>
               <Text style={styles.featureText}>{f.text}</Text>
-              {f.soon && (
-                <View style={styles.soonBadge}>
-                  <Text style={styles.soonText}>binnenkort</Text>
-                </View>
-              )}
             </View>
           ))}
         </View>
@@ -130,20 +124,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: typography.fontSize.base,
     color: colors.textPrimary,
     flex: 1,
-  },
-  soonBadge: {
-    backgroundColor: colors.brandPrimary + '22',
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderWidth: 1,
-    borderColor: colors.brandPrimary + '44',
-  },
-  soonText: {
-    fontFamily: typography.fontFamily.sansMedium,
-    fontSize: typography.fontSize.xs,
-    color: colors.brandPrimary,
-    letterSpacing: 0.3,
   },
   actions: {
     gap: spacing[1.5],

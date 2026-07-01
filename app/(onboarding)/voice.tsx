@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Volume2, EyeOff } from 'lucide-react-native';
+import { ChevronLeft, Volume2, EyeOff, User, UserRound } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { Button } from '../../src/components/ui/Button';
@@ -159,7 +159,9 @@ export default function VoiceScreen() {
                 accessibilityLabel="Vrouwenstem"
                 accessibilityState={{ selected: voiceType === 'female' }}
               >
-                <Text style={styles.voiceBtnEmoji}>👩</Text>
+                <View style={[styles.voiceBtnIcon, { backgroundColor: colors.brandLight + '22' }]}>
+                  <UserRound size={18} color={colors.brandLight} strokeWidth={2} />
+                </View>
                 <Text style={[styles.voiceBtnLabel, voiceType === 'female' && styles.voiceBtnLabelSelected]}>
                   Vrouwenstem
                 </Text>
@@ -172,7 +174,9 @@ export default function VoiceScreen() {
                 accessibilityLabel="Mannenstem"
                 accessibilityState={{ selected: voiceType === 'male' }}
               >
-                <Text style={styles.voiceBtnEmoji}>👨</Text>
+                <View style={[styles.voiceBtnIcon, { backgroundColor: colors.info + '22' }]}>
+                  <User size={18} color={colors.info} strokeWidth={2} />
+                </View>
                 <Text style={[styles.voiceBtnLabel, voiceType === 'male' && styles.voiceBtnLabelSelected]}>
                   Mannenstem
                 </Text>
@@ -270,7 +274,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderWidth: 1.5, borderColor: colors.borderSubtle,
   },
   voiceBtnSelected: { borderColor: colors.brandPrimary, backgroundColor: colors.brandPrimary + '11' },
-  voiceBtnEmoji: { fontSize: 20 },
+  voiceBtnIcon: {
+    width: 30, height: 30, borderRadius: 15,
+    alignItems: 'center', justifyContent: 'center',
+  },
   voiceBtnLabel: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
     color: colors.textSecondary,

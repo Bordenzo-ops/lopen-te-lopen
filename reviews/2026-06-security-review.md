@@ -60,16 +60,17 @@ Alle bevindingen uit het vorige rapport (10-11 juni) zijn afgehandeld of staan a
   - eas.json: EXPO_PUBLIC_SUPABASE_ANON_KEY en EXPO_PUBLIC_REVENUECAT_API_KEY vervangen door EAS secret-referenties ($EXPO_PUBLIC_SUPABASE_ANON_KEY, $EXPO_PUBLIC_REVENUECAT_API_KEY).
   - EAS secrets aangemaakt voor beide variables in de preview- en productie-omgeving (eas env:create).
   - eas.json toegevoegd aan .gitignore zodat toekomstige wijzigingen niet meer in git belanden.
-  - Nog te doen (buiten mandaat): de sleutels staan nog in de git history vóór deze fix. Roteer EXPO_PUBLIC_REVENUECAT_API_KEY (goog_Vy...) als deze schrijfrechten geeft. Gebruik git filter-repo om de history schoon te maken als dat noodzakelijk is.
+  - Nog te doen (buiten mandaat): de sleutels staan nog in de git history vóór deze fix. De RevenueCat key (goog_Vy...) is geverifieerd als publieke SDK key zonder schrijfrechten (alleen leesrechten voor aankopen); rotatie niet noodzakelijk. Gebruik git filter-repo om de history schoon te maken als dat wenselijk is.
 
 **4. Google Maps API-sleutel permanent in git history (voorstel)**
 
 - Locatie: app.json (commit b78f4c57 e.v., sleutel AIzaSyC_mehbQyc...)
 - Risico: de sleutel is publiek voor iedereen met repository-toegang. Onbeperkt gebruik is een direct kosten- en misbruikrisico.
 - Exploiteerbaarheid: onmiddellijk beschikbaar voor iedereen met repo-toegang.
-- Status: voorstel (ook al in vorig rapport vermeld, nog niet afgehandeld):
-  - Beperk de sleutel in Google Cloud Console tot de Maps SDK for Android, package com.lopentelopen.app en de SHA-1 fingerprint van het release-keystore. Daarmee wordt misbruik voor andere Google APIs geblokkeerd, ook al kent iemand de sleutel.
-  - Roteer de sleutel als de beperking niet snel kan worden ingevoerd.
+- Status: gefixt 29 juni 2026.
+  - In Google Cloud Console: applicatiebeperking ingesteld op "Android-apps", pakket com.lopentelopen.app en SHA-1 fingerprint van het EAS release-keystore (9F:7B:52:3B:05:F6:58:22:03:25:A0:41:A7:1C:8E:08:5D:45:70:04).
+  - API-beperking was al beperkt tot "Maps SDK for Android".
+  - Sleutelrotatie niet noodzakelijk nu de sleutel applicatie-gebonden is.
 
 ---
 
@@ -84,11 +85,11 @@ Alle bevindingen uit het vorige rapport (10-11 juni) zijn afgehandeld of staan a
   - src/services/syncService.ts: route-veld in runToRow() is permanent op null gezet, ongeacht de waarde in de lokale sessie. Routes blijven alleen beschikbaar via AsyncStorage op het apparaat zelf.
   - privacy-policy.html: sectie 4 is bijgewerkt om te vermelden dat routes bewust niet worden gesynchroniseerd.
 
-**6. npm audit (niet uitvoerbaar vanuit deze omgeving)**
+**6. npm audit (gefixt 29 juni 2026)**
 
 - Locatie: package.json
-- Risico: het npm-auditendpoint is geblokkeerd in deze sandbox. De override `xcode > uuid ^11.1.1` staat correct in package.json (toegevoegd in vorig rapport).
-- Status: draai lokaal `npm install && npm audit` om te controleren of de uuid-kwetsbaarheid inderdaad is verholpen. Verwacht 0 kwetsbaarheden. Expo SDK 56.0.12 is de huidige versie; controleer periodiek of er een nieuwere patch-release is.
+- Risico: het npm-auditendpoint is geblokkeerd in de sandbox. De override `xcode > uuid ^11.1.1` staat correct in package.json (toegevoegd in vorig rapport).
+- Status: gefixt. Lokaal uitgevoerd: `npm install && npm audit` — 662 packages geauditeerd, 0 kwetsbaarheden gevonden.
 
 **7. Anonieme cloudsync zonder expliciete gebruikerstoestemming (voorstel)**
 
@@ -135,22 +136,20 @@ Alle bevindingen uit het vorige rapport (10-11 juni) zijn afgehandeld of staan a
 
 ## Afsluiting
 
-Uitgevoerde fixes: 5 (alle kritieke en hoge bevindingen zijn geadresseerd)
+Uitgevoerde fixes: 7
 
 1. privacy-policy.html volledig herschreven: Supabase cloudsync, ElevenLabs stemcoaching en GPS-routebeleid nauwkeurig beschreven; clouddata-verwijderingsprocedure toegevoegd; datum bijgewerkt naar 29 juni 2026.
 2. ElevenLabs API-sleutel uit de app-bundel gehaald: Supabase Edge Function (supabase/functions/tts/index.ts) ingericht als proxy; voiceService.ts en voiceConfig.ts bijgewerkt.
 3. Hardcoded sleutels uit eas.json: vervangen door EAS secret-referenties, EAS secrets aangemaakt, eas.json in .gitignore.
 4. GPS-routes niet langer naar de cloud: syncService.ts zet route permanent op null.
 5. Expliciete cloudsync-toestemming: cloudSyncEnabled schakelaar in de store (default false) en in de Instellingen-tab.
+6. Google Maps API-sleutel beperkt: applicatiebeperking ingesteld op com.lopentelopen.app + SHA-1 EAS keystore.
+7. npm audit: 0 kwetsbaarheden in 662 packages.
 
 Commits: 163759bf (security-fixes batch), 9a668c78 (cloudSyncEnabled)
 TypeScript-compilatie: npx tsc --noEmit slaagt zonder fouten.
 
 Nog te doen door de gebruiker (buiten het automatische mandaat):
 
-- git push -u origin feature/premium-backend (authenticatie vereist in terminal)
-- ElevenLabs-sleutel roteren op elevenlabs.io/api-keys en Supabase-secret bijwerken: supabase secrets set ELEVENLABS_API_KEY=<nieuwe_sleutel> --project-ref zefiknynxppgbhiiunre
-- Google Maps API-sleutel beperken in Google Cloud Console: beperk AIzaSyC_mehbQyc... tot Maps SDK for Android, pakket com.lopentelopen.app en SHA-1 van het release-keystore
-- RevenueCat key (goog_Vy...) controleren op schrijfrechten in RevenueCat dashboard; zo ja: roteren en EAS secret bijwerken
-- Datasafety-formulieren bijwerken in Play Console en App Store Connect (cloudsync en ElevenLabs zijn nu gedocumenteerd in de privacy policy)
-- npm audit lokaal draaien: npm install && npm audit
+- Datasafety-formulier invullen in Play Console (Beleid > App-inhoud > Gegevensveiligheid): locatiedata, trainingsdata, persoonlijke info en ElevenLabs audio declareren
+- Datasafety-formulier bijwerken in App Store Connect (App Privacy) met dezelfde gegevens
