@@ -4,7 +4,7 @@ import {
   Alert, TextInput, KeyboardAvoidingView, Platform, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone, Cloud } from 'lucide-react-native';
+import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone, Cloud, Activity } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
@@ -15,6 +15,7 @@ import { router } from 'expo-router';
 import { Minus, Plus } from 'lucide-react-native';
 import { usePremium } from '../../src/hooks/usePremium';
 import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
+import { connectStrava, disconnectStrava, isStravaConfigured } from '../../src/services/stravaService';
 
 // ── Bewerkbare rij ─────────────────────────────────────────────────────────
 
@@ -165,6 +166,11 @@ export default function SettingsScreen() {
   const setCloudSyncEnabled = useAppStore(s => s.setCloudSyncEnabled);
   const syncStatus          = useAppStore(s => s.syncStatus);
   const lastSyncedAt        = useAppStore(s => s.lastSyncedAt);
+  const stravaConnected     = useAppStore(s => s.stravaConnected);
+  const stravaAthleteName   = useAppStore(s => s.stravaAthleteName);
+  const stravaAutoUpload    = useAppStore(s => s.stravaAutoUpload);
+  const setStravaAutoUpload = useAppStore(s => s.setStravaAutoUpload);
+  const [stravaBusy, setStravaBusy] = useState(false);
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   if (!profile) return null;
@@ -193,6 +199,47 @@ export default function SettingsScreen() {
       ],
     );
   };
+
+  async function handleConnectStrava() {
+    if (!isStravaConfigured()) {
+      Alert.alert(
+        'Strava-koppeling nog niet ingesteld',
+        'De Strava-koppeling voor deze app moet nog ingesteld worden. Zie docs/STRAVA_SETUP.md.',
+      );
+      return;
+    }
+    setStravaBusy(true);
+    try {
+      const result = await connectStrava();
+      if (!result.ok) {
+        Alert.alert('Verbinden mislukt', result.message ?? 'Er ging iets mis bij het verbinden met Strava.');
+      }
+    } finally {
+      setStravaBusy(false);
+    }
+  }
+
+  function handleDisconnectStrava() {
+    Alert.alert(
+      'Strava ontkoppelen',
+      'Weet je zeker dat je de koppeling met Strava wilt verbreken? Runs worden dan niet meer automatisch geupload.',
+      [
+        { text: 'Annuleren', style: 'cancel' },
+        {
+          text: 'Ontkoppelen',
+          style: 'destructive',
+          onPress: async () => {
+            setStravaBusy(true);
+            try {
+              await disconnectStrava();
+            } finally {
+              setStravaBusy(false);
+            }
+          },
+        },
+      ],
+    );
+  }
 
   function saveName(name: string) {
     updateProfile({ name: name.slice(0, 40) });
@@ -387,13 +434,69 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Koppelingen</Text>
             <View style={styles.card}>
-              <View style={styles.integrationRow}>
-                <Link2 size={18} color={colors.textSecondary} strokeWidth={2} />
-                <Text style={styles.integrationInfo}>
-                  Koppelingen met Strava, Garmin, Apple Health, Google Fit en Mi Fitness volgen later.
-                </Text>
-              </View>
+              {!stravaConnected ? (
+                <View style={styles.integrationRow}>
+                  <Activity size={18} color={colors.textSecondary} strokeWidth={2} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.switchLabel}>Strava</Text>
+                    <Text style={styles.switchSub}>
+                      {isStravaConfigured()
+                        ? 'Verbind je account om runs automatisch te uploaden.'
+                        : 'De setup voor Strava moet nog gebeuren. Zie docs/STRAVA_SETUP.md.'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={handleConnectStrava}
+                    style={styles.stravaConnectBtn}
+                    activeOpacity={0.85}
+                    disabled={stravaBusy}
+                    accessibilityRole="button"
+                    accessibilityLabel="Verbind met Strava"
+                  >
+                    <Text style={styles.stravaConnectBtnText}>
+                      {stravaBusy ? 'Bezig...' : 'Verbind met Strava'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.integrationRow}>
+                    <Activity size={18} color={colors.success} strokeWidth={2} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.switchLabel}>{stravaAthleteName ?? 'Strava'}</Text>
+                      <Text style={styles.switchSub}>Verbonden</Text>
+                    </View>
+                  </View>
+                  <Divider />
+                  <View style={styles.switchRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.switchLabel}>Upload runs automatisch</Text>
+                      <Text style={styles.switchSub}>Voltooide runs gaan direct naar Strava</Text>
+                    </View>
+                    <Switch
+                      value={stravaAutoUpload}
+                      onValueChange={setStravaAutoUpload}
+                      accessibilityLabel="Upload runs automatisch naar Strava"
+                      trackColor={{ false: colors.borderDefault, true: colors.brandPrimary + '88' }}
+                      thumbColor={stravaAutoUpload ? colors.brandPrimary : colors.textTertiary}
+                    />
+                  </View>
+                  <Divider />
+                  <TouchableOpacity
+                    onPress={handleDisconnectStrava}
+                    style={styles.dangerRow}
+                    activeOpacity={0.7}
+                    disabled={stravaBusy}
+                  >
+                    <Link2 size={16} color={colors.error} strokeWidth={2} />
+                    <Text style={styles.dangerLabel}>Ontkoppel</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
+            <Text style={styles.fieldNote}>
+              Garmin werkt via GPX-export op het samenvattingsscherm na elke training. Health Connect en Apple Health: eigen rij komt nog.
+            </Text>
           </View>
 
           {/* Cloudsync */}
@@ -593,6 +696,14 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     flex: 1,
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm,
     color: colors.textSecondary, lineHeight: typography.fontSize.sm * 1.5,
+  },
+  stravaConnectBtn: {
+    backgroundColor: colors.brandPrimary, borderRadius: radius.md,
+    paddingHorizontal: spacing[1.5], paddingVertical: spacing[1],
+  },
+  stravaConnectBtnText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
+    color: '#fff',
   },
   dangerRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing[1.5],

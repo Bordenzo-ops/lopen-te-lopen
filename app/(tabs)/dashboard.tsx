@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions, Alert } from 'react-native';
 import { router } from 'expo-router';
+import { retryStravaQueue } from '../../src/services/stravaService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Play, TrendingUp, Flame, Timer, Award } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
@@ -34,6 +35,12 @@ export default function DashboardScreen() {
   const { width } = useWindowDimensions();
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  // Best-effort herhaalpoging voor mislukte Strava-uploads bij het openen
+  // van het dashboard. Stil, blokkeert de UI nooit.
+  useEffect(() => {
+    void retryStravaQueue();
+  }, []);
 
   if (!profile) return null;
 

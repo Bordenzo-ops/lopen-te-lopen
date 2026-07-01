@@ -122,6 +122,22 @@ interface AppState {
   _hasHydrated: boolean;
   setHasHydrated: (v: boolean) => void;
 
+  // Strava-koppeling (offline-first, additief)
+  /** Is er een actieve Strava-koppeling (geldige tokens opgeslagen)? */
+  stravaConnected: boolean;
+  /** Naam van de gekoppelde Strava-atleet, voor weergave in Instellingen */
+  stravaAthleteName?: string;
+  /** Upload voltooide runs automatisch naar Strava? Default true. */
+  stravaAutoUpload: boolean;
+  /** SessionId's van runs die nog niet succesvol geupload zijn */
+  stravaUploadQueue: string[];
+  setStravaConnected: (connected: boolean, athleteName?: string) => void;
+  setStravaAutoUpload: (enabled: boolean) => void;
+  /** Voegt een sessionId toe aan de uploadwachtrij, zonder duplicaten */
+  enqueueStravaUpload: (sessionId: string) => void;
+  /** Haalt een sessionId uit de uploadwachtrij (na succesvolle upload) */
+  dequeueStravaUpload: (sessionId: string) => void;
+
   // Backend (offline-first, additief)
   /**
    * Heeft de gebruiker cloudsync expliciet ingeschakeld? Default false.
@@ -219,6 +235,29 @@ export const useAppStore = create<AppState>()(
       routePlanCount: 0,
       routePlanWeekStart: null,
       _hasHydrated: false,
+
+      // Strava-koppeling (offline-first defaults)
+      stravaConnected: false,
+      stravaAthleteName: undefined,
+      stravaAutoUpload: true,
+      stravaUploadQueue: [],
+
+      setStravaConnected: (connected, athleteName) =>
+        set({
+          stravaConnected: connected,
+          stravaAthleteName: connected ? athleteName : undefined,
+        }),
+      setStravaAutoUpload: (enabled) => set({ stravaAutoUpload: enabled }),
+      enqueueStravaUpload: (sessionId) =>
+        set(state => ({
+          stravaUploadQueue: state.stravaUploadQueue.includes(sessionId)
+            ? state.stravaUploadQueue
+            : [...state.stravaUploadQueue, sessionId],
+        })),
+      dequeueStravaUpload: (sessionId) =>
+        set(state => ({
+          stravaUploadQueue: state.stravaUploadQueue.filter(id => id !== sessionId),
+        })),
 
       // Backend-status (offline-first defaults)
       cloudSyncEnabled: false,
@@ -392,6 +431,18 @@ export const useAppStore = create<AppState>()(
 
         // Best-effort sync van de nieuwe sessie naar de cloud
         void get().syncNow();
+
+        // Best-effort automatische upload naar Strava. Faalt stil en zet de
+        // sessie in de wachtrij voor een latere herhaalpoging: uploaden mag
+        // de UI nooit blokkeren of laten crashen.
+        if (get().stravaConnected && get().stravaAutoUpload) {
+          import('../services/stravaService')
+            .then(({ uploadRun }) => uploadRun(completed))
+            .then(result => {
+              if (!result.ok) get().enqueueStravaUpload(completed.sessionId);
+            })
+            .catch(() => get().enqueueStravaUpload(completed.sessionId));
+        }
       },
 
       cancelSession: () => set({ activeSession: null }),
@@ -458,6 +509,10 @@ export const useAppStore = create<AppState>()(
         themePreference:        state.themePreference,
         routePlanCount:         state.routePlanCount,
         routePlanWeekStart:     state.routePlanWeekStart,
+        stravaConnected:        state.stravaConnected,
+        stravaAthleteName:      state.stravaAthleteName,
+        stravaAutoUpload:       state.stravaAutoUpload,
+        stravaUploadQueue:      state.stravaUploadQueue,
       }),
       onRehydrateStorage: () => (state) => {
         // Gezet na succesvolle én mislukte rehydratie

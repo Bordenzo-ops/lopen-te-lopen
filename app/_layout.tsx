@@ -14,6 +14,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAppStore } from '../src/store/appStore';
 import { useIsLightTheme } from '../src/theme/useTheme';
 import { init as initPurchases } from '../src/services/purchaseService';
+import { retryStravaQueue } from '../src/services/stravaService';
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -28,6 +29,12 @@ export default function RootLayout() {
   // als er geen Supabase-sleutels of netwerk zijn. Blokkeert de UI nooit.
   useEffect(() => {
     void useAppStore.getState().initBackend();
+  }, []);
+
+  // Best-effort herhaalpoging voor mislukte Strava-uploads bij app-start.
+  // Stil, blokkeert de UI nooit, zelfde filosofie als initBackend hierboven.
+  useEffect(() => {
+    void retryStravaQueue();
   }, []);
 
   // Initialiseer RevenueCat en ververs de premium-status best-effort op de
@@ -55,6 +62,7 @@ export default function RootLayout() {
           <Stack.Screen name="session/active" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="session/summary" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="paywall" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="strava-callback" options={{ animation: 'fade' }} />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>
