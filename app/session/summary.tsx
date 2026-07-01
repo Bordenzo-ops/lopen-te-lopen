@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CheckCircle2, Home, Share2, Trophy, Sparkles } from 'lucide-react-native';
+import { CheckCircle2, Home, Share2, Trophy, Sparkles, FileDown } from 'lucide-react-native';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
@@ -13,6 +13,7 @@ import { detectPersonalRecords, detectCumulativeMilestone } from '../../src/data
 import { Button } from '../../src/components/ui/Button';
 import { ZoneBadge } from '../../src/components/ui/ZoneBadge';
 import { ShareRunSheet } from '../../src/components/ui/ShareRunSheet';
+import { exportSessionAsGpx } from '../../src/services/exportService';
 
 export default function SummaryScreen() {
   const { distanceKm, durationSeconds, avgPace, sessionId, weekNumber } =
@@ -30,6 +31,7 @@ export default function SummaryScreen() {
   const completedSessions = useAppStore(s => s.completedSessions);
   const currentWeek       = useAppStore(s => s.currentWeek);
   const [showShare, setShowShare] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const completedInWeek = useAppStore(s =>
     s.completedSessions.filter(c => c.weekNumber === parseInt(weekNumber ?? '1')).length
   );
@@ -100,6 +102,28 @@ export default function SummaryScreen() {
     const m = Math.floor(secPerKm / 60);
     const s = Math.round(secPerKm % 60);
     return `${m}:${String(s).padStart(2, '0')} /km`;
+  };
+
+  // GPX-export is alleen zinvol met een route van minimaal 2 punten
+  const hasRoute = (lastSession?.route?.length ?? 0) >= 2;
+
+  const handleExportGpx = async () => {
+    if (!lastSession || isExporting) return;
+    setIsExporting(true);
+    try {
+      const result = await exportSessionAsGpx(lastSession);
+      if (!result.success) {
+        const message =
+          result.error === 'delen_niet_beschikbaar'
+            ? 'Delen is op dit toestel niet beschikbaar.'
+            : result.error === 'geen_route'
+            ? 'Deze training heeft geen route om te exporteren.'
+            : 'Er ging iets mis bij het exporteren.';
+        Alert.alert('Exporteren mislukt', message);
+      }
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const totalInWeek = week?.sessions.length ?? 3;
@@ -201,10 +225,33 @@ export default function SummaryScreen() {
 
       {/* Footer */}
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.shareBtn} onPress={() => setShowShare(true)} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="Deel je run">
-          <Share2 size={18} color={colors.brandPrimary} strokeWidth={2} />
-          <Text style={styles.shareBtnText}>Deel je run</Text>
-        </TouchableOpacity>
+        <View style={styles.secondaryBtnRow}>
+          <TouchableOpacity
+            style={[styles.shareBtn, hasRoute && styles.secondaryBtnHalf]}
+            onPress={() => setShowShare(true)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Deel je run"
+          >
+            <Share2 size={18} color={colors.brandPrimary} strokeWidth={2} />
+            <Text style={styles.shareBtnText} numberOfLines={1} adjustsFontSizeToFit>Deel je run</Text>
+          </TouchableOpacity>
+          {hasRoute && (
+            <TouchableOpacity
+              style={[styles.shareBtn, styles.secondaryBtnHalf]}
+              onPress={handleExportGpx}
+              activeOpacity={0.8}
+              disabled={isExporting}
+              accessibilityRole="button"
+              accessibilityLabel="Exporteer als GPX"
+            >
+              <FileDown size={18} color={colors.brandPrimary} strokeWidth={2} />
+              <Text style={styles.shareBtnText} numberOfLines={1} adjustsFontSizeToFit>
+                {isExporting ? 'Bezig...' : 'Exporteer als GPX'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
         {schemaComplete ? (
           <Button
             label="Bekijk je prestatie"
@@ -341,13 +388,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontStyle: 'italic',
   },
   footer: { paddingHorizontal: spacing[3], paddingBottom: spacing[3], paddingTop: spacing[2], gap: spacing[1] },
+  secondaryBtnRow: { flexDirection: 'row', gap: spacing[1] },
   shareBtn: {
+    flex: 1,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: spacing[1], paddingVertical: spacing[1.5],
     borderRadius: radius.xl, borderWidth: 1,
     borderColor: colors.brandPrimary + '55',
     backgroundColor: colors.brandPrimary + '11',
   },
+  secondaryBtnHalf: { flex: 1 },
   shareBtnText: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base,
     color: colors.brandPrimary,
