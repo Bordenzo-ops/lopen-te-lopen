@@ -31,3 +31,12 @@ Thumbs.db
 
 # Sync-artefacten
 .fuse_hidden*
+
+# Website-exports en zip-artefacten (horen niet in de app-repo)
+*.zip
+assets/Lopen te Lopen - live.html
+
+# Losse marketing- en website-map (aparte projecten, geen app-broncode)
+website/
+marketing/
+.agents/
