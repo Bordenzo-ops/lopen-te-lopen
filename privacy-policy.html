@@ -24,7 +24,7 @@
 <body>
 
   <h1>Privacybeleid</h1>
-  <p class="meta">Lopen te Lopen | Laatste update: 29 juni 2026</p>
+  <p class="meta">Lopen te Lopen | Laatste update: 8 juli 2026</p>
 
   <p>
     Lopen te Lopen respecteert jouw privacy. In dit beleid leggen we uit welke gegevens de app
@@ -55,9 +55,10 @@
   <ul>
     <li>
       <strong>Cloudsync (Supabase, optioneel):</strong> als cloudsynchronisatie is ingesteld,
-      worden jouw profiel (naam, leeftijd, doel), voltooide sessies (afstand, duur, tempo,
-      eventueel hartslaggemiddelde en gelopen route als GPS-punten) en een anonieme gebruikers-id
+      worden jouw profiel (naam, leeftijd, doel), voltooide sessies (afstand, duur, tempo en
+      eventueel hartslaggemiddelde) en een anonieme gebruikers-id
       opgeslagen bij <a href="https://supabase.com" rel="noopener">Supabase Inc.</a> (servers in de EU via AWS Frankfurt).
+      De gelopen route (GPS-punten) wordt bewust niet naar Supabase gesynchroniseerd en blijft lokaal op je apparaat.
       Jouw data is met Row Level Security beschermd: alleen jij hebt toegang. Zie het
       <a href="https://supabase.com/privacy" rel="noopener">privacybeleid van Supabase</a>.
       Zonder ingestelde cloudsleutels verlaat geen enkel gegeven jouw apparaat via deze dienst.
@@ -79,6 +80,25 @@
       verzoeken te beperken. Zonder premium-abonnement gebruikt de app de ingebouwde telefoonstem.
       Zie het <a href="https://elevenlabs.io/privacy" rel="noopener">privacybeleid van ElevenLabs</a>.
     </li>
+    <li>
+      <strong>Strava-koppeling (optioneel):</strong> als je jouw account met Strava verbindt en de
+      automatische upload aanzet, worden voltooide trainingen naar
+      <a href="https://www.strava.com" rel="noopener">Strava Inc.</a> (VS) verstuurd. Dat omvat de
+      afstand, duur en starttijd, en, als je tijdens de training een route hebt opgenomen, de
+      volledige gelopen route (GPS-punten) als GPX-bestand. Deze koppeling staat standaard uit en
+      werkt alleen nadat je Strava zelf via de instellingen hebt verbonden; je kunt de koppeling op
+      elk moment weer verbreken, waarna de app jouw toegang bij Strava intrekt. De verbinding is
+      versleuteld (HTTPS). Zie het
+      <a href="https://www.strava.com/legal/privacy" rel="noopener">privacybeleid van Strava</a>.
+    </li>
+    <li>
+      <strong>Health Connect (optioneel, alleen Android):</strong> als je dit aanzet, schrijft de app
+      jouw voltooide trainingen (afstand en duur als beweegsessie) weg naar Health Connect, het
+      gezondheidsplatform van Android op jouw eigen toestel. Andere apps die jij toegang geeft, kunnen
+      die gegevens dan uitlezen. De app schrijft uitsluitend en leest zelf geen gezondheidsgegevens uit
+      Health Connect. Deze gegevens blijven op je apparaat; Lopen te Lopen stuurt ze niet naar een
+      eigen server. Je beheert de toegang via de Health Connect-instellingen van je toestel.
+    </li>
   </ul>
 
   <h2>4. Locatietoegang</h2>
@@ -87,7 +107,8 @@
     De locatiegegevens worden gebruikt om je route, afstand en tempo bij te houden en, als je de
     routeplanner gebruikt, om een route voor je te berekenen (zie punt 3).
     Je gelopen routes worden als onderdeel van je trainingsgeschiedenis lokaal op je apparaat
-    bewaard. Als cloudsync actief is, worden routes ook in de cloud opgeslagen (zie punt 3).
+    bewaard. Als je de Strava-koppeling hebt aangezet, wordt de route bij het uploaden ook naar
+    Strava verstuurd (zie punt 3).
   </p>
   <p>
     Je kunt de locatietoestemming op elk moment intrekken via de instellingen van je apparaat.
