@@ -309,7 +309,7 @@ export const ShareRunCard = forwardRef<View, ShareRunCardProps>(function ShareRu
 
         {/* App branding */}
         <View style={styles.brandRow}>
-          <Text style={styles.brandText}>🏃 Loop de halve</Text>
+          <Text style={styles.brandText}>Lopen te Lopen</Text>
         </View>
 
       </View>

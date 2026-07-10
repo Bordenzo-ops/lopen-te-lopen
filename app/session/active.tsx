@@ -1,11 +1,14 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Alert, BackHandler, ActivityIndicator,
+  View, Text, TouchableOpacity, StyleSheet, Alert, BackHandler, ActivityIndicator, Linking,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Pause, Play, Square, ChevronDown, MapPin, Map, Info, Lock } from 'lucide-react-native';
 import * as Location from 'expo-location';
+import * as Haptics from 'expo-haptics';
+import { useKeepAwake } from 'expo-keep-awake';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
@@ -26,6 +29,13 @@ import { useRacePace } from '../../src/hooks/useRacePace';
 import { formatPacePerKm } from '../../src/data/paceModel';
 import { selectRoutePlansThisWeek } from '../../src/store/appStore';
 import type { PlannedRoute } from '../../src/services/routeService';
+import type { KmSplit } from '../../src/store/appStore';
+import {
+  startBackgroundTracking,
+  stopBackgroundTracking,
+  subscribeToLocations,
+} from '../../src/services/backgroundLocationService';
+import { saveSnapshot, clearSnapshot } from '../../src/services/runRecoveryService';
 
 // ── Haversine afstandsberekening (meters) ────────────────────────────────────
 function haversineMeters(
@@ -57,6 +67,67 @@ function calcRollingPace(
   return secs / (distM / 1000); // sec/km
 }
 
+// GPS-punten met een geschatte nauwkeurigheid slechter dan dit aantal meters
+// negeren we volledig: ze verstoren zowel de afstandsberekening als de routelijn.
+const GPS_ACCURACY_THRESHOLD_M = 25;
+
+// Plausibiliteitsfilter: een punt dat een impliciete snelheid hoger dan dit
+// oplevert t.o.v. het vorige geaccepteerde punt is onmogelijk voor een hardloper
+// (28,8 km/u) en wijst op een GPS-sprong. Gewoon overslaan, niets loggen.
+const PLAUSIBILITY_MAX_SPEED_MPS = 8;
+
+// Geen geaccepteerd GPS-punt gezien binnen dit aantal milliseconden tijdens een
+// lopende (niet-gepauzeerde) sessie: toon de "zwak GPS-signaal"-waarschuwing.
+const GPS_WEAK_SIGNAL_THRESHOLD_MS = 20000;
+
+// Interval waarop een crash-herstel-snapshot van de lopende sessie wordt
+// weggeschreven, zie runRecoveryService.
+const SNAPSHOT_SAVE_INTERVAL_MS = 15000;
+
+// AsyncStorage-sleutel voor de eenmalige locatie-priming, zie
+// ensureLocationPriming hieronder. Bewust niet via appStore: dit is een losse,
+// permanente vlag die niets met het gebruikersprofiel te maken heeft.
+const LOCATION_PRIMING_KEY = 'location-priming-shown';
+
+/**
+ * Toont eenmalig een nette uitleg vlak voordat het systeem om locatietoestemming
+ * vraagt, zodat de gebruiker begrijpt waarom de app dit vraagt voordat de
+ * (soms afschrikwekkende) systeemdialoog verschijnt. Bij een volgende run
+ * staat de vlag al in AsyncStorage en slaan we dit moment stilletjes over.
+ */
+async function ensureLocationPriming(): Promise<void> {
+  let alreadyShown: string | null = null;
+  try {
+    alreadyShown = await AsyncStorage.getItem(LOCATION_PRIMING_KEY);
+  } catch {
+    // Bij een opslagfout laten we de priming gewoon zien; blokkeert de run niet.
+  }
+  if (alreadyShown) return;
+
+  await new Promise<void>((resolve) => {
+    Alert.alert(
+      'Locatie voor je run',
+      'Lopen te Lopen gebruikt je locatie om je route, afstand en tempo live te meten tijdens het hardlopen. Je locatie wordt niet gedeeld.',
+      [{ text: 'Ga verder', onPress: () => resolve() }],
+      { cancelable: false },
+    );
+  });
+
+  try {
+    await AsyncStorage.setItem(LOCATION_PRIMING_KEY, '1');
+  } catch {
+    // Faalt stil: in het ergste geval verschijnt de priming nog een keer.
+  }
+}
+
+// Auto-pauze: bij een snelheid onder dit aantal m/s gedurende ongeveer 5
+// seconden beschouwen we de loper als stilstaand.
+const AUTO_PAUSE_SPEED_THRESHOLD_MPS = 0.5;
+const AUTO_PAUSE_STILL_DURATION_MS  = 5000;
+// Geen auto-pauze in de eerste 15 seconden na de start: voorkomt een vals
+// alarm tijdens het wegzetten van de telefoon vlak na de countdown.
+const AUTO_PAUSE_GRACE_PERIOD_MS = 15000;
+
 // Korte, begrijpelijke omschrijving van het trainingstype. Leidt op het actieve
 // scherm boven de hartslagzone, zodat een beginner meteen snapt wat de bedoeling
 // is. De zonecode blijft als ondersteuning zichtbaar.
@@ -81,8 +152,13 @@ export default function ActiveSessionScreen() {
   const updateProfile   = useAppStore(s => s.updateProfile);
   const registerRoutePlan = useAppStore(s => s.registerRoutePlan);
   const routePlansThisWeek = useAppStore(selectRoutePlansThisWeek);
+  const autoPauseEnabled = useAppStore(s => s.autoPauseEnabled);
   const { hasAccess, promptUpgrade } = usePremium();
   const { paceForType } = useRacePace();
+
+  // Houd het scherm aan tijdens de hele actieve sessie, zodat de run niet
+  // onderbreekt doordat het scherm vergrendelt.
+  useKeepAwake();
 
   const [elapsed, setElapsed]               = useState(0);
   const [isRunning, setIsRunning]           = useState(false);
@@ -92,10 +168,28 @@ export default function ActiveSessionScreen() {
   const [gpsError, setGpsError]             = useState<string | null>(null);
   const [sessionStarted, setSessionStarted] = useState(false);
   const [showTypeInfo, setShowTypeInfo]     = useState(false);
+  // Countdown: 3-2-1 fullscreen voorafgaand aan de GPS-tracking en de timer.
+  const [countdownValue, setCountdownValue] = useState<number | null>(null);
+  const [countdownActive, setCountdownActive] = useState(false);
+  // Km-splits: tijd per voltooide kilometer, in Strava-stijl getoond op de samenvatting.
+  const [splits, setSplits] = useState<KmSplit[]>([]);
+  const lastSplitKmRef  = useRef(0);
+  const lastSplitTimeRef = useRef(0);
+  // Auto-pauze: automatisch pauzeren bij stilstand, met eigen melding op het scherm.
+  const [isAutoPaused, setIsAutoPaused] = useState(false);
+  const stillSinceRef      = useRef<number | null>(null);
+  const sessionStartTimeRef = useRef<number | null>(null);
+  const isAutoPausedRef    = useRef(false);
+  const manuallyPausedRef  = useRef(false);
+  const countdownActiveRef = useRef(false);
   // Schermvergrendeling: voorkomt dat een veeg of broekzak de run onderbreekt.
   // De ref houdt de actuele waarde vast voor de hardware-terugknop-handler.
   const [isLocked, setIsLocked]             = useState(false);
   const isLockedRef                         = useRef(false);
+  // GPS-verlies-detectie: waarschuwing als er te lang geen geaccepteerd punt is.
+  const [weakGpsSignal, setWeakGpsSignal]   = useState(false);
+  // Toont "Open instellingen" als de locatietoestemming expliciet geweigerd is.
+  const [permissionDenied, setPermissionDenied] = useState(false);
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -116,9 +210,24 @@ export default function ActiveSessionScreen() {
   const distanceRef   = useRef(0);
   const paceRef       = useRef(0);
   const isRunningRef  = useRef(false);
+  const elapsedRef    = useRef(0);
   const locationSub   = useRef<Location.LocationSubscription | null>(null);
   const timerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
   const gpsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Achtergrondtracking: opzegfunctie van het locatie-abonnement.
+  const unsubscribeLocationsRef = useRef<(() => void) | null>(null);
+  // Laatste GPS-punt dat zowel de nauwkeurigheids- als plausibiliteitsfilter
+  // doorstond. Basis voor het plausibiliteitsfilter en de GPS-verlies-detectie.
+  const lastAcceptedPointRef = useRef<{ lat: number; lon: number; timestamp: number } | null>(null);
+  const lastAcceptedAtRef    = useRef<number | null>(null);
+  // Spiegelt de splits-state naar een ref, zodat de snapshot-timer altijd de
+  // laatste waarde ziet zonder de interval-callback opnieuw te hoeven maken.
+  const splitsRef = useRef<KmSplit[]>([]);
+  useEffect(() => { splitsRef.current = splits; }, [splits]);
+  // Wijst altijd naar de laatste persistSnapshot-functie (zie verderop), zodat
+  // de GPS-callback (met een leeg dependency-array) hem zonder stale closure
+  // kan aanroepen bij auto-pauze/hervatten.
+  const persistSnapshotRef = useRef<() => void>(() => {});
 
   // ── Zoek sessie ───────────────────────────────────────────────────────────
   const weekNum = parseInt(weekNumber ?? '1');
@@ -158,21 +267,187 @@ export default function ActiveSessionScreen() {
   }, []);
 
   // ── Sessie intern starten (na GPS/route-flow) ─────────────────────────────
+  // Start eerst de fullscreen 3-2-1 countdown. Pas als die afgelopen is,
+  // beginnen de GPS-tracking en de secondetimer echt (zie countdown-effect).
   const startSessionNow = useCallback((route: PlannedRoute | null) => {
     setActivePlannedRoute(route);
     setSessionStarted(true);
-    setIsRunning(true);
-    isRunningRef.current = true;
+    setCountdownActive(true);
+    countdownActiveRef.current = true;
+    setCountdownValue(3);
   }, []);
 
+  // ── Countdown: elke seconde een haptische tik, bij "Start" een zwaardere ──
+  useEffect(() => {
+    if (!countdownActive) return;
+
+    if (countdownValue === null) return;
+
+    if (countdownValue <= 0) {
+      // Countdown klaar: zwaardere tik en de echte sessie start nu pas.
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      setCountdownActive(false);
+      countdownActiveRef.current = false;
+      const now = Date.now();
+      sessionStartTimeRef.current = now;
+      setIsRunning(true);
+      isRunningRef.current = true;
+      return;
+    }
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const timeout = setTimeout(() => setCountdownValue(v => (v ?? 1) - 1), 1000);
+    return () => clearTimeout(timeout);
+  }, [countdownActive, countdownValue]);
+
   // ── GPS opstarten ─────────────────────────────────────────────────────────
+  // Achtergrondtracking via expo-task-manager (backgroundLocationService), zodat
+  // de run doorloopt met vergrendeld scherm of de app op de achtergrond. Bij een
+  // fout in het starten van die achtergrondtaak (bijvoorbeeld een simulator die
+  // dit niet ondersteunt) valt dit terug op de klassieke voorgrond-tracking van
+  // watchPositionAsync, zodat GPS-tracking nooit helemaal uitvalt.
   useEffect(() => {
     let mounted = true;
     if (!profile) return;
 
+    // Verwerk één binnenkomend locatiepunt. Exact dezelfde logica als voorheen
+    // (nauwkeurigheidsfilter, eerste fix, auto-pauze, splits, haptics), plus
+    // het nieuwe plausibiliteitsfilter en de GPS-verlies-detectie.
+    const handleLocation = (loc: Location.LocationObject) => {
+      if (!mounted) return;
+
+      const { latitude, longitude, accuracy, speed } = loc.coords;
+      const now = loc.timestamp;
+
+      // ── GPS-nauwkeurigheidsfilter: te onnauwkeurige punten negeren we
+      // volledig, zowel voor de afstandsberekening als de routelijn.
+      if (accuracy != null && accuracy > GPS_ACCURACY_THRESHOLD_M) return;
+
+      // ── Plausibiliteitsfilter: een onmogelijke sprong t.o.v. het vorige
+      // geaccepteerde punt (harder dan 8 m/s) wijst op een GPS-fout. Gewoon
+      // overslaan, verder niets doen met dit punt.
+      const lastAccepted = lastAcceptedPointRef.current;
+      if (lastAccepted) {
+        const dtSec = (now - lastAccepted.timestamp) / 1000;
+        if (dtSec > 0) {
+          const jumpMeters = haversineMeters(lastAccepted.lat, lastAccepted.lon, latitude, longitude);
+          if (jumpMeters / dtSec > PLAUSIBILITY_MAX_SPEED_MPS) return;
+        }
+      }
+      lastAcceptedPointRef.current = { lat: latitude, lon: longitude, timestamp: now };
+      lastAcceptedAtRef.current = now;
+
+      // ── Eerste GPS-fix ──────────────────────────────────────────────
+      if (!gpsReady) {
+        if (gpsTimeoutRef.current) {
+          clearTimeout(gpsTimeoutRef.current);
+          gpsTimeoutRef.current = null;
+        }
+        setGpsReady(true);
+        firstGpsRef.current = { lat: latitude, lon: longitude };
+
+        // Vraag de gebruiker of er een route gepland moet worden
+        if (canUsePlanner && !routePlanTriggered.current) {
+          routePlanTriggered.current = true;
+          setShowRouteQuestion(true);
+        } else if (!routePlanTriggered.current) {
+          routePlanTriggered.current = true;
+          // Gratis weeklimiet bereikt: nette upgrade-prompt en zonder route starten
+          if (routeLimitReached) {
+            promptUpgrade(
+              'Routeplanner-limiet bereikt',
+              `Met gratis kun je ${PREMIUM_CONFIG.FREE_ROUTE_PLANS_PER_WEEK} routes per week plannen. Met premium plan je onbeperkt routes. Je sessie start gewoon, zonder vooraf geplande route.`,
+            );
+          }
+          startSessionNow(null);
+        }
+      }
+
+      // ── Auto-pauze: detecteer stilstand/beweging, ook tijdens pauze ──
+      // Dit loopt zodra de sessie (na de countdown) begonnen is, ongeacht
+      // of de timer op dit moment loopt, zodat we automatisch weer kunnen
+      // hervatten zodra de loper in beweging komt.
+      if (countdownActiveRef.current) return;
+      if (!sessionStartTimeRef.current) return;
+
+      if (autoPauseEnabled && !manuallyPausedRef.current) {
+        const sinceStart = now - sessionStartTimeRef.current;
+        const isStill = speed != null
+          ? speed < AUTO_PAUSE_SPEED_THRESHOLD_MPS
+          : false;
+
+        if (sinceStart >= AUTO_PAUSE_GRACE_PERIOD_MS) {
+          if (isStill) {
+            if (stillSinceRef.current == null) stillSinceRef.current = now;
+            const stillFor = now - stillSinceRef.current;
+            if (!isAutoPausedRef.current && stillFor >= AUTO_PAUSE_STILL_DURATION_MS) {
+              isAutoPausedRef.current = true;
+              isRunningRef.current = false;
+              setIsAutoPaused(true);
+              setIsRunning(false);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+              persistSnapshotRef.current();
+            }
+          } else {
+            stillSinceRef.current = null;
+            if (isAutoPausedRef.current) {
+              isAutoPausedRef.current = false;
+              isRunningRef.current = true;
+              setIsAutoPaused(false);
+              setIsRunning(true);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              persistSnapshotRef.current();
+            }
+          }
+        }
+      }
+
+      // ── GPS-tracking (alleen als de sessie daadwerkelijk loopt) ─────
+      if (!isRunningRef.current) return;
+
+      const prev = routeRef.current[routeRef.current.length - 1];
+      routeRef.current = [
+        ...routeRef.current,
+        { lat: latitude, lon: longitude, timestamp: now },
+      ];
+
+      if (prev) {
+        const meters = haversineMeters(prev.lat, prev.lon, latitude, longitude);
+        distanceRef.current += meters / 1000;
+        setDistanceKm(parseFloat(distanceRef.current.toFixed(3)));
+      }
+
+      const pace = calcRollingPace(routeRef.current);
+      if (pace > 0) {
+        paceRef.current = pace;
+        setPace(pace);
+      }
+
+      // ── Km-splits: sla de tijd van elke voltooide kilometer op ──────
+      const completedKm = Math.floor(distanceRef.current);
+      if (completedKm > lastSplitKmRef.current) {
+        const nowElapsed = elapsedRef.current;
+        for (let km = lastSplitKmRef.current + 1; km <= completedKm; km++) {
+          const splitSeconds = nowElapsed - lastSplitTimeRef.current;
+          setSplits(prevSplits => [...prevSplits, { km, seconds: splitSeconds }]);
+          lastSplitTimeRef.current = nowElapsed;
+        }
+        lastSplitKmRef.current = completedKm;
+        // Haptische tik bij elke kilometer-cue, net als de gesproken melding.
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+
+      onKmUpdate(distanceRef.current, paceRef.current);
+      onRouteCoachingUpdate(latitude, longitude, distanceRef.current);
+    };
+
     (async () => {
+      await ensureLocationPriming();
+      if (!mounted) return;
+
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
+        setPermissionDenied(true);
         setGpsError('Geen locatietoestemming. Geef toegang via je telefooninstellingen.');
         setGpsReady(true);
         startSessionNow(null);
@@ -187,82 +462,86 @@ export default function ActiveSessionScreen() {
         startSessionNow(null);
       }, 30_000);
 
-      locationSub.current = await Location.watchPositionAsync(
-        {
-          accuracy:         Location.Accuracy.BestForNavigation,
-          distanceInterval: 5,
-          timeInterval:     1000,
-        },
-        (loc) => {
-          if (!mounted) return;
+      // Abonneer altijd eerst, zodat we niets missen zodra de achtergrondtaak
+      // (of het voorgrond-fallbackpad hieronder) begint te leveren.
+      unsubscribeLocationsRef.current = subscribeToLocations((locations) => {
+        locations.forEach(handleLocation);
+      });
 
-          const { latitude, longitude } = loc.coords;
-          const now = loc.timestamp;
-
-          // ── Eerste GPS-fix ──────────────────────────────────────────────
-          if (!gpsReady) {
-            if (gpsTimeoutRef.current) {
-              clearTimeout(gpsTimeoutRef.current);
-              gpsTimeoutRef.current = null;
-            }
-            setGpsReady(true);
-            firstGpsRef.current = { lat: latitude, lon: longitude };
-
-            // Vraag de gebruiker of er een route gepland moet worden
-            if (canUsePlanner && !routePlanTriggered.current) {
-              routePlanTriggered.current = true;
-              setShowRouteQuestion(true);
-            } else if (!routePlanTriggered.current) {
-              routePlanTriggered.current = true;
-              // Gratis weeklimiet bereikt: nette upgrade-prompt en zonder route starten
-              if (routeLimitReached) {
-                promptUpgrade(
-                  'Routeplanner-limiet bereikt',
-                  `Met gratis kun je ${PREMIUM_CONFIG.FREE_ROUTE_PLANS_PER_WEEK} routes per week plannen. Met premium plan je onbeperkt routes. Je sessie start gewoon, zonder vooraf geplande route.`,
-                );
-              }
-              startSessionNow(null);
-            }
-          }
-
-          // ── GPS-tracking (alleen als sessie gestart is) ─────────────────
-          if (!isRunningRef.current) return;
-
-          const prev = routeRef.current[routeRef.current.length - 1];
-          routeRef.current = [
-            ...routeRef.current,
-            { lat: latitude, lon: longitude, timestamp: now },
-          ];
-
-          if (prev) {
-            const meters = haversineMeters(prev.lat, prev.lon, latitude, longitude);
-            distanceRef.current += meters / 1000;
-            setDistanceKm(parseFloat(distanceRef.current.toFixed(3)));
-          }
-
-          const pace = calcRollingPace(routeRef.current);
-          if (pace > 0) {
-            paceRef.current = pace;
-            setPace(pace);
-          }
-
-          onKmUpdate(distanceRef.current, paceRef.current);
-          onRouteCoachingUpdate(latitude, longitude, distanceRef.current);
-        },
-      );
+      const backgroundStarted = await startBackgroundTracking();
+      if (!backgroundStarted && mounted) {
+        // Faalt stil terug naar voorgrond-tracking: de run mag nooit zonder
+        // GPS-tracking komen te zitten, ook al werkt de achtergrondtaak niet.
+        locationSub.current = await Location.watchPositionAsync(
+          {
+            accuracy:         Location.Accuracy.BestForNavigation,
+            distanceInterval: 5,
+            timeInterval:     1000,
+          },
+          handleLocation,
+        );
+      }
     })();
 
     return () => {
       mounted = false;
+      unsubscribeLocationsRef.current?.();
       locationSub.current?.remove();
+      void stopBackgroundTracking();
       if (gpsTimeoutRef.current) clearTimeout(gpsTimeoutRef.current);
     };
   }, []);
 
+  // ── GPS-verlies-detectie: waarschuw als er te lang geen geaccepteerd punt
+  // binnenkomt tijdens een lopende (niet-gepauzeerde) sessie. Verdwijnt vanzelf
+  // zodra er weer punten binnenkomen.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!isRunningRef.current) {
+        setWeakGpsSignal(false);
+        return;
+      }
+      const lastAt = lastAcceptedAtRef.current;
+      if (lastAt == null) return;
+      setWeakGpsSignal(Date.now() - lastAt > GPS_WEAK_SIGNAL_THRESHOLD_MS);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ── Crash-herstel: schrijf periodiek een snapshot van de lopende sessie ───
+  const persistSnapshot = useCallback(() => {
+    if (!sessionStarted || countdownActiveRef.current) return;
+    if (!sessionId || !session) return;
+    void saveSnapshot({
+      sessionId,
+      sessionType:    session.type,
+      weekNumber:     weekNum,
+      startTimestamp: sessionStartTimeRef.current ?? Date.now(),
+      elapsed:        elapsedRef.current,
+      distanceKm:     distanceRef.current,
+      splits:         splitsRef.current,
+      route:          routeRef.current,
+      pausedState:    !isRunningRef.current,
+      savedAt:        Date.now(),
+    });
+  }, [sessionStarted, sessionId, session, weekNum]);
+
+  useEffect(() => { persistSnapshotRef.current = persistSnapshot; }, [persistSnapshot]);
+
+  useEffect(() => {
+    if (!sessionStarted) return;
+    const interval = setInterval(persistSnapshot, SNAPSHOT_SAVE_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [sessionStarted, persistSnapshot]);
+
   // ── Secondetimer ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (isRunning) {
-      timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000);
+      timerRef.current = setInterval(() => setElapsed(e => {
+        const next = e + 1;
+        elapsedRef.current = next;
+        return next;
+      }), 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
@@ -355,7 +634,10 @@ export default function ActiveSessionScreen() {
           text: 'Opslaan en afsluiten',
           onPress: () => {
             if (timerRef.current) clearInterval(timerRef.current);
+            unsubscribeLocationsRef.current?.();
             locationSub.current?.remove();
+            void stopBackgroundTracking();
+            void clearSnapshot();
             const finalDist = parseFloat(distanceRef.current.toFixed(2));
             const avgPace   = finalDist > 0 ? Math.round(elapsed / finalDist) : 0;
             onFinish(finalDist, elapsed);
@@ -365,6 +647,7 @@ export default function ActiveSessionScreen() {
                 durationSeconds:  elapsed,
                 avgPaceSecPerKm:  avgPace,
                 route:            routeRef.current,
+                splits:           splits,
                 source:           'app',
               },
               week?.sessions ?? [],
@@ -377,6 +660,7 @@ export default function ActiveSessionScreen() {
                 avgPace:         String(avgPace),
                 sessionId,
                 weekNumber,
+                splits:          JSON.stringify(splits),
               },
             });
           },
@@ -397,7 +681,10 @@ export default function ActiveSessionScreen() {
           style: 'destructive',
           onPress: () => {
             if (timerRef.current) clearInterval(timerRef.current);
+            unsubscribeLocationsRef.current?.();
             locationSub.current?.remove();
+            void stopBackgroundTracking();
+            void clearSnapshot();
             stopVoice();
             cancelSession();
             router.back();
@@ -416,6 +703,20 @@ export default function ActiveSessionScreen() {
           <Text style={styles.backLinkText}>Terug naar dashboard</Text>
         </TouchableOpacity>
       </SafeAreaView>
+    );
+  }
+
+  // ── Fullscreen countdown, vlak voor de start van GPS-tracking en timer ────
+  if (countdownActive) {
+    return (
+      <View style={[styles.container, styles.countdownContainer]}>
+        <SafeAreaView style={styles.countdownInner}>
+          <Text style={styles.countdownLabel}>Klaar voor de start</Text>
+          <Text style={styles.countdownNumber}>
+            {countdownValue !== null && countdownValue > 0 ? countdownValue : 'Start'}
+          </Text>
+        </SafeAreaView>
+      </View>
     );
   }
 
@@ -545,6 +846,31 @@ export default function ActiveSessionScreen() {
         {gpsError && (
           <View style={styles.gpsBanner}>
             <Text style={styles.gpsBannerText}>{gpsError}</Text>
+            {permissionDenied && (
+              <TouchableOpacity
+                onPress={() => Linking.openSettings()}
+                style={styles.gpsSettingsBtn}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Open instellingen"
+              >
+                <Text style={styles.gpsSettingsBtnText}>Open instellingen</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* Zwak GPS-signaal: langer dan 20 seconden geen geaccepteerd punt */}
+        {!gpsError && weakGpsSignal && (
+          <View style={styles.gpsBanner}>
+            <Text style={styles.gpsBannerText}>Zwak GPS-signaal. Je afstand kan even achterlopen.</Text>
+          </View>
+        )}
+
+        {/* Auto-pauze: automatisch gepauzeerd omdat de loper vrijwel stilstaat */}
+        {isAutoPaused && (
+          <View style={styles.autoPauseBanner}>
+            <Text style={styles.autoPauseBannerText}>Auto-pauze</Text>
           </View>
         )}
 
@@ -632,8 +958,16 @@ export default function ActiveSessionScreen() {
           <TouchableOpacity
             onPress={() => {
               const next = !isRunning;
+              // Handmatige pauze/hervatten heeft altijd voorrang op auto-pauze.
+              manuallyPausedRef.current = !next;
+              isAutoPausedRef.current = false;
+              stillSinceRef.current = null;
+              setIsAutoPaused(false);
               setIsRunning(next);
               if (!next) stopVoice();
+              // Meteen een snapshot schrijven bij pauzeren/hervatten, niet
+              // wachten op de eerstvolgende periodieke opslag.
+              persistSnapshot();
             }}
             style={[styles.pauseBtn, { borderColor: `${zoneColor}55` }]}
             activeOpacity={0.8}
@@ -666,7 +1000,7 @@ export default function ActiveSessionScreen() {
           <View style={styles.lockCard}>
             <Lock size={30} color={colors.textPrimary} strokeWidth={2} />
             <Text style={styles.lockTitle}>Scherm vergrendeld</Text>
-            <Text style={styles.lockSub}>Je training loopt gewoon door.</Text>
+            <Text style={styles.lockSub}>Je run loopt door, ook met het scherm vergrendeld.</Text>
             <TouchableOpacity
               onLongPress={() => setIsLocked(false)}
               delayLongPress={600}
@@ -697,6 +1031,26 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: spacing[3],
+  },
+
+  // Fullscreen countdown
+  countdownContainer: {
+    backgroundColor: colors.bgBase,
+  },
+  countdownInner: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing[2],
+  },
+  countdownLabel: {
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.md,
+    color: colors.textSecondary, textTransform: 'uppercase',
+    letterSpacing: typography.letterSpacing.widest,
+  },
+  countdownNumber: {
+    fontFamily: typography.fontFamily.display, fontSize: 140,
+    color: colors.brandPrimary, letterSpacing: -4,
   },
 
   errorText: {
@@ -817,6 +1171,25 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   gpsBannerText: {
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
     color: colors.error, textAlign: 'center',
+  },
+  gpsSettingsBtn: {
+    alignSelf: 'center', marginTop: spacing[1],
+    paddingHorizontal: spacing[2], paddingVertical: 4,
+    borderRadius: radius.full, borderWidth: 1, borderColor: colors.error,
+  },
+  gpsSettingsBtnText: {
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.xs,
+    color: colors.error,
+  },
+  autoPauseBanner: {
+    marginHorizontal: spacing[3], backgroundColor: `${colors.warning}22`,
+    borderRadius: radius.md, padding: spacing[1], borderWidth: 1,
+    borderColor: `${colors.warning}44`, marginBottom: spacing[1],
+  },
+  autoPauseBannerText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.xs,
+    color: colors.warning, textAlign: 'center', textTransform: 'uppercase',
+    letterSpacing: typography.letterSpacing.wide,
   },
   mainMetric: {
     alignItems: 'center', paddingTop: spacing[3], paddingBottom: spacing[2],

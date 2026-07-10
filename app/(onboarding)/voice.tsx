@@ -113,7 +113,7 @@ export default function VoiceScreen() {
                 Gesproken begeleiding
               </Text>
               <Text style={styles.optionDesc}>
-                De app houdt je op de hoogte: hartslagzone, een update bij elke kilometer en aanmoedigingen.
+                Hartslagzone, kilometer-updates en aanmoedigingen.
               </Text>
             </View>
             <View style={[styles.radio, voiceGuidance && styles.radioSelected]}>

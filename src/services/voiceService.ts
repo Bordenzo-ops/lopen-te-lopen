@@ -20,6 +20,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 // @ts-ignore: wordt geinstalleerd met "npx expo install expo-file-system"
 import { File, Directory, Paths } from 'expo-file-system';
 import { ELEVENLABS, isElevenLabsConfigured, VoiceType } from '../config/voiceConfig';
+import { getCurrentSession } from './authService';
 import { hasPremiumAccess } from '../config/premiumConfig';
 import { useAppStore } from '../store/appStore';
 
@@ -70,15 +71,20 @@ function getCacheFile(voiceId: string, text: string): any {
 
 /** Haalt mp3-audio op via de Supabase TTS Edge Function (sleutel blijft serverside) */
 async function fetchTts(voiceId: string, text: string): Promise<Uint8Array> {
-  const supabaseUrl  = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-  const supabaseAnon = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 
   if (!supabaseUrl) throw new Error('Supabase URL niet geconfigureerd');
+
+  // De TTS-function vereist een geldige Supabase-sessietoken (ook anoniem).
+  // Zonder sessie gooien we hier, zodat speak() terugvalt op de telefoonstem.
+  const session = await getCurrentSession();
+  const accessToken = session?.access_token ?? '';
+  if (!accessToken) throw new Error('Geen Supabase-sessie voor TTS');
 
   const res = await fetch(`${supabaseUrl}/functions/v1/tts`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${supabaseAnon}`,
+      'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({

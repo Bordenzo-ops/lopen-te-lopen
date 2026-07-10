@@ -1,28 +1,33 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CheckCircle2, Home, Share2, Trophy, Sparkles, FileDown } from 'lucide-react-native';
+import { CheckCircle2, Home, Share2, Trophy, Sparkles, FileDown, Zap, Crown } from 'lucide-react-native';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
 import { getTrainingPlan, zoneInfo } from '../../src/data/trainingPlans';
 import type { TrainingWeek } from '../../src/data/trainingPlans';
-import { selectTotalKm } from '../../src/store/appStore';
+import { selectTotalKm, selectShowRunUpsell } from '../../src/store/appStore';
+import type { KmSplit } from '../../src/store/appStore';
 import { detectPersonalRecords, detectCumulativeMilestone } from '../../src/data/achievements';
 import { Button } from '../../src/components/ui/Button';
+import { Card } from '../../src/components/ui/Card';
 import { ZoneBadge } from '../../src/components/ui/ZoneBadge';
 import { ShareRunSheet } from '../../src/components/ui/ShareRunSheet';
 import { exportSessionAsGpx } from '../../src/services/exportService';
+import { maybeAskForReview } from '../../src/services/reviewService';
+import { usePremium } from '../../src/hooks/usePremium';
 
 export default function SummaryScreen() {
-  const { distanceKm, durationSeconds, avgPace, sessionId, weekNumber } =
+  const { distanceKm, durationSeconds, avgPace, sessionId, weekNumber, splits: splitsParam } =
     useLocalSearchParams<{
       distanceKm: string;
       durationSeconds: string;
       avgPace: string;
       sessionId: string;
       weekNumber: string;
+      splits?: string;
     }>();
 
   const profile           = useAppStore(s => s.profile);
@@ -35,12 +40,67 @@ export default function SummaryScreen() {
   const completedInWeek = useAppStore(s =>
     s.completedSessions.filter(c => c.weekNumber === parseInt(weekNumber ?? '1')).length
   );
+  const { hasAccess } = usePremium();
+  // Maximaal 1x per 3 voltooide runs: niet opdringerig, wel regelmatig zichtbaar.
+  // De hook wordt altijd aangeroepen (rules of hooks); de combinatie met
+  // hasAccess gebeurt pas daarna.
+  const isRunUpsellTurn = useAppStore(selectShowRunUpsell);
+  const showRunUpsell = !hasAccess && isRunUpsellTurn;
+  const lastReviewPromptAt    = useAppStore(s => s.lastReviewPromptAt);
+  const setLastReviewPromptAt = useAppStore(s => s.setLastReviewPromptAt);
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  // In-app reviewvraag, 2 seconden na het renderen van een succesvolle
+  // samenvatting zodat het trotsmoment eerst landt. Niet combineren met de
+  // premium-upsellkaart hierboven: die krijgt dan voorrang en de reviewvraag
+  // verschijnt gewoon een andere keer. De hook staat bewust vóór de
+  // "!profile"-guard hieronder (rules of hooks) en herleidt de sessie-info
+  // daarom zelf, in plaats van de later in dit bestand berekende `session`/
+  // `km` te hergebruiken.
+  useEffect(() => {
+    if (!profile) return;
+    if (showRunUpsell) return;
+
+    const weekNumForReview = parseInt(weekNumber ?? '1');
+    const planForReview = schemaMode === 'race' && racePlan
+      ? racePlan.weeks
+      : getTrainingPlan(profile.goal).plan;
+    const sessionForReview = planForReview
+      .find(w => w.weekNumber === weekNumForReview)
+      ?.sessions.find(s => s.id === sessionId);
+    const kmForReview = parseFloat(distanceKm ?? '0');
+    const sessionWasComplete = sessionForReview ? kmForReview >= sessionForReview.distanceKm : true;
+
+    const timer = setTimeout(() => {
+      void maybeAskForReview({
+        totalCompletedSessions: completedSessions.length,
+        sessionWasComplete,
+        lastReviewPromptAt,
+        onPromptShown: () => setLastReviewPromptAt(new Date().toISOString()),
+      });
+    }, 2000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!profile) return null;
 
   const lastSession = completedSessions[completedSessions.length - 1];
+
+  // Km-splits: bij voorkeur uit de opgeslagen sessie (werkt ook na een herstart
+  // van de app), anders uit de route-param direct na het afronden van de run.
+  let splits: KmSplit[] = lastSession?.splits ?? [];
+  if (splits.length === 0 && splitsParam) {
+    try {
+      const parsed = JSON.parse(splitsParam);
+      if (Array.isArray(parsed)) splits = parsed;
+    } catch (_) {
+      // Ongeldige of ontbrekende splits-data: gewoon geen splits tonen
+    }
+  }
+  const slowestSplitSeconds = splits.length > 0 ? Math.max(...splits.map(s => s.seconds)) : 0;
+  const fastestSplitSeconds = splits.length > 0 ? Math.min(...splits.map(s => s.seconds)) : 0;
 
   // Persoonlijke records detecteren: vergelijk de zojuist voltooide run met alle
   // eerdere runs (lastSession zit al in completedSessions, dus die sluiten we uit).
@@ -102,6 +162,13 @@ export default function SummaryScreen() {
     const m = Math.floor(secPerKm / 60);
     const s = Math.round(secPerKm % 60);
     return `${m}:${String(s).padStart(2, '0')} /km`;
+  };
+
+  // Splittijd in mm:ss, voor de km-splits-lijst
+  const formatSplitTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${String(sec).padStart(2, '0')}`;
   };
 
   // GPX-export is alleen zinvol met een route van minimaal 2 punten
@@ -193,6 +260,44 @@ export default function SummaryScreen() {
           )}
         </View>
 
+        {/* Km-splits, in Strava-stijl: per km de tijd met een balkje relatief
+            aan de langzaamste km, en de snelste km uitgelicht */}
+        {splits.length > 0 && (
+          <View style={styles.splitsCard}>
+            <Text style={styles.splitsTitle}>Splits per kilometer</Text>
+            <View style={styles.splitsList}>
+              {splits.map(split => {
+                const isFastest = split.seconds === fastestSplitSeconds && splits.length > 1;
+                const barPct = slowestSplitSeconds > 0
+                  ? Math.max(8, (split.seconds / slowestSplitSeconds) * 100)
+                  : 0;
+                return (
+                  <View key={split.km} style={styles.splitRow}>
+                    <Text style={[styles.splitKm, isFastest && styles.splitKmFastest]}>
+                      {split.km}
+                    </Text>
+                    <View style={styles.splitBarTrack}>
+                      <View
+                        style={[
+                          styles.splitBarFill,
+                          { width: `${barPct}%` },
+                          isFastest && styles.splitBarFillFastest,
+                        ]}
+                      />
+                    </View>
+                    <View style={styles.splitTimeRow}>
+                      <Text style={[styles.splitTime, isFastest && styles.splitTimeFastest]}>
+                        {formatSplitTime(split.seconds)}
+                      </Text>
+                      {isFastest && <Zap size={12} color={colors.success} strokeWidth={2.5} />}
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
         {/* Week progress */}
         <View style={styles.weekCard}>
           <View style={styles.weekCardHeader}>
@@ -220,6 +325,27 @@ export default function SummaryScreen() {
             <Text style={styles.coachLabel}>Tip van de coach</Text>
             <Text style={styles.coachText}>{session.coachTip}</Text>
           </View>
+        )}
+
+        {/* Contextuele premium-upsell na de run, alleen voor gratis gebruikers
+            en hooguit eens per 3 voltooide runs, zodat het niet opdringerig wordt. */}
+        {showRunUpsell && (
+          <Card variant="surface" padding="lg" style={styles.upsellCard}>
+            <View style={styles.upsellHeader}>
+              <Crown size={20} color={colors.premium} strokeWidth={2} />
+              <Text style={styles.upsellTitle}>Haal meer uit je volgende run</Text>
+            </View>
+            <Text style={styles.upsellText}>
+              Probeer premium 14 dagen gratis: stemcoaching, onbeperkt routes plannen en
+              tempo-advies op jouw doeltijd.
+            </Text>
+            <Button
+              label="Probeer gratis"
+              onPress={() => router.push('/paywall')}
+              size="md"
+              style={styles.upsellButton}
+            />
+          </Card>
         )}
       </ScrollView>
 
@@ -350,6 +476,40 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   statValue: {
     fontFamily: typography.fontFamily.sansBold, fontSize: typography.fontSize.base, color: colors.textPrimary,
   },
+  splitsCard: {
+    backgroundColor: colors.bgCard, borderRadius: radius.xl,
+    borderWidth: 1, borderColor: colors.borderSubtle, padding: spacing[2], gap: spacing[1.5],
+  },
+  splitsTitle: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base, color: colors.textPrimary,
+  },
+  splitsList: { gap: spacing[1] },
+  splitRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing[1.5],
+  },
+  splitKm: {
+    width: 22,
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
+    color: colors.textSecondary, textAlign: 'right',
+  },
+  splitKmFastest: { color: colors.success },
+  splitBarTrack: {
+    flex: 1, height: 8, borderRadius: radius.full,
+    backgroundColor: colors.bgSurface, overflow: 'hidden',
+  },
+  splitBarFill: {
+    height: '100%', borderRadius: radius.full,
+    backgroundColor: colors.brandPrimary,
+  },
+  splitBarFillFastest: { backgroundColor: colors.success },
+  splitTimeRow: {
+    width: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4,
+  },
+  splitTime: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
+    color: colors.textPrimary, fontVariant: ['tabular-nums'],
+  },
+  splitTimeFastest: { color: colors.success },
   weekCard: {
     backgroundColor: colors.bgCard, borderRadius: radius.xl,
     borderWidth: 1, borderColor: colors.borderSubtle, padding: spacing[2], gap: spacing[1.5],
@@ -386,6 +546,25 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.base,
     color: colors.textSecondary, lineHeight: typography.fontSize.base * typography.lineHeight.relaxed,
     fontStyle: 'italic',
+  },
+  upsellCard: {
+    gap: spacing[1.5],
+    borderWidth: 1,
+    borderColor: colors.premium + '44',
+  },
+  upsellHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing[1],
+  },
+  upsellTitle: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base,
+    color: colors.textPrimary, flexShrink: 1,
+  },
+  upsellText: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm,
+    color: colors.textSecondary, lineHeight: typography.fontSize.sm * typography.lineHeight.normal,
+  },
+  upsellButton: {
+    marginTop: spacing[0.5],
   },
   footer: { paddingHorizontal: spacing[3], paddingBottom: spacing[3], paddingTop: spacing[2], gap: spacing[1] },
   secondaryBtnRow: { flexDirection: 'row', gap: spacing[1] },

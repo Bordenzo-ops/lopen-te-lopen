@@ -29,9 +29,17 @@ export function StatRing({
   const progress = Math.min(100, Math.max(0, value));
   const strokeDashoffset = circumference - (progress / 100) * circumference;
   const center = size / 2;
+  const roundedProgress = Math.round(progress);
+  const accessibleLabel = sublabel ? `${label}, ${sublabel}` : label;
 
   return (
-    <View style={[styles.container, { width: size, height: size }]}>
+    <View
+      style={[styles.container, { width: size, height: size }]}
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={accessibleLabel}
+      accessibilityValue={{ min: 0, max: 100, now: roundedProgress }}
+    >
       <Svg width={size} height={size}>
         {/* Track */}
         <Circle

@@ -43,6 +43,12 @@ export interface UserProfile {
   isPremium?: boolean;
 }
 
+/** Tijd (in seconden) voor een voltooide kilometer, in Strava-stijl splits. */
+export interface KmSplit {
+  km: number;
+  seconds: number;
+}
+
 export interface CompletedSession {
   sessionId: string;
   weekNumber: number;
@@ -52,6 +58,11 @@ export interface CompletedSession {
   avgPaceSecPerKm: number;
   avgHeartRate?: number;
   route?: Array<{ lat: number; lon: number; timestamp: number }>;
+  /**
+   * Km-splits van deze run, optioneel voor achterwaartse compatibiliteit met
+   * eerder opgeslagen runs die dit veld nog niet hebben.
+   */
+  splits?: KmSplit[];
   source: 'app' | 'strava' | 'garmin' | 'apple_health' | 'google_fit' | 'mi_fitness';
 }
 
@@ -147,6 +158,34 @@ interface AppState {
   healthConnectEnabled: boolean;
   setHealthConnectEnabled: (enabled: boolean) => void;
 
+  // Auto-pauze tijdens het lopen (offline-first, additief)
+  /**
+   * Pauzeer de timer automatisch bij stilstand tijdens een run? Default true,
+   * net als Strava en Runna. Instelbaar via Instellingen.
+   */
+  autoPauseEnabled: boolean;
+  setAutoPauseEnabled: (enabled: boolean) => void;
+
+  // Lokale herinneringen (offline-first, additief)
+  /**
+   * Staan lokale herinneringen aan (trainingsherinneringen, streak-
+   * bescherming en het wekelijkse overzicht)? Default false: de gebruiker
+   * moet dit bewust aanzetten via Instellingen, waarna eerst toestemming
+   * gevraagd wordt via de systeemdialoog voor meldingen.
+   */
+  remindersEnabled: boolean;
+  setRemindersEnabled: (enabled: boolean) => void;
+  /** Gekozen tijdstip (uur, 0-23) voor de dagelijkse trainingsherinnering. Default 8 (08:00). */
+  reminderHour: number;
+  setReminderHour: (hour: number) => void;
+  /**
+   * ISO-datum van de laatste keer dat de in-app reviewvraag getoond is, of
+   * null als dat nog nooit gebeurd is. Voorkomt dat we vaker dan eens per
+   * 90 dagen om een winkelbeoordeling vragen.
+   */
+  lastReviewPromptAt: string | null;
+  setLastReviewPromptAt: (iso: string) => void;
+
   // Backend (offline-first, additief)
   /**
    * Heeft de gebruiker cloudsync expliciet ingeschakeld? Default false.
@@ -168,20 +207,48 @@ interface AppState {
   /** Best-effort synchronisatie van profiel en sessies. Blokkeert de UI nooit. */
   syncNow: () => Promise<void>;
 
-  // Premium (RevenueCat, niet persistent als bron van waarheid)
+  // Premium (RevenueCat)
   /**
    * Is premium actief volgens RevenueCat (entitlement "premium")? Default
-   * false. Wordt ververst bij app-start en na aankoop of herstel. Wordt
-   * bewust niet gepersisteerd: RevenueCat is de bron van waarheid.
+   * false. Wordt ververst bij app-start en na aankoop, herstel of een
+   * customerInfo-update. Wordt bewust wél gepersisteerd (zie partialize
+   * hieronder): RevenueCat blijft de bron van waarheid zodra er netwerk is,
+   * maar een betalende gebruiker die offline start mag niet per ongeluk de
+   * gratis laag te zien krijgen. Bij een netwerkfout blijft daarom de laatst
+   * bekende waarde staan (zie refreshPremium).
    */
   isPremium: boolean;
-  /** Zet de premium-status direct, bijvoorbeeld na een aankoop of herstel. */
+  /**
+   * Zet de premium-status direct, bijvoorbeeld na een aankoop, herstel of
+   * een update van de RevenueCat-listener. Detecteert zelf de overgang van
+   * actief naar verlopen (true -> false) en zet dan premiumExpiredNoticePending,
+   * zodat het dashboard dit eenmalig vriendelijk kan melden.
+   */
   setPremium: (value: boolean) => void;
   /**
    * Ververs de premium-status best-effort bij RevenueCat. Faalt stil naar
-   * de bestaande waarde zonder sleutel of netwerk en blokkeert nooit.
+   * de bestaande (gepersisteerde) waarde zonder sleutel, netwerk of bij een
+   * fout en blokkeert nooit. Een netwerkfout overschrijft de cache bewust
+   * niet: alleen een écht bevestigd antwoord van RevenueCat (actief of
+   * verlopen) wordt doorgezet.
    */
   refreshPremium: () => Promise<void>;
+  /**
+   * Staat er een melding klaar dat premium net verlopen is? Wordt gezet
+   * zodra setPremium een overgang van true naar false detecteert (via de
+   * RevenueCat-listener of een verversing). Het dashboard toont deze
+   * eenmalig en ruimt hem op via dismissPremiumExpiredNotice.
+   */
+  premiumExpiredNoticePending: boolean;
+  /** Ruimt de "premium verlopen"-melding op, bijvoorbeeld na het sluiten ervan. */
+  dismissPremiumExpiredNotice: () => void;
+  /**
+   * Heeft de gebruiker de subtiele premium-upsellkaart op het dashboard al
+   * weggeklikt? Blijft daarna permanent verborgen (gepersisteerd).
+   */
+  dashboardUpsellDismissed: boolean;
+  /** Verbergt de dashboard-upsellkaart permanent. */
+  dismissDashboardUpsell: () => void;
 
   /**
    * Registreert dat er een route gepland is en hoogt de weekteller op. Reset
@@ -272,6 +339,18 @@ export const useAppStore = create<AppState>()(
       healthConnectEnabled: false,
       setHealthConnectEnabled: (enabled) => set({ healthConnectEnabled: enabled }),
 
+      // Auto-pauze (offline-first default: aan)
+      autoPauseEnabled: true,
+      setAutoPauseEnabled: (enabled) => set({ autoPauseEnabled: enabled }),
+
+      // Lokale herinneringen (offline-first defaults)
+      remindersEnabled: false,
+      setRemindersEnabled: (enabled) => set({ remindersEnabled: enabled }),
+      reminderHour: 8,
+      setReminderHour: (hour) => set({ reminderHour: hour }),
+      lastReviewPromptAt: null,
+      setLastReviewPromptAt: (iso) => set({ lastReviewPromptAt: iso }),
+
       // Backend-status (offline-first defaults)
       cloudSyncEnabled: false,
       isSignedIn: false,
@@ -280,8 +359,22 @@ export const useAppStore = create<AppState>()(
 
       // Premium-status (RevenueCat, default geen premium)
       isPremium: false,
+      premiumExpiredNoticePending: false,
+      dashboardUpsellDismissed: false,
 
-      setPremium: (value) => set({ isPremium: value }),
+      setPremium: (value) => {
+        const wasPremium = get().isPremium;
+        set({
+          isPremium: value,
+          // Alleen een echte overgang van actief naar verlopen triggert de melding
+          premiumExpiredNoticePending: wasPremium && !value
+            ? true
+            : get().premiumExpiredNoticePending,
+        });
+      },
+
+      dismissPremiumExpiredNotice: () => set({ premiumExpiredNoticePending: false }),
+      dismissDashboardUpsell: () => set({ dashboardUpsellDismissed: true }),
 
       setCloudSyncEnabled: (v) => {
         set({ cloudSyncEnabled: v });
@@ -297,7 +390,12 @@ export const useAppStore = create<AppState>()(
       refreshPremium: async () => {
         try {
           const active = await fetchPremiumActive();
-          set({ isPremium: active });
+          // null betekent: onbekend door een netwerk- of API-fout. Dan laten
+          // we de gepersisteerde waarde bewust staan in plaats van hem te
+          // overschrijven met "geen premium".
+          if (active !== null) {
+            get().setPremium(active);
+          }
         } catch (_) {
           // Stil falen: behoud de bestaande premium-status
         }
@@ -467,6 +565,20 @@ export const useAppStore = create<AppState>()(
               // Stil falen: schrijven naar Health Connect mag nooit crashen
             });
         }
+
+        // Best-effort herplannen van de streak-bescherming en het
+        // weekoverzicht. completeSession is de ene plek die altijd geraakt
+        // wordt zodra een sessie voltooid is, ongeacht welk scherm dat doet
+        // (samenvatting, deep link, etc.), dus dit is de eenvoudigste
+        // betrouwbare plek om te herplannen. Alleen als de gebruiker
+        // herinneringen aan heeft staan; faalt verder altijd stil.
+        if (get().remindersEnabled) {
+          import('../services/notificationService')
+            .then(({ refreshWeeklyNotifications }) => refreshWeeklyNotifications(updatedCompleted))
+            .catch(() => {
+              // Stil falen: herinneringen zijn een prettige extra, geen kernfunctie
+            });
+        }
       },
 
       cancelSession: () => set({ activeSession: null }),
@@ -538,6 +650,16 @@ export const useAppStore = create<AppState>()(
         stravaAutoUpload:       state.stravaAutoUpload,
         stravaUploadQueue:      state.stravaUploadQueue,
         healthConnectEnabled:   state.healthConnectEnabled,
+        autoPauseEnabled:       state.autoPauseEnabled,
+        remindersEnabled:       state.remindersEnabled,
+        reminderHour:           state.reminderHour,
+        lastReviewPromptAt:     state.lastReviewPromptAt,
+        // Laatst bekende premium-status: offline-first zodat een betalende
+        // gebruiker zonder netwerk niet per ongeluk de gratis laag ziet.
+        // RevenueCat blijft de bron van waarheid zodra er weer netwerk is.
+        isPremium:                   state.isPremium,
+        premiumExpiredNoticePending: state.premiumExpiredNoticePending,
+        dashboardUpsellDismissed:    state.dashboardUpsellDismissed,
       }),
       onRehydrateStorage: () => (state) => {
         // Gezet na succesvolle én mislukte rehydratie
@@ -582,6 +704,14 @@ export const selectIsSessionSkipped = (
 
 export const selectTotalKm = (state: AppState): number =>
   state.completedSessions.reduce((sum, s) => sum + s.actualDistanceKm, 0);
+
+/**
+ * Mag de upsell-kaart na een run getoond worden? Om niet opdringerig te zijn
+ * verschijnt deze hooguit eens per 3 voltooide runs (na de 3e, 6e, 9e, ...),
+ * afgeleid uit het aantal voltooide sessies zonder aparte teller.
+ */
+export const selectShowRunUpsell = (state: AppState): boolean =>
+  state.completedSessions.length > 0 && state.completedSessions.length % 3 === 0;
 
 export const selectHeartRateZones = (maxHr: number) => ({
   Z1: { min: Math.round(maxHr * 0.50), max: Math.round(maxHr * 0.60) },

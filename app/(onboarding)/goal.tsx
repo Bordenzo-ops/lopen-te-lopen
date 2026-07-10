@@ -27,7 +27,7 @@ const goalMeta: Record<GoalType, { icon: React.ReactNode; tagline: string }> = {
   '5km':           { icon: <Target size={26} color={colors.brandLight} strokeWidth={2} />,   tagline: 'Ideaal als eerste doel' },
   '10km':          { icon: <Dumbbell size={26} color={colors.brandLight} strokeWidth={2} />, tagline: 'De klassieke uitdaging' },
   'half_marathon': { icon: <Medal size={26} color={colors.brandLight} strokeWidth={2} />,    tagline: 'Het ultieme doel' },
-  'marathon':      { icon: <Trophy size={26} color={colors.brandLight} strokeWidth={2} />,   tagline: 'Voor de echte avonturier' },
+  'marathon':      { icon: <Trophy size={26} color={colors.brandLight} strokeWidth={2} />,   tagline: 'De ultieme uitdaging' },
 };
 
 const distanceLabel: Record<RotterdamRace['distance'], string> = {
@@ -250,7 +250,7 @@ function RaceModeContent({
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Kies je wedstrijd</Text>
-      <Text style={styles.sectionSub}>Jouw schema wordt automatisch aangepast op de wedstrijddatum.</Text>
+      <Text style={styles.sectionSub}>Het schema past zich automatisch aan op jouw wedstrijddag</Text>
       {anyPremiumRace && (
         <Text style={styles.racePremiumNote}>
           Je kunt nu elke wedstrijd kiezen. De halve marathon blijft altijd gratis.

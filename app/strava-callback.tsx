@@ -22,6 +22,7 @@ export default function StravaCallbackScreen() {
     expires_at?: string;
     athlete_name?: string;
     error?: string;
+    state?: string;
   }>();
   const colors = useThemeColors();
   const styles = makeStyles(colors);

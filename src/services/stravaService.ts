@@ -5,16 +5,21 @@
  * voltooide runs.
  *
  * Werking:
- *  1. connectStrava() opent de Strava-authorize-pagina in de browser. Strava
- *     stuurt na goedkeuring door naar de Supabase Edge Function
+ *  1. connectStrava() genereert een willekeurige CSRF-statewaarde en opent
+ *     daarna de Strava-authorize-pagina in de browser. Strava stuurt na
+ *     goedkeuring door naar de Supabase Edge Function
  *     (supabase/functions/strava-oauth), die de authorization code omwisselt
  *     voor tokens (client secret blijft serverside) en de gebruiker
  *     terugstuurt naar de app via het deep link-schema
- *     lopentelopen://strava-callback. De route app/strava-callback.tsx vangt
- *     dat op en roept saveTokens() aan.
- *  2. Tokens staan lokaal in AsyncStorage (zelfde opslag als de zustand-
- *     store). Vlak voor een upload wordt gecontroleerd of het access_token
- *     binnen 5 minuten verloopt; zo ja, dan wordt het eerst ververst via de
+ *     lopentelopen://strava-callback, inclusief de ongewijzigde state. De
+ *     route app/strava-callback.tsx vangt dat op en roept
+ *     handleStravaCallback() aan.
+ *  2. handleStravaCallback() controleert eerst of de ontvangen state
+ *     overeenkomt met de bewaarde state (CSRF-bescherming); bij een mismatch
+ *     worden de tokens niet opgeslagen. Daarna staan tokens veilig in
+ *     expo-secure-store (Keychain/Keystore), niet meer in AsyncStorage.
+ *     Vlak voor een upload wordt gecontroleerd of het access_token binnen 5
+ *     minuten verloopt; zo ja, dan wordt het eerst ververst via de
  *     POST-route van dezelfde Edge Function.
  *  3. uploadRun() stuurt de run door: met een route (>= 2 punten) als
  *     GPX-bestand (hergebruikt generateGpx uit exportService) naar
@@ -26,12 +31,18 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+import * as Crypto from 'expo-crypto';
 import * as Linking from 'expo-linking';
 import { generateGpx } from './exportService';
 import type { CompletedSession } from '../store/appStore';
 import { useAppStore } from '../store/appStore';
 
 const TOKEN_STORAGE_KEY = 'strava-tokens';
+const OAUTH_STATE_KEY = 'strava-oauth-state';
+
+/** Bewaart de actieve CSRF-state in het geheugen zolang de app leeft. */
+let pendingOAuthState: string | null = null;
 
 /** Leeg = koppeling uitgeschakeld: de UI toont dan dat setup nog nodig is. */
 export const STRAVA_CLIENT_ID = process.env.EXPO_PUBLIC_STRAVA_CLIENT_ID ?? '';
@@ -55,12 +66,33 @@ interface StravaTokens {
 // ── Tokenopslag ───────────────────────────────────────────────────────────────
 
 async function saveTokens(tokens: StravaTokens): Promise<void> {
-  await AsyncStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(tokens));
+  await SecureStore.setItemAsync(TOKEN_STORAGE_KEY, JSON.stringify(tokens));
+}
+
+/**
+ * Eenmalige migratie van de oude AsyncStorage-opslag naar SecureStore. Wordt
+ * stil overgeslagen als er niets te migreren valt of als er iets misgaat:
+ * de gebruiker moet dan gewoon opnieuw met Strava verbinden.
+ */
+async function migrateLegacyTokens(): Promise<void> {
+  try {
+    const alreadyMigrated = await SecureStore.getItemAsync(TOKEN_STORAGE_KEY);
+    if (alreadyMigrated) return;
+
+    const legacyRaw = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
+    if (!legacyRaw) return;
+
+    await SecureStore.setItemAsync(TOKEN_STORAGE_KEY, legacyRaw);
+    await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
+  } catch {
+    // Migratie mislukt: laat de oude data ongemoeid, geen impact op de UI
+  }
 }
 
 async function readTokens(): Promise<StravaTokens | null> {
   try {
-    const raw = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
+    await migrateLegacyTokens();
+    const raw = await SecureStore.getItemAsync(TOKEN_STORAGE_KEY);
     if (!raw) return null;
     return JSON.parse(raw) as StravaTokens;
   } catch {
@@ -70,9 +102,14 @@ async function readTokens(): Promise<StravaTokens | null> {
 
 async function clearTokens(): Promise<void> {
   try {
-    await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
+    await SecureStore.deleteItemAsync(TOKEN_STORAGE_KEY);
   } catch {
     // Negeer storage-fouten bij wissen
+  }
+  try {
+    await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
+  } catch {
+    // Negeer storage-fouten bij wissen van eventuele oude data
   }
 }
 
@@ -92,13 +129,16 @@ export async function connectStrava(): Promise<{ ok: boolean; message?: string }
     return { ok: false, message: 'Strava-koppeling is nog niet ingesteld voor deze app.' };
   }
 
+  const state = await genereerEnBewaarOAuthState();
+
   const authorizeUrl =
     'https://www.strava.com/oauth/authorize' +
     `?client_id=${encodeURIComponent(STRAVA_CLIENT_ID)}` +
     `&redirect_uri=${encodeURIComponent(functionUrl)}` +
     '&response_type=code' +
     '&scope=activity:write,read' +
-    '&approval_prompt=auto';
+    '&approval_prompt=auto' +
+    `&state=${encodeURIComponent(state)}`;
 
   try {
     await Linking.openURL(authorizeUrl);
@@ -106,6 +146,46 @@ export async function connectStrava(): Promise<{ ok: boolean; message?: string }
   } catch {
     return { ok: false, message: 'Kon de Strava-verbindingspagina niet openen.' };
   }
+}
+
+/**
+ * Genereert een willekeurige CSRF-statewaarde voor de OAuth-uitwisseling en
+ * bewaart die zowel in het geheugen als in SecureStore (als fallback voor
+ * het geval de app tussentijds herstart, bijvoorbeeld door het OS).
+ */
+async function genereerEnBewaarOAuthState(): Promise<string> {
+  const bytes: Uint8Array = await Crypto.getRandomBytesAsync(16);
+  const state = Array.from(bytes)
+    .map((b: number) => b.toString(16).padStart(2, '0'))
+    .join('');
+
+  pendingOAuthState = state;
+  try {
+    await SecureStore.setItemAsync(OAUTH_STATE_KEY, state);
+  } catch {
+    // Geen fallback beschikbaar: de module-variabele blijft de enige bron
+  }
+  return state;
+}
+
+/** Haalt de bewaarde OAuth-state op (geheugen eerst, dan SecureStore) en ruimt hem daarna op. */
+async function verbruikBewaardeOAuthState(): Promise<string | null> {
+  let state = pendingOAuthState;
+  if (!state) {
+    try {
+      state = await SecureStore.getItemAsync(OAUTH_STATE_KEY);
+    } catch {
+      state = null;
+    }
+  }
+
+  pendingOAuthState = null;
+  try {
+    await SecureStore.deleteItemAsync(OAUTH_STATE_KEY);
+  } catch {
+    // Negeer storage-fouten bij opruimen
+  }
+  return state;
 }
 
 /**
@@ -118,7 +198,21 @@ export async function handleStravaCallback(params: {
   expires_at?: string;
   athlete_name?: string;
   error?: string;
+  state?: string;
 }): Promise<{ ok: boolean; athleteName?: string; message?: string }> {
+  const bewaardeState = await verbruikBewaardeOAuthState();
+
+  // CSRF-controle: de ontvangen state moet overeenkomen met de bewaarde.
+  // Is er geen bewaarde state (bijv. oude flow of app-herstart zonder
+  // fallback), dan accepteren we alleen als er ook geen state binnenkomt.
+  if (bewaardeState) {
+    if (params.state !== bewaardeState) {
+      return { ok: false, message: 'Verbinden met Strava is niet gelukt: de beveiligingscontrole is mislukt. Probeer het opnieuw.' };
+    }
+  } else if (params.state) {
+    return { ok: false, message: 'Verbinden met Strava is niet gelukt: de beveiligingscontrole is mislukt. Probeer het opnieuw.' };
+  }
+
   if (params.error) {
     return { ok: false, message: vertaalStravaFout(params.error) };
   }

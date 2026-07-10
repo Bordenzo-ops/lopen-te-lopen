@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensio
 import { router } from 'expo-router';
 import { retryStravaQueue } from '../../src/services/stravaService';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Play, TrendingUp, Flame, Timer, Award } from 'lucide-react-native';
+import { Play, TrendingUp, Flame, Timer, Award, Crown, X } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore, selectWeeklyKm, selectIsSessionCompleted, selectTotalKm } from '../../src/store/appStore';
@@ -12,6 +12,7 @@ import { SessionCard } from '../../src/components/ui/SessionCard';
 import { StatRing } from '../../src/components/ui/StatRing';
 import { Button } from '../../src/components/ui/Button';
 import { useRacePace } from '../../src/hooks/useRacePace';
+import { usePremium } from '../../src/hooks/usePremium';
 import { computeRunStats, computeMilestones } from '../../src/data/achievements';
 import { formatPacePerKm } from '../../src/data/paceModel';
 
@@ -32,6 +33,11 @@ export default function DashboardScreen() {
   const racePlan   = useAppStore(s => s.racePlan);
   const schemaMode = useAppStore(s => s.schemaMode);
   const { paceForType } = useRacePace();
+  const { hasAccess } = usePremium();
+  const premiumExpiredNoticePending = useAppStore(s => s.premiumExpiredNoticePending);
+  const dismissPremiumExpiredNotice = useAppStore(s => s.dismissPremiumExpiredNotice);
+  const dashboardUpsellDismissed = useAppStore(s => s.dashboardUpsellDismissed);
+  const dismissDashboardUpsell = useAppStore(s => s.dismissDashboardUpsell);
   const { width } = useWindowDimensions();
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -121,6 +127,78 @@ export default function DashboardScreen() {
             <Text style={styles.goal}>{planLabel} · week {currentWeek} van {totalWeeks}</Text>
           </View>
         </View>
+
+        {/* Premium verlopen: eenmalige, vriendelijke melding. Schema en runs
+            blijven gewoon werken zonder premium, dus dit is bewust geen
+            waarschuwing maar een neutrale herinnering. */}
+        {premiumExpiredNoticePending && (
+          <View style={styles.expiredCard}>
+            <TouchableOpacity
+              onPress={dismissPremiumExpiredNotice}
+              style={styles.dismissBtn}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Melding sluiten"
+            >
+              <X size={16} color={colors.textTertiary} strokeWidth={2.5} />
+            </TouchableOpacity>
+            <Text style={styles.expiredText}>
+              Je premium is verlopen. Je schema en runs blijven gewoon werken. Premium
+              opnieuw activeren kan altijd.
+            </Text>
+            <Button
+              label="Premium opnieuw activeren"
+              onPress={() => router.push('/paywall')}
+              size="sm"
+            />
+          </View>
+        )}
+
+        {/* Subtiele dashboard-upsell voor gratis gebruikers, permanent te sluiten.
+            Verschijnt niet naast de "premium verlopen"-melding hierboven. */}
+        {!premiumExpiredNoticePending && !hasAccess && !dashboardUpsellDismissed && (
+          <View style={styles.upsellCard}>
+            <TouchableOpacity
+              onPress={dismissDashboardUpsell}
+              style={styles.dismissBtn}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Kaart sluiten"
+            >
+              <X size={16} color={colors.textTertiary} strokeWidth={2.5} />
+            </TouchableOpacity>
+            <View style={styles.upsellHeader}>
+              <Crown size={16} color={colors.premium} strokeWidth={2} />
+              <Text style={styles.upsellTitle}>Ontdek premium: 14 dagen gratis</Text>
+            </View>
+            <Text style={styles.upsellText}>
+              Onbeperkt routes plannen, stemcoaching en persoonlijk tempo-advies.
+            </Text>
+            <Button
+              label="Bekijk premium"
+              onPress={() => router.push('/paywall')}
+              size="sm"
+            />
+          </View>
+        )}
+
+        {/* Compacte streak-indicator, zichtbaar zodra er minstens 1 run is
+            (niet pas na 2 weken). Gebruikt dezelfde computeWeekStreak-logica
+            als de mijlpalenkaart verderop. Bij een onderbroken reeks
+            (currentWeekStreak 0 of 1) tonen we bewust dezelfde
+            "Eerste week bezig!"-tekst: een score van 0 of 1 week heeft geen
+            zinvol getal om te tonen, en dit blijft zo een simpele aanmoediging
+            in plaats van een technisch correcte maar verwarrende 0. */}
+        {stats.totalRuns >= 1 && (
+          <View style={styles.streakBadge}>
+            <Flame size={16} color={colors.brandPrimary} strokeWidth={2} />
+            <Text style={styles.streakBadgeText}>
+              {stats.currentWeekStreak >= 2
+                ? `${stats.currentWeekStreak} weken op rij`
+                : 'Eerste week bezig!'}
+            </Text>
+          </View>
+        )}
 
         {/* Progress ring + week km */}
         <View style={styles.statsRow}>
@@ -259,13 +337,6 @@ export default function DashboardScreen() {
             <Text style={styles.sectionTitle}>Jouw mijlpalen</Text>
             <View style={styles.milestoneCard}>
               <View style={styles.prRow}>
-                {stats.currentWeekStreak >= 2 && (
-                  <View style={styles.prItem}>
-                    <Flame size={18} color={colors.brandPrimary} strokeWidth={2} />
-                    <Text style={styles.prValue}>{stats.currentWeekStreak}</Text>
-                    <Text style={styles.prLabel}>weken op rij</Text>
-                  </View>
-                )}
                 <View style={styles.prItem}>
                   <TrendingUp size={18} color={colors.zone2} strokeWidth={2} />
                   <Text style={styles.prValue}>{stats.longestRunKm.toFixed(1)}</Text>
@@ -334,6 +405,42 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   goal: {
     fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.sm,
     color: colors.textSecondary, marginTop: 4,
+  },
+  expiredCard: {
+    backgroundColor: colors.bgCard, borderRadius: radius.xl, padding: spacing[2],
+    borderWidth: 1, borderColor: colors.borderSubtle, gap: spacing[1.5],
+  },
+  upsellCard: {
+    backgroundColor: colors.bgCard, borderRadius: radius.xl, padding: spacing[2],
+    borderWidth: 1, borderColor: colors.premium + '44', gap: spacing[1.5],
+  },
+  upsellHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
+  upsellTitle: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base,
+    color: colors.textPrimary, flexShrink: 1, paddingRight: spacing[3],
+  },
+  dismissBtn: {
+    position: 'absolute', top: spacing[1], right: spacing[1],
+    width: 32, height: 32, alignItems: 'center', justifyContent: 'center', zIndex: 1,
+  },
+  expiredText: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm,
+    color: colors.textSecondary, paddingRight: spacing[3],
+    lineHeight: typography.fontSize.sm * typography.lineHeight.normal,
+  },
+  upsellText: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm,
+    color: colors.textSecondary, lineHeight: typography.fontSize.sm * typography.lineHeight.normal,
+  },
+  streakBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
+    backgroundColor: colors.brandPrimary + '14',
+    borderWidth: 1, borderColor: colors.brandPrimary + '33',
+    borderRadius: radius.full, paddingHorizontal: spacing[1.5], paddingVertical: 6,
+  },
+  streakBadgeText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
+    color: colors.brandLight,
   },
   statsRow: { flexDirection: 'row', gap: spacing[2], justifyContent: 'space-between' },
   ringCard: { flex: 1, alignItems: 'center', gap: 6 },

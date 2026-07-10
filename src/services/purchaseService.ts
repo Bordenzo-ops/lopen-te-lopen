@@ -18,15 +18,32 @@
  * Vereist: npx expo install react-native-purchases
  */
 
+import { Platform } from 'react-native';
 import Purchases, {
   type CustomerInfo,
+  type CustomerInfoUpdateListener,
   type PurchasesOffering,
   type PurchasesPackage,
+  type SubscriptionOption,
   LOG_LEVEL,
 } from 'react-native-purchases';
 import { getCurrentUser } from './authService';
 
-const REVENUECAT_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY ?? '';
+/**
+ * RevenueCat gebruikt per platform een aparte publieke API-sleutel:
+ *  - iOS gebruikt de Apple-sleutel (appl_...) uit EXPO_PUBLIC_REVENUECAT_IOS_API_KEY
+ *  - Android gebruikt de Google-sleutel (goog_...) uit EXPO_PUBLIC_REVENUECAT_API_KEY
+ * Ontbreekt de platform-specifieke sleutel, dan valt het terug op de Android-key
+ * zodat bestaand gedrag niet breekt.
+ */
+const REVENUECAT_ANDROID_API_KEY =
+  process.env.EXPO_PUBLIC_REVENUECAT_API_KEY ?? '';
+const REVENUECAT_IOS_API_KEY =
+  process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY ?? '';
+const REVENUECAT_API_KEY =
+  Platform.OS === 'ios'
+    ? REVENUECAT_IOS_API_KEY || REVENUECAT_ANDROID_API_KEY
+    : REVENUECAT_ANDROID_API_KEY;
 
 /** Naam van het entitlement zoals ingesteld in RevenueCat. */
 export const PREMIUM_ENTITLEMENT_ID = 'premium';
@@ -97,6 +114,11 @@ export async function identifyUser(userId: string): Promise<void> {
 /**
  * Haal de standaard offering op met de beschikbare abonnementspakketten.
  * Geeft null terug als RevenueCat niet beschikbaar is of er geen offering is.
+ *
+ * Doet bij een fout één automatische herhaalpoging na 1 seconde: een
+ * tijdelijke netwerkhapering mag de paywall niet meteen op de fallbackprijzen
+ * laten terugvallen. Faalt de herhaalpoging ook, dan geven we alsnog stil
+ * null terug.
  */
 export async function getOfferings(): Promise<PurchasesOffering | null> {
   if (!configured) return null;
@@ -104,7 +126,88 @@ export async function getOfferings(): Promise<PurchasesOffering | null> {
     const offerings = await Purchases.getOfferings();
     return offerings.current ?? offerings.all[DEFAULT_OFFERING_ID] ?? null;
   } catch {
-    return null;
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const offerings = await Purchases.getOfferings();
+      return offerings.current ?? offerings.all[DEFAULT_OFFERING_ID] ?? null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+/**
+ * Zet aantal periode-eenheden (dag/week/maand/jaar) om naar een geschat
+ * aantal dagen. Maand en jaar zijn benaderingen (30 resp. 365 dagen), net
+ * als RevenueCat dit zelf documenteert voor afgeleide prijzen.
+ */
+function periodUnitToDays(unit: string, numberOfUnits: number): number {
+  switch (unit) {
+    case 'DAY':
+      return numberOfUnits;
+    case 'WEEK':
+      return numberOfUnits * 7;
+    case 'MONTH':
+      return numberOfUnits * 30;
+    case 'YEAR':
+      return numberOfUnits * 365;
+    default:
+      return numberOfUnits;
+  }
+}
+
+export interface TrialInfo {
+  /** Heeft dit pakket een gratis proefperiode? */
+  hasFreeTrial: boolean;
+  /** Lengte van de proefperiode in dagen, of null als onbekend/niet van toepassing. */
+  trialDays: number | null;
+}
+
+const NO_TRIAL: TrialInfo = { hasFreeTrial: false, trialDays: null };
+
+/**
+ * Platform-onafhankelijke helper die uitleest of een RevenueCat-pakket een
+ * gratis proefperiode heeft, en zo ja hoeveel dagen.
+ *
+ * iOS levert dit via product.introPrice (een gratis fase heeft price === 0).
+ * Android (Google Play) levert dit via product.subscriptionOptions, waarbij
+ * elke optie een freePhase kan hebben met een eigen billingPeriod en
+ * billingCycleCount. Volledig defensief: bij een onverwachte vorm van de
+ * data of een ontbrekend pakket geven we gewoon "geen proefperiode" terug,
+ * zodat de paywall nooit crasht en netjes terugvalt op het normale gedrag.
+ */
+export function getTrialInfo(pkg: PurchasesPackage | null | undefined): TrialInfo {
+  if (!pkg) return NO_TRIAL;
+  try {
+    const product = pkg.product;
+    if (!product) return NO_TRIAL;
+
+    if (Platform.OS === 'ios') {
+      const intro = product.introPrice;
+      if (intro && intro.price === 0) {
+        const cycles = Math.max(1, intro.cycles || 1);
+        const days = periodUnitToDays(intro.periodUnit, intro.periodNumberOfUnits) * cycles;
+        return days > 0 ? { hasFreeTrial: true, trialDays: days } : NO_TRIAL;
+      }
+      return NO_TRIAL;
+    }
+
+    // Android: zoek de gratis fase, eerst in de standaardoptie, anders in
+    // de eerste beschikbare optie die er een heeft.
+    const options: SubscriptionOption[] = product.subscriptionOptions ?? [];
+    const candidates = [product.defaultOption, ...options].filter(
+      (o): o is SubscriptionOption => !!o,
+    );
+    const withFreePhase = candidates.find(o => o.freePhase);
+    const freePhase = withFreePhase?.freePhase;
+    if (freePhase) {
+      const cycles = Math.max(1, freePhase.billingCycleCount ?? 1);
+      const days = periodUnitToDays(freePhase.billingPeriod.unit, freePhase.billingPeriod.value) * cycles;
+      return days > 0 ? { hasFreeTrial: true, trialDays: days } : NO_TRIAL;
+    }
+    return NO_TRIAL;
+  } catch {
+    return NO_TRIAL;
   }
 }
 
@@ -184,16 +287,77 @@ export function hasPremiumEntitlement(customerInfo: CustomerInfo | null): boolea
 }
 
 /**
- * Vraag de huidige premium-status op bij RevenueCat. Faalt stil naar false
- * zonder sleutel, netwerk of bij een fout.
+ * Vraag de huidige premium-status op bij RevenueCat.
+ *
+ * Geeft zonder RevenueCat-sleutel altijd false terug (bewust: geen premium
+ * mogelijk zonder configuratie). Bij een echte netwerk- of API-fout geven we
+ * null terug in plaats van false: de aanroeper kan dan de laatst bekende
+ * (gepersisteerde) status laten staan in plaats van een tijdelijke
+ * netwerkhapering te verwarren met een verlopen abonnement.
  */
-export async function isPremiumActive(): Promise<boolean> {
+export async function isPremiumActive(): Promise<boolean | null> {
   if (!configured) return false;
   try {
     const customerInfo = await Purchases.getCustomerInfo();
     return hasPremiumEntitlement(customerInfo);
   } catch {
-    return false;
+    return null;
+  }
+}
+
+/**
+ * Log de huidige gebruiker uit bij RevenueCat, bijvoorbeeld bij het
+ * uitloggen uit de app zelf. Best-effort: zonder configuratie of bij een
+ * fout gebeurt er niets en blijft de app gewoon werken.
+ */
+export async function logOut(): Promise<void> {
+  if (!configured) return;
+  try {
+    await Purchases.logOut();
+  } catch {
+    // Stil falen: uitloggen bij RevenueCat mag de rest van het uitloggen
+    // nooit blokkeren
+  }
+}
+
+/** Actieve listener-referentie, nodig om hem later weer te kunnen verwijderen. */
+let activeCustomerInfoListener: CustomerInfoUpdateListener | null = null;
+
+/**
+ * Registreert een listener die meeluistert met RevenueCat-updates van de
+ * customerInfo (bijvoorbeeld een automatische verlenging, een verlopen
+ * abonnement, of een aankoop op een ander toestel) en geeft de nieuwe
+ * premium-status door aan de callback. Werkt alleen als RevenueCat
+ * geconfigureerd is; anders gebeurt er niets. Vervangt een eventueel eerder
+ * geregistreerde listener, zodat er nooit dubbele listeners actief zijn.
+ */
+export function addPremiumListener(callback: (isPremium: boolean) => void): void {
+  if (!configured) return;
+  try {
+    removePremiumListener();
+    const listener: CustomerInfoUpdateListener = (customerInfo) => {
+      try {
+        callback(hasPremiumEntitlement(customerInfo));
+      } catch {
+        // Stil falen: een fout in de callback mag RevenueCat nooit raken
+      }
+    };
+    activeCustomerInfoListener = listener;
+    Purchases.addCustomerInfoUpdateListener(listener);
+  } catch {
+    activeCustomerInfoListener = null;
+  }
+}
+
+/** Verwijdert de geregistreerde customerInfo-listener, als die er is. Best-effort. */
+export function removePremiumListener(): void {
+  if (!activeCustomerInfoListener) return;
+  try {
+    Purchases.removeCustomerInfoUpdateListener(activeCustomerInfoListener);
+  } catch {
+    // Negeer: er is toch niets meer aan te doen
+  } finally {
+    activeCustomerInfoListener = null;
   }
 }
 

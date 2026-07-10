@@ -41,7 +41,7 @@ export const PREMIUM_CONFIG = {
    * (doeltijd-gestuurde tempo's), de premium-stemmen, onbeperkt routes plannen
    * en later de geavanceerde statistieken, niet in de basis-schema's.
    */
-  FREE_RACE_DISTANCES: ['5km', '10km', 'half_marathon', 'marathon'] as RaceDistance[],
+  FREE_RACE_DISTANCES: ['5km', '10km', '15km', 'half_marathon', 'marathon'] as RaceDistance[],
 } as const;
 
 /**

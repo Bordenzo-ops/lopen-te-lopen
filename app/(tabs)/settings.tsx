@@ -4,11 +4,11 @@ import {
   Alert, TextInput, KeyboardAvoidingView, Platform, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone, Cloud, Activity } from 'lucide-react-native';
+import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone, Cloud, Activity, Bell } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
-import { zoneInfo } from '../../src/data/trainingPlans';
+import { zoneInfo, DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
 import * as voiceService from '../../src/services/voiceService';
 import type { VoiceType } from '../../src/config/voiceConfig';
 import { router } from 'expo-router';
@@ -17,6 +17,15 @@ import { usePremium } from '../../src/hooks/usePremium';
 import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
 import { connectStrava, disconnectStrava, isStravaConfigured } from '../../src/services/stravaService';
 import { enableHealthConnect, isHealthConnectAvailable } from '../../src/services/healthConnectService';
+import {
+  requestNotificationPermission,
+  scheduleTrainingReminders,
+  cancelAllReminders,
+  refreshWeeklyNotifications,
+} from '../../src/services/notificationService';
+
+/** Beschikbare tijdstippen voor de trainingsherinnering (geen picker-package nodig). */
+const REMINDER_HOURS = [7, 8, 12, 18] as const;
 
 // ── Bewerkbare rij ─────────────────────────────────────────────────────────
 
@@ -175,6 +184,14 @@ export default function SettingsScreen() {
   const healthConnectEnabled    = useAppStore(s => s.healthConnectEnabled);
   const setHealthConnectEnabled = useAppStore(s => s.setHealthConnectEnabled);
   const [healthConnectBusy, setHealthConnectBusy] = useState(false);
+  const autoPauseEnabled    = useAppStore(s => s.autoPauseEnabled);
+  const setAutoPauseEnabled = useAppStore(s => s.setAutoPauseEnabled);
+  const completedSessions   = useAppStore(s => s.completedSessions);
+  const remindersEnabled    = useAppStore(s => s.remindersEnabled);
+  const setRemindersEnabled = useAppStore(s => s.setRemindersEnabled);
+  const reminderHour        = useAppStore(s => s.reminderHour);
+  const setReminderHour     = useAppStore(s => s.setReminderHour);
+  const [remindersBusy, setRemindersBusy] = useState(false);
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   if (!profile) return null;
@@ -264,6 +281,40 @@ export default function SettingsScreen() {
       }
     } finally {
       setHealthConnectBusy(false);
+    }
+  }
+
+  async function handleToggleReminders(value: boolean) {
+    if (!value) {
+      setRemindersEnabled(false);
+      void cancelAllReminders();
+      return;
+    }
+    setRemindersBusy(true);
+    try {
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        setRemindersEnabled(false);
+        Alert.alert(
+          'Meldingen niet toegestaan',
+          'We konden geen toestemming krijgen voor meldingen. Je kunt dit later alsnog inschakelen via de instellingen van je toestel.',
+        );
+        return;
+      }
+      setRemindersEnabled(true);
+      await scheduleTrainingReminders(profile?.trainingDays ?? DEFAULT_TRAINING_DAYS, reminderHour);
+      // Bereken direct de actuele streak- en weekoverzicht-status, zodat de
+      // gebruiker niet hoeft te wachten tot de volgende voltooide sessie.
+      await refreshWeeklyNotifications(completedSessions);
+    } finally {
+      setRemindersBusy(false);
+    }
+  }
+
+  async function handleChangeReminderHour(hour: number) {
+    setReminderHour(hour);
+    if (remindersEnabled) {
+      await scheduleTrainingReminders(profile?.trainingDays ?? DEFAULT_TRAINING_DAYS, hour);
     }
   }
 
@@ -400,6 +451,21 @@ export default function SettingsScreen() {
                   thumbColor={profile.voiceGuidance ? colors.brandPrimary : colors.textTertiary}
                 />
               </View>
+              <Divider />
+              <View style={styles.switchRow}>
+                <Activity size={18} color={colors.textSecondary} strokeWidth={2} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.switchLabel}>Auto-pauze</Text>
+                  <Text style={styles.switchSub}>Pauzeert de timer automatisch als je stilstaat</Text>
+                </View>
+                <Switch
+                  value={autoPauseEnabled}
+                  onValueChange={setAutoPauseEnabled}
+                  accessibilityLabel="Auto-pauze"
+                  trackColor={{ false: colors.borderDefault, true: colors.brandPrimary + '88' }}
+                  thumbColor={autoPauseEnabled ? colors.brandPrimary : colors.textTertiary}
+                />
+              </View>
               {profile.voiceGuidance && (
                 <>
                   <Divider />
@@ -454,6 +520,61 @@ export default function SettingsScreen() {
                 </Text>
               </TouchableOpacity>
             )}
+          </View>
+
+          {/* Herinneringen */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Herinneringen</Text>
+            <View style={styles.card}>
+              <View style={styles.switchRow}>
+                <Bell size={18} color={colors.textSecondary} strokeWidth={2} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.switchLabel}>Trainingsherinneringen</Text>
+                  <Text style={styles.switchSub}>
+                    Een melding op je trainingsdagen, plus een seintje als je dreigt je wekelijkse streak te missen
+                  </Text>
+                </View>
+                <Switch
+                  value={remindersEnabled}
+                  onValueChange={handleToggleReminders}
+                  disabled={remindersBusy}
+                  accessibilityLabel="Trainingsherinneringen"
+                  trackColor={{ false: colors.borderDefault, true: colors.brandPrimary + '88' }}
+                  thumbColor={remindersEnabled ? colors.brandPrimary : colors.textTertiary}
+                />
+              </View>
+              {remindersEnabled && (
+                <>
+                  <Divider />
+                  <View style={styles.reminderTimeSection}>
+                    <Text style={styles.rowLabel}>Tijdstip</Text>
+                    <View style={styles.timeRow}>
+                      {REMINDER_HOURS.map(h => {
+                        const active = reminderHour === h;
+                        return (
+                          <TouchableOpacity
+                            key={h}
+                            style={[styles.timeBtn, active && styles.timeBtnActive]}
+                            onPress={() => handleChangeReminderHour(h)}
+                            activeOpacity={0.85}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Tijdstip ${String(h).padStart(2, '0')}:00`}
+                            accessibilityState={{ selected: active }}
+                          >
+                            <Text style={[styles.timeBtnText, active && styles.timeBtnTextActive]}>
+                              {String(h).padStart(2, '0')}:00
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </>
+              )}
+            </View>
+            <Text style={styles.fieldNote}>
+              We vragen eenmalig toestemming voor meldingen. Zet je toestemming later uit via je toestelinstellingen, dan werkt deze schakelaar niet meer.
+            </Text>
           </View>
 
           {/* Koppelingen */}
@@ -687,6 +808,19 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: spacing[1.5],
     paddingHorizontal: spacing[2], paddingVertical: spacing[1.5],
   },
+  reminderTimeSection: {
+    paddingHorizontal: spacing[2], paddingVertical: spacing[1.5], gap: spacing[1],
+  },
+  timeRow: { flexDirection: 'row', gap: spacing[1] },
+  timeBtn: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 40,
+    borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderDefault, backgroundColor: colors.bgSurface,
+  },
+  timeBtnActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  timeBtnText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm, color: colors.textSecondary,
+  },
+  timeBtnTextActive: { color: '#fff' },
   switchLabel: {
     fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.base, color: colors.textPrimary,
   },
