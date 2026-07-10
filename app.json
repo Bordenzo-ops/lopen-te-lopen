@@ -14,8 +14,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.lopentelopen.app",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Lopen te Lopen gebruikt je locatie om je route, afstand en tempo bij te houden tijdens het hardlopen.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Lopen te Lopen gebruikt je locatie om je route, afstand en tempo bij te houden tijdens het hardlopen.",
+        "NSLocationWhenInUseUsageDescription": "Lopen te Lopen gebruikt je locatie om je route, afstand en tempo bij te houden tijdens het hardlopen, ook als je scherm vergrendeld is.",
         "UIBackgroundModes": [
           "audio",
           "location"
@@ -28,7 +27,7 @@
         "backgroundColor": "#0A0F1A"
       },
       "package": "com.lopentelopen.app",
-      "versionCode": 7,
+      "versionCode": 9,
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -57,8 +56,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Lopen te Lopen gebruikt je locatie om je route, afstand en tempo bij te houden tijdens het hardlopen.",
-          "locationWhenInUsePermission": "Lopen te Lopen gebruikt je locatie om je route, afstand en tempo bij te houden tijdens het hardlopen.",
+          "locationWhenInUsePermission": "Lopen te Lopen gebruikt je locatie om je route, afstand en tempo bij te houden tijdens het hardlopen, ook als je scherm vergrendeld is.",
           "isIosBackgroundLocationEnabled": true
         }
       ],
@@ -81,7 +79,15 @@
         }
       ],
       "expo-asset",
-      "react-native-health-connect"
+      "react-native-health-connect",
+      "expo-secure-store",
+      [
+        "@sentry/react-native",
+        {
+          "organization": "dronevision-studios",
+          "project": "android"
+        }
+      ]
     ],
     "extra": {
       "router": {},

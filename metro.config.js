@@ -5,6 +5,7 @@
 // en de webpreview anders crasht. Op Android en iOS blijft de echte
 // react-native-maps gewoon in gebruik; dit raakt de productie-app niet.
 const { getDefaultConfig } = require('expo/metro-config');
+const { withSentryConfig } = require('@sentry/react-native/metro');
 const path = require('path');
 
 const config = getDefaultConfig(__dirname);
@@ -23,4 +24,7 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     : context.resolveRequest(context, moduleName, platform);
 };
 
-module.exports = config;
+// Voegt debug-ID's toe aan bundel en source maps zodat Sentry
+// crashstacktraces kan koppelen aan leesbare bestandsnamen/regelnummers
+// in plaats van geminificeerde code. Zie docs/SENTRY_SETUP.md.
+module.exports = withSentryConfig(config);

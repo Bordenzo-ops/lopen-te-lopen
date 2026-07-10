@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell(claude mcp *)"
+      "PowerShell(claude mcp *)",
+      "PowerShell(npm audit)",
+      "Bash(npm audit *)"
     ]
   }
 }
