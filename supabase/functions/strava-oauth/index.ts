@@ -24,6 +24,14 @@
  *     stravaService.ts vlak voordat een upload dreigt te falen op een
  *     verlopen access_token.
  *
+ * Hardening (werkpakket 1):
+ *  - GET-route: de state-parameter die de app meegeeft bij het starten van
+ *    de OAuth-flow wordt, indien aanwezig, ongewijzigd teruggegeven in ALLE
+ *    redirects naar de app (zowel succes als fout), als parameter state.
+ *    De app valideert deze state zelf (client-werk zit in een ander pakket).
+ *  - POST-route: eenvoudige in-memory rate limit per refresh_token, max 10
+ *    verzoeken per minuut, om misbruik of foutieve retry-loops te beperken.
+ *
  * Deploy:
  *   supabase functions deploy strava-oauth --no-verify-jwt
  *   supabase secrets set STRAVA_CLIENT_ID=... STRAVA_CLIENT_SECRET=...
@@ -44,6 +52,26 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Eenvoudige in-memory rate limit voor de POST-route (token verversen):
+// max 10 verzoeken per minuut per refresh_token.
+const RATE_LIMIT_MAX = 10;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const refreshRequestLog = new Map<string, number[]>();
+
+function isRefreshRateLimited(refreshToken: string): boolean {
+  const now = Date.now();
+  const timestamps = refreshRequestLog.get(refreshToken) ?? [];
+  // Oude entries buiten het venster opruimen
+  const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  if (recent.length >= RATE_LIMIT_MAX) {
+    refreshRequestLog.set(refreshToken, recent);
+    return true;
+  }
+  recent.push(now);
+  refreshRequestLog.set(refreshToken, recent);
+  return false;
+}
 
 /** Bouwt de deep link terug naar de app met de gegeven querystring-parameters */
 function buildAppRedirect(params: Record<string, string>): string {
@@ -70,17 +98,24 @@ serve(async (req: Request) => {
   if (req.method === 'GET') {
     const code = url.searchParams.get('code');
     const stravaError = url.searchParams.get('error');
+    const state = url.searchParams.get('state');
+
+    // Geeft de state-parameter, indien aanwezig, ongewijzigd mee in de
+    // redirect. De app valideert deze state zelf om CSRF op de OAuth-flow
+    // te voorkomen.
+    const withState = (params: Record<string, string>): Record<string, string> =>
+      state ? { ...params, state } : params;
 
     if (stravaError) {
-      return redirect(buildAppRedirect({ error: stravaError }));
+      return redirect(buildAppRedirect(withState({ error: stravaError })));
     }
 
     if (!code) {
-      return redirect(buildAppRedirect({ error: 'geen_code_ontvangen' }));
+      return redirect(buildAppRedirect(withState({ error: 'geen_code_ontvangen' })));
     }
 
     if (!STRAVA_CLIENT_ID || !STRAVA_CLIENT_SECRET) {
-      return redirect(buildAppRedirect({ error: 'niet_geconfigureerd' }));
+      return redirect(buildAppRedirect(withState({ error: 'niet_geconfigureerd' })));
     }
 
     try {
@@ -96,7 +131,7 @@ serve(async (req: Request) => {
       });
 
       if (!tokenResp.ok) {
-        return redirect(buildAppRedirect({ error: `strava_fout_${tokenResp.status}` }));
+        return redirect(buildAppRedirect(withState({ error: `strava_fout_${tokenResp.status}` })));
       }
 
       const data = await tokenResp.json();
@@ -106,15 +141,17 @@ serve(async (req: Request) => {
         .trim();
 
       return redirect(
-        buildAppRedirect({
-          access_token: data.access_token ?? '',
-          refresh_token: data.refresh_token ?? '',
-          expires_at: String(data.expires_at ?? ''),
-          athlete_name: athleteName || 'Strava-atleet',
-        }),
+        buildAppRedirect(
+          withState({
+            access_token: data.access_token ?? '',
+            refresh_token: data.refresh_token ?? '',
+            expires_at: String(data.expires_at ?? ''),
+            athlete_name: athleteName || 'Strava-atleet',
+          }),
+        ),
       );
     } catch {
-      return redirect(buildAppRedirect({ error: 'onbekende_fout' }));
+      return redirect(buildAppRedirect(withState({ error: 'onbekende_fout' })));
     }
   }
 
@@ -141,6 +178,13 @@ serve(async (req: Request) => {
       return new Response(
         JSON.stringify({ error: 'Vereist veld ontbreekt: refresh_token.' }),
         { status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    if (isRefreshRateLimited(body.refresh_token)) {
+      return new Response(
+        JSON.stringify({ error: 'Te veel verzoeken, probeer het over een minuut opnieuw.' }),
+        { status: 429, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
       );
     }
 
