@@ -25,6 +25,15 @@ google-service-account.json
 # eas.json bevat mogelijk omgevingsvariabelen; gebruik EAS Secrets voor sleutels
 eas.json
 
+# iOS-ondertekening (nooit in git)
+*.p12
+*.p8
+*.mobileprovision
+*.cer
+*.certSigningRequest
+ios-cert/
+credentials.json
+
 # macOS / Windows
 .DS_Store
 Thumbs.db
