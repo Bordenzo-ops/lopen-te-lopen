@@ -28,22 +28,29 @@ import Purchases, {
   LOG_LEVEL,
 } from 'react-native-purchases';
 import { getCurrentUser } from './authService';
+import { sanitizeEnvValue } from '../utils/env';
 
 /**
  * RevenueCat gebruikt per platform een aparte publieke API-sleutel:
  *  - iOS gebruikt de Apple-sleutel (appl_...) uit EXPO_PUBLIC_REVENUECAT_IOS_API_KEY
  *  - Android gebruikt de Google-sleutel (goog_...) uit EXPO_PUBLIC_REVENUECAT_API_KEY
- * Ontbreekt de platform-specifieke sleutel, dan valt het terug op de Android-key
- * zodat bestaand gedrag niet breekt.
+ *
+ * BELANGRIJK: geen platform-fallback. Een goog_-sleutel aan Purchases.configure
+ * geven op iOS (of andersom) is fout en kan een native crash veroorzaken.
+ * Ontbreekt de platform-specifieke sleutel, dan is purchases simpelweg "niet
+ * geconfigureerd" (bestaand stil-falen-pad), net als wanneer .env leeg is.
+ *
+ * Extra hardening: als een omgevingsvariabele niet geexpandeerd is (bijvoorbeeld
+ * de letterlijke string "$EXPO_PUBLIC_REVENUECAT_IOS_API_KEY" door een kapotte
+ * eas.json-configuratie), begint de waarde met "$" en behandelen we hem ook
+ * als niet geconfigureerd, in plaats van die letterlijke placeholder-string
+ * aan Purchases.configure te geven. Zie src/utils/env.ts voor de gedeelde
+ * sanitize-helper (ook gebruikt door supabaseClient.ts en voiceConfig.ts).
  */
-const REVENUECAT_ANDROID_API_KEY =
-  process.env.EXPO_PUBLIC_REVENUECAT_API_KEY ?? '';
-const REVENUECAT_IOS_API_KEY =
-  process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY ?? '';
+const REVENUECAT_ANDROID_API_KEY = sanitizeEnvValue(process.env.EXPO_PUBLIC_REVENUECAT_API_KEY);
+const REVENUECAT_IOS_API_KEY = sanitizeEnvValue(process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY);
 const REVENUECAT_API_KEY =
-  Platform.OS === 'ios'
-    ? REVENUECAT_IOS_API_KEY || REVENUECAT_ANDROID_API_KEY
-    : REVENUECAT_ANDROID_API_KEY;
+  Platform.OS === 'ios' ? REVENUECAT_IOS_API_KEY : REVENUECAT_ANDROID_API_KEY;
 
 /** Naam van het entitlement zoals ingesteld in RevenueCat. */
 export const PREMIUM_ENTITLEMENT_ID = 'premium';

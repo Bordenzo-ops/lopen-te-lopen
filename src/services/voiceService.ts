@@ -38,10 +38,155 @@ function hashText(text: string): string {
   return h.toString(36);
 }
 
-/** Ingebouwde telefoonstem als vangnet */
-function fallbackSpeak(text: string): void {
+// ── Stemkeuze voor de ingebouwde telefoonstem (vangnet) ─────────────────────
+//
+// expo-speech biedt geen "man"/"vrouw"-parameter, alleen een lijst losse
+// systeemstemmen per taal. Om de man/vrouw-keuze uit de UI toch te laten
+// doorwerken op het fallbackpad, wordt hieronder een benadering gemaakt op
+// basis van de beschikbare Nederlandse stemmen en (als vangnet) toonhoogte.
+//
+// Belangrijke beperking: dit is en blijft een benadering. Android-stem-
+// identifiers (bijvoorbeeld "nl-nl-x-bmd-local") hebben geen gestandaardiseerd
+// geslacht in hun naam, dus op zulke toestellen leunt de keuze vaak alleen op
+// het pitch-verschil. Het resultaat kan dus per toestel/OS-versie verschillen.
+// Alles hieronder is defensief: bij elke fout of ontbrekende data valt de
+// app terug op de standaard systeemstem met pitch 1.0 (het oude gedrag).
+
+interface FallbackVoiceChoice {
+  /** Stem-identifier voor Speech.speak's `voice`-optie, indien bekend. */
+  voiceId?: string;
+  pitch: number;
+}
+
+type FallbackVoiceChoices = { female: FallbackVoiceChoice; male: FallbackVoiceChoice };
+
+/** Cache van de Nederlandse systeemstemmen. undefined = nog niet opgehaald,
+ *  null = opgehaald maar geen (bruikbare) Nederlandse stemmen gevonden. */
+let cachedDutchVoices: Speech.Voice[] | null | undefined;
+let dutchVoicesPromise: Promise<Speech.Voice[] | null> | null = null;
+
+/**
+ * Haalt eenmalig (gecachet) de Nederlandse systeemstemmen op. Best-effort:
+ * ook een mislukte of lege poging wordt gecachet, zodat niet bij elke
+ * speak()-aanroep opnieuw de (mogelijk trage) native lijst wordt opgevraagd.
+ */
+function getDutchVoices(): Promise<Speech.Voice[] | null> {
+  if (cachedDutchVoices !== undefined) return Promise.resolve(cachedDutchVoices);
+  if (!dutchVoicesPromise) {
+    dutchVoicesPromise = (async () => {
+      try {
+        const all = await Speech.getAvailableVoicesAsync();
+        const dutch = (all ?? []).filter(v =>
+          (v.language ?? '').toLowerCase().startsWith('nl'),
+        );
+        return dutch.length > 0 ? dutch : null;
+      } catch {
+        return null;
+      }
+    })().then(result => {
+      cachedDutchVoices = result;
+      return result;
+    });
+  }
+  return dutchVoicesPromise;
+}
+
+/**
+ * Ruwe geslachtsheuristiek op basis van de stem-identifier/naam. Geeft
+ * 'female', 'male' of null (onbekend) terug. Nooit een uitzondering: bij
+ * onverwachte data valt dit terug op null.
+ */
+function guessVoiceGender(voice: Speech.Voice): VoiceType | null {
+  try {
+    const haystack = `${voice.identifier ?? ''} ${voice.name ?? ''}`.toLowerCase();
+    // Let op: "female" bevat "male" als substring, dus altijd eerst op
+    // "female" controleren.
+    if (haystack.includes('female')) return 'female';
+    if (haystack.includes('male')) return 'male';
+    // Bekende iOS Apple-stemnamen zonder expliciete gender-marker in de naam.
+    if (haystack.includes('xander')) return 'male';
+    if (haystack.includes('claire') || haystack.includes('ellen')) return 'female';
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Cache van de berekende man/vrouw-stemkeuze. undefined = nog niet berekend,
+ *  null = geen bruikbare Nederlandse stem gevonden (gebruik systeemdefault). */
+let cachedVoiceChoices: FallbackVoiceChoices | null | undefined;
+let voiceChoicesPromise: Promise<FallbackVoiceChoices | null> | null = null;
+
+/**
+ * Bepaalt eenmalig (gecachet) welke systeemstem/pitch bij 'female' en 'male'
+ * hoort. Volledig defensief: geeft bij elke fout of lege stemmenlijst null
+ * terug, zodat de aanroeper op het oude standaardgedrag terugvalt.
+ */
+function getFallbackVoiceChoices(): Promise<FallbackVoiceChoices | null> {
+  if (cachedVoiceChoices !== undefined) return Promise.resolve(cachedVoiceChoices);
+  if (!voiceChoicesPromise) {
+    voiceChoicesPromise = (async () => {
+      try {
+        const dutchVoices = await getDutchVoices();
+        if (!dutchVoices || dutchVoices.length === 0) return null;
+
+        const withGender = dutchVoices.map(voice => ({ voice, gender: guessVoiceGender(voice) }));
+        const femaleVoice = withGender.find(v => v.gender === 'female')?.voice ?? dutchVoices[0];
+        const female: FallbackVoiceChoice = { voiceId: femaleVoice.identifier, pitch: 1.0 };
+
+        const maleEntry = withGender.find(v => v.gender === 'male');
+        let male: FallbackVoiceChoice;
+        if (maleEntry) {
+          // Herkenbare mannenstem gevonden: de stem zelf klinkt al als man,
+          // geen extra pitch-correctie nodig.
+          male = { voiceId: maleEntry.voice.identifier, pitch: 1.0 };
+        } else {
+          const alternativeVoice = dutchVoices.find(v => v.identifier !== femaleVoice.identifier);
+          if (alternativeVoice) {
+            // Geen herkenbare mannenstem, maar wel een andere nl-stem
+            // beschikbaar: kies die met een lagere pitch zodat het geluid
+            // hoorbaar verschilt van de vrouw-keuze.
+            male = { voiceId: alternativeVoice.identifier, pitch: 0.85 };
+          } else {
+            // Maar één Nederlandse stem beschikbaar op dit toestel: alleen
+            // het pitch-verschil kan hier nog een onderscheid maken.
+            male = { voiceId: femaleVoice.identifier, pitch: 0.8 };
+          }
+        }
+
+        return { female, male };
+      } catch {
+        return null;
+      }
+    })().then(result => {
+      cachedVoiceChoices = result;
+      return result;
+    });
+  }
+  return voiceChoicesPromise;
+}
+
+/** Ingebouwde telefoonstem als vangnet, met een benadering van de man/vrouw-keuze */
+async function fallbackSpeak(text: string, voice: VoiceType): Promise<void> {
   Speech.stop();
-  Speech.speak(text, { language: 'nl-NL', pitch: 1.0, rate: 0.95 });
+
+  let options: Speech.SpeechOptions = { language: 'nl-NL', pitch: 1.0, rate: 0.95 };
+  try {
+    const choices = await getFallbackVoiceChoices();
+    const choice = choices?.[voice];
+    if (choice) {
+      options = {
+        language: 'nl-NL',
+        rate: 0.95,
+        pitch: choice.pitch,
+        ...(choice.voiceId ? { voice: choice.voiceId } : {}),
+      };
+    }
+  } catch {
+    // Terugvallen op de standaardopties hierboven (oude gedrag)
+  }
+
+  Speech.speak(text, options);
 }
 
 /** Audio dempen van muziek (ducking) en afspelen in stille modus (iOS) */
@@ -118,7 +263,7 @@ export async function speak(text: string, voice: VoiceType = 'female'): Promise<
   }
 
   if (!premiumVoices || !isElevenLabsConfigured()) {
-    fallbackSpeak(text);
+    await fallbackSpeak(text, voice);
     return;
   }
 
@@ -136,7 +281,7 @@ export async function speak(text: string, voice: VoiceType = 'female'): Promise<
     currentPlayer.play();
   } catch {
     // Netwerk weg, quotum op of afspeelfout: telefoonstem als vangnet
-    fallbackSpeak(text);
+    await fallbackSpeak(text, voice);
   }
 }
 

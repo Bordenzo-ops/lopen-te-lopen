@@ -8,6 +8,8 @@
  * valt de app automatisch terug op de ingebouwde telefoonstem (expo-speech).
  */
 
+import { sanitizeEnvValue, isHttpsUrl } from '../utils/env';
+
 export type VoiceType = 'female' | 'male';
 
 export const ELEVENLABS = {
@@ -41,6 +43,11 @@ export const ELEVENLABS = {
  * TTS is beschikbaar zodra de Supabase Edge Function bereikbaar is.
  * De Supabase URL is publiek (EXPO_PUBLIC_), de ElevenLabs-sleutel
  * staat serverside als Supabase Secret en zit nooit in de bundel.
+ *
+ * Zelfde hardening als isSupabaseConfigured() in supabaseClient.ts: een
+ * niet-geexpandeerde placeholder ("$EXPO_PUBLIC_SUPABASE_URL") wordt eerst
+ * gesaneerd tot een lege string, en de overgebleven waarde moet met
+ * "https://" beginnen om als geldig te tellen.
  */
 export const isElevenLabsConfigured = (): boolean =>
-  (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').length > 0;
+  isHttpsUrl(sanitizeEnvValue(process.env.EXPO_PUBLIC_SUPABASE_URL));
