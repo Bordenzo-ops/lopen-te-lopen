@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 import { spacing, typography } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
-import { Home, Calendar, Settings, Trophy } from 'lucide-react-native';
+import { Home, Calendar, CalendarDays, Settings, Trophy } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabsLayout() {
@@ -45,6 +45,15 @@ export default function TabsLayout() {
           title: 'Schema',
           tabBarIcon: ({ color, size }) => (
             <Calendar color={color} size={size - 2} strokeWidth={2} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="logbook"
+        options={{
+          title: 'Logboek',
+          tabBarIcon: ({ color, size }) => (
+            <CalendarDays color={color} size={size - 2} strokeWidth={2} />
           ),
         }}
       />
