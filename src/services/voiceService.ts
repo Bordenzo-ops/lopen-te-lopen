@@ -20,7 +20,7 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 // @ts-ignore: wordt geinstalleerd met "npx expo install expo-file-system"
 import { File, Directory, Paths } from 'expo-file-system';
 import { ELEVENLABS, isElevenLabsConfigured, VoiceType } from '../config/voiceConfig';
-import { getCurrentSession } from './authService';
+import { ensureAnonymousSession } from './authService';
 import { hasPremiumAccess } from '../config/premiumConfig';
 import { useAppStore } from '../store/appStore';
 
@@ -44,6 +44,19 @@ function hashText(text: string): string {
 // systeemstemmen per taal. Om de man/vrouw-keuze uit de UI toch te laten
 // doorwerken op het fallbackpad, wordt hieronder een benadering gemaakt op
 // basis van de beschikbare Nederlandse stemmen en (als vangnet) toonhoogte.
+//
+// nl-NL-voorkeur: "Nederlandse stemmen" omvat op sommige toestellen (vooral
+// iOS) ook nl-BE (Vlaams), bijvoorbeeld de standaard iOS-stemmen Xander
+// (nl-NL) en Ellen (nl-BE). Zonder maatregelen kiest de gender-heuristiek
+// dan een Vlaamse stem terwijl de gebruiker een Nederlandse verwacht.
+// Daarom geldt: zodra er minstens één nl-NL-stem (ook nl_NL) bestaat, wordt
+// nl-BE volledig genegeerd en gebeurt de man/vrouw-keuze uitsluitend binnen
+// de nl-NL-stemmen. Ontbreekt daarbinnen een herkende vrouwen- of
+// mannenstem, dan wordt het geslacht met pitch benaderd (vrouw hoger op
+// 1.15, man lager op 0.85/0.8). Binnen gelijke taal krijgen stemmen met
+// kwaliteit "Enhanced" voorrang boven "Default" (indien dat veld
+// beschikbaar is). Alleen als er geen enkele nl-NL-stem bestaat, valt de
+// keuze terug op de overige nl-varianten (zoals nl-BE).
 //
 // Belangrijke beperking: dit is en blijft een benadering. Android-stem-
 // identifiers (bijvoorbeeld "nl-nl-x-bmd-local") hebben geen gestandaardiseerd
@@ -92,6 +105,41 @@ function getDutchVoices(): Promise<Speech.Voice[] | null> {
 }
 
 /**
+ * Normaliseert een taalcode voor vergelijking: kleine letters en "_"
+ * vervangen door "-" (bv. "nl_NL" -> "nl-nl").
+ */
+function normalizeLanguageTag(language: string | undefined): string {
+  return (language ?? '').toLowerCase().replace(/_/g, '-');
+}
+
+/**
+ * Sorteert Nederlandse stemmen zodat nl-NL boven andere nl-varianten
+ * (zoals het Vlaamse nl-BE) komt te staan, en binnen dezelfde taal de
+ * "Enhanced"-kwaliteitsstemmen (indien bekend) voorrang krijgen boven
+ * "Default". Alleen als er géén nl-NL-stemmen zijn, komen andere
+ * nl-varianten aan bod. Volledig defensief: bij een onverwachte fout
+ * wordt de oorspronkelijke (ongesorteerde) lijst teruggegeven.
+ */
+function sortDutchVoicesByPreference(voices: Speech.Voice[]): Speech.Voice[] {
+  try {
+    const rank = (voice: Speech.Voice): number =>
+      normalizeLanguageTag(voice.language) === 'nl-nl' ? 0 : 1;
+    // 'quality' bestaat in deze expo-speech-versie (VoiceQuality-enum);
+    // defensief met optional chaining voor het geval dit veld ontbreekt.
+    const qualityRank = (voice: Speech.Voice): number =>
+      (voice as { quality?: string })?.quality === 'Enhanced' ? 0 : 1;
+
+    return [...voices].sort((a, b) => {
+      const langDiff = rank(a) - rank(b);
+      if (langDiff !== 0) return langDiff;
+      return qualityRank(a) - qualityRank(b);
+    });
+  } catch {
+    return voices;
+  }
+}
+
+/**
  * Ruwe geslachtsheuristiek op basis van de stem-identifier/naam. Geeft
  * 'female', 'male' of null (onbekend) terug. Nooit een uitzondering: bij
  * onverwachte data valt dit terug op null.
@@ -118,43 +166,87 @@ let cachedVoiceChoices: FallbackVoiceChoices | null | undefined;
 let voiceChoicesPromise: Promise<FallbackVoiceChoices | null> | null = null;
 
 /**
+ * Kiest binnen één stemmenlijst (de "pool") een vrouw- en mannenstem.
+ *
+ * - Vrouw: een als 'female' herkende stem op pitch 1.0; anders de eerste
+ *   stem uit de pool met `femaleFallbackPitch` als benadering.
+ * - Man: een als 'male' herkende stem op pitch 1.0; anders een andere stem
+ *   dan de vrouw-keuze op pitch 0.85; anders dezelfde stem op pitch 0.8,
+ *   zodat alleen het pitch-verschil nog onderscheid maakt.
+ */
+function chooseVoicesFromPool(
+  pool: Speech.Voice[],
+  femaleFallbackPitch: number,
+): FallbackVoiceChoices {
+  const withGender = pool.map(voice => ({ voice, gender: guessVoiceGender(voice) }));
+
+  const femaleEntry = withGender.find(v => v.gender === 'female');
+  const femaleVoice = femaleEntry?.voice ?? pool[0];
+  const female: FallbackVoiceChoice = {
+    voiceId: femaleVoice.identifier,
+    // Geen herkende vrouwenstem in de pool: benader een vrouwstem via een
+    // hogere pitch (spiegelbeeld van het man-via-lagere-pitch-patroon).
+    pitch: femaleEntry ? 1.0 : femaleFallbackPitch,
+  };
+
+  const maleEntry = withGender.find(v => v.gender === 'male');
+  let male: FallbackVoiceChoice;
+  if (maleEntry) {
+    // Herkenbare mannenstem gevonden: de stem zelf klinkt al als man,
+    // geen extra pitch-correctie nodig.
+    male = { voiceId: maleEntry.voice.identifier, pitch: 1.0 };
+  } else {
+    const alternativeVoice = pool.find(v => v.identifier !== femaleVoice.identifier);
+    if (alternativeVoice) {
+      // Geen herkenbare mannenstem, maar wel een andere stem in de pool
+      // beschikbaar: kies die met een lagere pitch zodat het geluid
+      // hoorbaar verschilt van de vrouw-keuze.
+      male = { voiceId: alternativeVoice.identifier, pitch: 0.85 };
+    } else {
+      // Maar één stem in de pool beschikbaar: alleen het pitch-verschil
+      // kan hier nog een onderscheid maken.
+      male = { voiceId: femaleVoice.identifier, pitch: 0.8 };
+    }
+  }
+
+  return { female, male };
+}
+
+/**
  * Bepaalt eenmalig (gecachet) welke systeemstem/pitch bij 'female' en 'male'
- * hoort. Volledig defensief: geeft bij elke fout of lege stemmenlijst null
- * terug, zodat de aanroeper op het oude standaardgedrag terugvalt.
+ * hoort. Zodra er minstens één nl-NL-stem bestaat, wordt de man/vrouw-keuze
+ * UITSLUITEND binnen de nl-NL-stemmen gemaakt; nl-BE (Vlaams) wordt dan
+ * volledig genegeerd, ook als daar een herkende vrouwen-/mannenstem in zit
+ * (iOS-standaard: Xander is nl-NL, Ellen is nl-BE en valt dan af). Gender
+ * wordt binnen nl-NL zo nodig met pitch benaderd (vrouw hoger op 1.15, man
+ * lager op 0.85/0.8). Alleen als er géén enkele nl-NL-stem is, vallen we
+ * terug op de overige nl-varianten met de oude keuzelogica. Volledig
+ * defensief: geeft bij elke fout of lege stemmenlijst null terug, zodat de
+ * aanroeper op het oude standaardgedrag terugvalt.
  */
 function getFallbackVoiceChoices(): Promise<FallbackVoiceChoices | null> {
   if (cachedVoiceChoices !== undefined) return Promise.resolve(cachedVoiceChoices);
   if (!voiceChoicesPromise) {
     voiceChoicesPromise = (async () => {
       try {
-        const dutchVoices = await getDutchVoices();
-        if (!dutchVoices || dutchVoices.length === 0) return null;
+        const rawDutchVoices = await getDutchVoices();
+        if (!rawDutchVoices || rawDutchVoices.length === 0) return null;
+        // nl-NL eerst, daarna (bij gelijke taal) Enhanced-kwaliteit eerst.
+        const dutchVoices = sortDutchVoicesByPreference(rawDutchVoices);
 
-        const withGender = dutchVoices.map(voice => ({ voice, gender: guessVoiceGender(voice) }));
-        const femaleVoice = withGender.find(v => v.gender === 'female')?.voice ?? dutchVoices[0];
-        const female: FallbackVoiceChoice = { voiceId: femaleVoice.identifier, pitch: 1.0 };
-
-        const maleEntry = withGender.find(v => v.gender === 'male');
-        let male: FallbackVoiceChoice;
-        if (maleEntry) {
-          // Herkenbare mannenstem gevonden: de stem zelf klinkt al als man,
-          // geen extra pitch-correctie nodig.
-          male = { voiceId: maleEntry.voice.identifier, pitch: 1.0 };
-        } else {
-          const alternativeVoice = dutchVoices.find(v => v.identifier !== femaleVoice.identifier);
-          if (alternativeVoice) {
-            // Geen herkenbare mannenstem, maar wel een andere nl-stem
-            // beschikbaar: kies die met een lagere pitch zodat het geluid
-            // hoorbaar verschilt van de vrouw-keuze.
-            male = { voiceId: alternativeVoice.identifier, pitch: 0.85 };
-          } else {
-            // Maar één Nederlandse stem beschikbaar op dit toestel: alleen
-            // het pitch-verschil kan hier nog een onderscheid maken.
-            male = { voiceId: femaleVoice.identifier, pitch: 0.8 };
-          }
+        // Minstens één nl-NL-stem? Dan kiezen we uitsluitend binnen die
+        // subset, zodat nooit een Vlaamse (nl-BE) stem gekozen wordt terwijl
+        // er een Nederlandse beschikbaar is. Vrouw-benadering gebeurt dan
+        // desnoods via een hogere pitch (1.15) op een nl-NL-stem.
+        const nlNlVoices = dutchVoices.filter(
+          v => normalizeLanguageTag(v.language) === 'nl-nl',
+        );
+        if (nlNlVoices.length > 0) {
+          return chooseVoicesFromPool(nlNlVoices, 1.15);
         }
-
-        return { female, male };
+        // Geen enkele nl-NL-stem: oude gedrag over alle nl-varianten, met
+        // de eerste stem op pitch 1.0 als vrouw-fallback.
+        return chooseVoicesFromPool(dutchVoices, 1.0);
       } catch {
         return null;
       }
@@ -169,6 +261,12 @@ function getFallbackVoiceChoices(): Promise<FallbackVoiceChoices | null> {
 /** Ingebouwde telefoonstem als vangnet, met een benadering van de man/vrouw-keuze */
 async function fallbackSpeak(text: string, voice: VoiceType): Promise<void> {
   Speech.stop();
+
+  // Zonder actieve audiosessie speelt AVSpeechSynthesizer op iOS niets af
+  // bij een vergrendeld scherm/achtergrond of met de stille-modus-schakelaar
+  // aan. Daarom ook hier (net als op het ElevenLabs-pad) eerst de audiosessie
+  // activeren. Defensief: ensureAudioMode() faalt nooit hard.
+  await ensureAudioMode();
 
   let options: Speech.SpeechOptions = { language: 'nl-NL', pitch: 1.0, rate: 0.95 };
   try {
@@ -189,12 +287,18 @@ async function fallbackSpeak(text: string, voice: VoiceType): Promise<void> {
   Speech.speak(text, options);
 }
 
-/** Audio dempen van muziek (ducking) en afspelen in stille modus (iOS) */
+/**
+ * Audio dempen van muziek (ducking), afspelen in stille modus (iOS) en
+ * doorspelen als de app naar de achtergrond gaat/het scherm vergrendeld is
+ * (nodig voor gesproken coaching tijdens een lopende hardloopsessie; de app
+ * heeft hiervoor UIBackgroundModes "audio" in app.json).
+ */
 async function ensureAudioMode(): Promise<void> {
   if (audioModeReady) return;
   try {
     await setAudioModeAsync({
       playsInSilentMode: true,
+      shouldPlayInBackground: true,
       interruptionMode: 'duckOthers',
       interruptionModeAndroid: 'duckOthers',
     });
@@ -221,8 +325,13 @@ async function fetchTts(voiceId: string, text: string): Promise<Uint8Array> {
   if (!supabaseUrl) throw new Error('Supabase URL niet geconfigureerd');
 
   // De TTS-function vereist een geldige Supabase-sessietoken (ook anoniem).
-  // Zonder sessie gooien we hier, zodat speak() terugvalt op de telefoonstem.
-  const session = await getCurrentSession();
+  // Belangrijk: premium-stemmen moeten óók werken als de gebruiker cloud-sync
+  // nooit heeft aangezet. Daarom starten we hier zo nodig zelf een anonieme
+  // sessie, puur voor deze TTS-aanroep. Er wordt daardoor niets gesynct:
+  // syncNow/initBackend blijven achter de cloudSyncEnabled-toestemming zitten.
+  // Lukt ook dat niet (offline, geen backend), dan gooien we hier, zodat
+  // speak() terugvalt op de telefoonstem.
+  const session = await ensureAnonymousSession();
   const accessToken = session?.access_token ?? '';
   if (!accessToken) throw new Error('Geen Supabase-sessie voor TTS');
 
