@@ -90,6 +90,21 @@ De TestFlight-build (versie 1.0.0, build 4, productieprofiel) crashte direct bij
 - Serverkant stemmen geverifieerd: `tts`-functie ACTIVE op Supabase, `ELEVENLABS_API_KEY` staat als function secret.
 - Crashlog-tip als iOS build 5 alsnog crasht: iPhone Instellingen > Privacy en beveiliging > Analyse en verbeteringen > Analysegegevens, zoek een bestand dat begint met "Lopen te Lopen", en deel dat in de volgende chat.
 
+### Delen/opslaan-fix + nieuwe builds (2026-07-15)
+
+Sentry meldde twee nieuwe issues die een vriend tijdens het testen op zijn iPhone tegenkwam: run niet kunnen **delen** en niet kunnen **opslaan**.
+
+- **ANDROID-2** (delen): `instagram-stories://share` stond niet in `LSApplicationQueriesSchemes`, waardoor `Linking.canOpenURL` op iOS een error gooide die de hele deelactie liet crashen. Gefixt in `app.json` (scheme toegevoegd) + `src/hooks/useShareRun.ts` (`canOpenURL`/`openURL` en `share()` in try/catch met nette fallback naar het native deelmenu).
+- **ANDROID-3** (opslaan): `MediaLibrary.saveToLibraryAsync` gooit in expo-media-library 56 een runtime-error. Vervangen door `MediaLibrary.Asset.create(...)` in `src/hooks/useShareRun.ts`.
+- Beide fixes gecommit op master (`1ee8566e`). Beide Sentry-issues staan op **resolved** (dronevision-studios, project android).
+- Permission-rule `mcp__sentry__update_issue` toegevoegd aan `.claude/settings.local.json` zodat het bijwerken van Sentry-issues vanuit de chat mag.
+
+**iOS build 8 (versie 1.0.0): GESLAAGD en GEUPLOAD** (2026-07-15) via `eas build --platform ios --profile production --auto-submit`. Auto-submit werkte meteen (iOS-creds in `ios-cert/` + `ascApiKey`-config in eas.json). Bevat de delen/opslaan-fixes plus al het werk uit build 6. Buildnummer automatisch verhoogd naar 8 (autoIncrement).
+
+**Android (wordt versionCode 13): auto-submit lukt nog niet.** `eas submit`/`--auto-submit` vraagt om `google-service-account.json` (pad in `submit.production.android.serviceAccountKeyPath`), en die sleutel bestaat nog niet — Android v12 is destijds handmatig via de Play Console geupload, nooit via `eas submit`. Twee routes:
+- **Nu**: bouw zonder `--auto-submit` (`eas build --platform android --profile production`) en sleep de `.aab` handmatig in de Play Console.
+- **Eenmalig instellen**: Google Service Account aanmaken via Play Console > Setup > API access -> service account in Google Cloud -> JSON-key downloaden -> rechten geven in Play Console (Release + View app information) -> bestand opslaan als `google-service-account.json` in de projectroot (staat al in .gitignore). Daarna werkt `--auto-submit` ook voor Android zonder prompt. Gids: https://expo.fyi/creating-google-service-account. (Lars is deze route aan het uitvoeren.)
+
 ## Al voorbereid in code (niet opnieuw doen)
 
 - `src/services/purchaseService.ts`: kiest de RevenueCat-key per platform. iOS -> `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`, Android -> `EXPO_PUBLIC_REVENUECAT_API_KEY`, zonder platform-fallback (sinds 2026-07-13; zie de subsectie hierboven). `getTrialInfo` leest op iOS `product.introPrice`.

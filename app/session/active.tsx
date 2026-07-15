@@ -337,6 +337,10 @@ export default function ActiveSessionScreen() {
       lastAcceptedPointRef.current = { lat: latitude, lon: longitude, timestamp: now };
       lastAcceptedAtRef.current = now;
 
+      // GPS blijkt (alsnog) beschikbaar: wis een eerdere "geen GPS"-melding,
+      // anders blijft de banner staan terwijl de afstand wél wordt bijgehouden.
+      setGpsError(prev => (prev ? null : prev));
+
       // ── Eerste GPS-fix ──────────────────────────────────────────────
       if (!gpsReady) {
         if (gpsTimeoutRef.current) {

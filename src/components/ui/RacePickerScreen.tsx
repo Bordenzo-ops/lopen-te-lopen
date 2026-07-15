@@ -17,7 +17,7 @@ import {
 import { palette, typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
 import {
-  PROVINCES, weeksUntilRace, formatRaceDate,
+  PROVINCES, weeksUntilRace, weeksUntilLabel, formatRaceDate,
   type Race, type RaceCity, type RaceProvince,
 } from '../../data/rotterdamRaces';
 import { buildRacePlan, canTrainForRace, type RacePlan } from '../../data/buildRacePlan';
@@ -96,7 +96,6 @@ function RaceRow({
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const isPast   = new Date(race.date) <= new Date();
-  const weeks    = weeksUntilRace(race.date);
   const { possible } = canTrainForRace(race);
   const accent   = race.accentColor;
 
@@ -127,7 +126,7 @@ function RaceRow({
             <View style={styles.raceMetaItem}>
               <Clock size={11} color={possible ? accent : palette.warning} strokeWidth={2} />
               <Text style={[styles.raceMetaText, { color: possible ? accent : palette.warning }]}>
-                {weeks} weken te gaan
+                {weeksUntilLabel(race.date)}
               </Text>
             </View>
           )}
@@ -189,7 +188,7 @@ function EventGroupRow({
               <View style={styles.raceMetaItem}>
                 <Clock size={11} color={accent} strokeWidth={2} />
                 <Text style={[styles.raceMetaText, { color: accent }]}>
-                  {weeksUntilRace(event.date)} weken te gaan
+                  {weeksUntilLabel(event.date)}
                 </Text>
               </View>
             )}
@@ -597,6 +596,27 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
     });
   }
 
+  // Eén wedstrijd(-groep)-rij renderen; gedeeld tussen aankomende en afgelopen races.
+  function renderRaceItem(race: Race) {
+    return race.subRaces ? (
+      <EventGroupRow
+        key={race.id}
+        event={race}
+        isOpen={openEvents.has(race.id)}
+        onToggle={() => toggleEvent(race.id)}
+        onSelectSub={handleRacePress}
+        isLocked={isRaceLocked}
+      />
+    ) : (
+      <RaceRow
+        key={race.id}
+        race={race}
+        onPress={() => handleRacePress(race)}
+        locked={isRaceLocked(race)}
+      />
+    );
+  }
+
   function handleRacePress(race: Race) {
     // Premium-gating: vergrendelde wedstrijden leiden naar de paywall
     if (isRaceLocked(race)) {
@@ -674,30 +694,21 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
                       onToggle={() => toggleCity(city.id)}
                     />
 
-                    {/* Wedstrijden */}
-                    {openCities.has(city.id) && (
-                      <View style={styles.racesContainer}>
-                        {city.races.map(race =>
-                          race.subRaces ? (
-                            <EventGroupRow
-                              key={race.id}
-                              event={race}
-                              isOpen={openEvents.has(race.id)}
-                              onToggle={() => toggleEvent(race.id)}
-                              onSelectSub={handleRacePress}
-                              isLocked={isRaceLocked}
-                            />
-                          ) : (
-                            <RaceRow
-                              key={race.id}
-                              race={race}
-                              onPress={() => handleRacePress(race)}
-                              locked={isRaceLocked(race)}
-                            />
-                          )
-                        )}
-                      </View>
-                    )}
+                    {/* Wedstrijden: eerst aankomend, afgelopen races onderaan gegroepeerd */}
+                    {openCities.has(city.id) && (() => {
+                      const now = new Date();
+                      const upcomingRaces = city.races.filter(r => new Date(r.date) > now);
+                      const pastRaces     = city.races.filter(r => new Date(r.date) <= now);
+                      return (
+                        <View style={styles.racesContainer}>
+                          {upcomingRaces.map(renderRaceItem)}
+                          {pastRaces.length > 0 && (
+                            <Text style={styles.pastRacesLabel}>Afgelopen</Text>
+                          )}
+                          {pastRaces.map(renderRaceItem)}
+                        </View>
+                      );
+                    })()}
                   </View>
                 ))}
               </View>
@@ -797,6 +808,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
 
   // Wedstrijden
   racesContainer: { backgroundColor: colors.bgBase },
+  pastRacesLabel: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.xs,
+    color: colors.textTertiary, textTransform: 'uppercase', letterSpacing: typography.letterSpacing.wide,
+    paddingHorizontal: spacing[2], paddingTop: spacing[1.5], paddingBottom: spacing[0.5],
+  },
   raceRow: {
     flexDirection: 'row', alignItems: 'center',
     borderBottomWidth: 1, borderBottomColor: colors.borderSubtle + '60',

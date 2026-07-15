@@ -8,7 +8,7 @@ import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore, selectIsSessionCompleted } from '../../src/store/appStore';
 import { getTrainingPlan, zoneInfo, remapWeekDays, DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
 import { DayPicker } from '../../src/components/ui/DayPicker';
-import { weeksUntilRace } from '../../src/data/rotterdamRaces';
+import { weeksUntilLabel } from '../../src/data/rotterdamRaces';
 import { Dumbbell, Trophy } from 'lucide-react-native';
 import { useRacePace } from '../../src/hooks/useRacePace';
 import { formatPacePerKm } from '../../src/data/paceModel';
@@ -47,7 +47,7 @@ export default function ScheduleScreen() {
   );
   const planName  = useRace ? racePlan!.race.name : fallbackPlan.name;
   const planTotal = useRace ? racePlan!.totalWeeks : fallbackPlan.weeks;
-  const weeksLeft = useRace ? weeksUntilRace(racePlan!.race.date) : null;
+  const weeksLeftLabel = useRace ? weeksUntilLabel(racePlan!.race.date) : null;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -90,7 +90,7 @@ export default function ScheduleScreen() {
             <Text style={styles.raceInfoName}>{planName}</Text>
             <Text style={styles.raceInfoMeta}>
               🏁 {new Date(racePlan!.race.date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}
-              {'  ·  '}{weeksLeft} weken te gaan · {planTotal}-wekenschema
+              {'  ·  '}{weeksLeftLabel} · {planTotal}-wekenschema
             </Text>
           </View>
         ) : (

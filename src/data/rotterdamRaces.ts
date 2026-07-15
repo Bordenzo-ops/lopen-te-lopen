@@ -55,17 +55,6 @@ export const PROVINCES: RaceProvince[] = [
         name: 'Rotterdam',
         races: [
           {
-            id: 'dam2dam-2025',
-            name: 'Dam tot Damloop',
-            date: '2025-09-14',
-            distance: '10km',
-            url: 'https://www.damtotdamloop.nl',
-            description: 'Iconische 10 km van Amsterdam naar Zaandam. Vlak en snel parcours.',
-            location: 'Rotterdam Centrum',
-            accentColor: '#3B82F6',
-            registrationOpen: false,
-          },
-          {
             id: 'rotterdam-hm-2025',
             name: 'Rotterdam Halve Marathon',
             date: '2025-09-21',
@@ -438,6 +427,140 @@ export const PROVINCES: RaceProvince[] = [
           },
         ],
       },
+      {
+        id: 'delft',
+        name: 'Delft',
+        races: [
+          {
+            id: 'golden-tenloop-delft-2027',
+            name: 'Golden Tenloop',
+            date: '2027-05-06',
+            distance: '10km',
+            url: 'https://goldentenloop.nl',
+            description: 'Sfeervol hardloopfestival op Hemelvaartsdag door de historische binnenstad van Delft. Start en finish op de Burgwal. 5 km en 10 km beschikbaar.',
+            location: 'Burgwal, Delft',
+            accentColor: '#EAB308',
+            registrationOpen: false,
+            subRaces: [
+              {
+                id: 'golden-tenloop-delft-2027-10km',
+                name: 'Golden Tenloop 10 km',
+                date: '2027-05-06',
+                distance: '10km',
+                url: 'https://goldentenloop.nl/inschrijven/',
+                description: '10 km door de binnenstad van Delft, het hoofdonderdeel van de Golden Tenloop.',
+                location: 'Burgwal, Delft',
+                accentColor: '#EAB308',
+                registrationOpen: false,
+              },
+              {
+                id: 'golden-tenloop-delft-2027-5km',
+                name: 'Golden Tenloop 5 km',
+                date: '2027-05-06',
+                distance: '5km',
+                url: 'https://goldentenloop.nl/inschrijven/',
+                description: 'Toegankelijke 5 km door Delft, geschikt voor beginners.',
+                location: 'Burgwal, Delft',
+                accentColor: '#FDE047',
+                registrationOpen: false,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'naaldwijk',
+        name: 'Naaldwijk',
+        races: [
+          {
+            id: 'halve-westland-naaldwijk-2027',
+            name: 'Moore DRV Halve Westland',
+            date: '2027-03-21',
+            distance: 'half_marathon',
+            url: 'https://westlandsehalvemarathon.nl',
+            description: 'Populair hardloopevenement in het Westland met 5 km, 10 km en halve marathon. Finish bij sportpark De Hoge Bomen in Naaldwijk. Vorige editie volledig uitverkocht.',
+            location: 'Sportpark De Hoge Bomen, Naaldwijk',
+            accentColor: '#16A34A',
+            registrationOpen: false,
+            subRaces: [
+              {
+                id: 'halve-westland-naaldwijk-2027-hm',
+                name: 'Halve Westland 21,1 km',
+                date: '2027-03-21',
+                distance: 'half_marathon',
+                url: 'https://westlandsehalvemarathon.nl/index.php/inschrijven/halve-marathon',
+                description: 'De volledige halve marathon van 21,1 km door het Westland.',
+                location: 'Sportpark De Hoge Bomen, Naaldwijk',
+                accentColor: '#15803D',
+                registrationOpen: false,
+              },
+              {
+                id: 'halve-westland-naaldwijk-2027-10km',
+                name: 'Halve Westland 10 km',
+                date: '2027-03-21',
+                distance: '10km',
+                url: 'https://westlandsehalvemarathon.nl/index.php/inschrijven/10km',
+                description: '10 km door het Westland, langs de kassen en polders.',
+                location: 'Sportpark De Hoge Bomen, Naaldwijk',
+                accentColor: '#16A34A',
+                registrationOpen: false,
+              },
+              {
+                id: 'halve-westland-naaldwijk-2027-5km',
+                name: 'Halve Westland 5 km',
+                date: '2027-03-21',
+                distance: '5km',
+                url: 'https://westlandsehalvemarathon.nl/index.php/inschrijven/5km',
+                description: 'Toegankelijke 5 km, geschikt voor beginners.',
+                location: 'Sportpark De Hoge Bomen, Naaldwijk',
+                accentColor: '#4ADE80',
+                registrationOpen: false,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'waddinxveen',
+        name: 'Waddinxveen',
+        races: [
+          {
+            id: 'langs-de-gouweloop-waddinxveen-2026',
+            name: 'Langs de Gouweloop',
+            date: '2026-10-04',
+            distance: '10km',
+            url: 'https://www.langsdegouweloop.nl',
+            description: 'Jaarlijkse hardloopwedstrijd langs de rivier de Gouwe in Waddinxveen. Vlak parcours, geschikt voor zowel beginners als gevorderde lopers. 5 km en 10 km beschikbaar.',
+            location: 'Waddinxveen',
+            accentColor: '#0891B2',
+            registrationOpen: true,
+            subRaces: [
+              {
+                id: 'langs-de-gouweloop-waddinxveen-2026-10km',
+                name: 'Langs de Gouweloop 10 km',
+                date: '2026-10-04',
+                distance: '10km',
+                url: 'https://www.langsdegouweloop.nl',
+                description: '10 km langs de Gouwe, over vlakke wegen met natuurlijke en stedelijke afwisseling.',
+                location: 'Waddinxveen',
+                accentColor: '#0891B2',
+                registrationOpen: true,
+              },
+              {
+                id: 'langs-de-gouweloop-waddinxveen-2026-5km',
+                name: 'Langs de Gouweloop 5 km',
+                date: '2026-10-04',
+                distance: '5km',
+                url: 'https://www.langsdegouweloop.nl',
+                description: 'Toegankelijke 5 km langs de Gouwe.',
+                location: 'Waddinxveen',
+                accentColor: '#22D3EE',
+                registrationOpen: true,
+              },
+            ],
+          },
+        ],
+      },
     ],
   },
   {
@@ -448,6 +571,17 @@ export const PROVINCES: RaceProvince[] = [
         id: 'amsterdam',
         name: 'Amsterdam',
         races: [
+          {
+            id: 'dam2dam-2025',
+            name: 'Dam tot Damloop',
+            date: '2025-09-14',
+            distance: '10km',
+            url: 'https://www.damtotdamloop.nl',
+            description: 'Iconische 10 km van Amsterdam naar Zaandam. Vlak en snel parcours.',
+            location: 'Amsterdam → Zaandam',
+            accentColor: '#3B82F6',
+            registrationOpen: false,
+          },
           {
             id: 'dam2dam-2026',
             name: 'NN Dam tot Damloop',
@@ -735,6 +869,13 @@ export function getRaceById(id: string): Race | undefined {
 export function weeksUntilRace(raceDate: string, today = new Date()): number {
   const diff = new Date(raceDate).getTime() - today.getTime();
   return Math.floor(diff / (1000 * 60 * 60 * 24 * 7));
+}
+
+/** Leesbaar countdown-label, bijv. "5 weken te gaan", "1 week te gaan" of "Deze week" (< 1 week) */
+export function weeksUntilLabel(raceDate: string, today = new Date()): string {
+  const weeks = weeksUntilRace(raceDate, today);
+  if (weeks < 1) return 'Deze week';
+  return weeks === 1 ? '1 week te gaan' : `${weeks} weken te gaan`;
 }
 
 /** Leesbare datum, bijv. "zondag 20 september 2026" */

@@ -12,6 +12,15 @@
 
 import { PREMIUM_CONFIG } from '../config/premiumConfig';
 
+// ── Config ────────────────────────────────────────────────────────────────────
+
+/** Max. wachttijd op de ORS-routing API voordat we opgeven */
+const ORS_TIMEOUT_MS = 20000;
+
+/** Melding bij time-out of netwerkfout (zelfde copy, want de gebruiker kan het toch niet onderscheiden) */
+const ORS_TIMEOUT_MESSAGE =
+  'Route plannen lukt nu niet. Controleer je verbinding of start zonder route.';
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface RouteWaypoint {
@@ -129,20 +138,32 @@ function parseOrsGeoJson(data: any, type: 'loop' | 'outAndBack'): PlannedRoute {
   return { type, waypoints, instructions, totalDistanceKm };
 }
 
-/** Voert een POST-request uit naar de ORS API */
+/** Voert een POST-request uit naar de ORS API, met time-out (anders blijft de UI eindeloos laden) */
 async function orsPost(endpoint: string, body: object): Promise<any> {
-  const res = await fetch(
-    `https://api.openrouteservice.org/v2${endpoint}`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization:  PREMIUM_CONFIG.ORS_API_KEY,
-        'Content-Type': 'application/json',
-        Accept:         'application/json, application/geo+json',
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(() => controller.abort(), ORS_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://api.openrouteservice.org/v2${endpoint}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization:  PREMIUM_CONFIG.ORS_API_KEY,
+          'Content-Type': 'application/json',
+          Accept:         'application/json, application/geo+json',
+        },
+        body:   JSON.stringify(body),
+        signal: controller.signal,
       },
-      body: JSON.stringify(body),
-    },
-  );
+    );
+  } catch (err: any) {
+    // Zowel een time-out-abort als een netwerkfout (geen verbinding) komen hier terecht
+    throw new Error(ORS_TIMEOUT_MESSAGE);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');

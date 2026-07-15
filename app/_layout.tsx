@@ -11,6 +11,7 @@ import {
 } from '@expo-google-fonts/inter';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import * as SplashScreen from 'expo-splash-screen';
 import { useAppStore } from '../src/store/appStore';
 import { useIsLightTheme } from '../src/theme/useTheme';
 import {
@@ -20,6 +21,7 @@ import {
 } from '../src/services/purchaseService';
 import { retryStravaQueue } from '../src/services/stravaService';
 import { initCrashReporting, CrashReportingBoundary } from '../src/services/crashReporting';
+import { AnimatedSplash } from '../src/components/AnimatedSplash';
 // Side-effect import: garandeert dat de expo-task-manager achtergrondtaak
 // gedefinieerd is zodra de app-module laadt, ook na een OS-herstart van de
 // app (bijvoorbeeld door het besturingssysteem, zonder dat de gebruiker de
@@ -31,8 +33,22 @@ import '../src/services/backgroundLocationService';
 // tijdens het opstarten van de app worden zo ook al gerapporteerd.
 initCrashReporting();
 
+// Houd de native splash zichtbaar totdat de fullscreen JS-splash
+// (AnimatedSplash) gerenderd en klaar is om 'm over te nemen. Zo ontstaat er
+// geen wit/leeg flitsje tussen de native splash en de eigen opstartafbeelding.
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// Globaal veiligheidsnet: garandeert dat de native splash ook verdwijnt als
+// de JS-splash (AnimatedSplash) nooit mount, bijvoorbeeld door een
+// render-crash die de CrashReportingBoundary opvangt of door falend
+// font-laden. Zo kan de crash-fallback zichtbaar worden in plaats van een
+// bevroren native splash.
+setTimeout(() => {
+  SplashScreen.hideAsync().catch(() => {});
+}, 8000);
+
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
@@ -73,23 +89,27 @@ export default function RootLayout() {
 
   const isLight = useIsLightTheme();
 
-  if (!fontsLoaded) return null;
+  // Bij een font-fout starten we door met systeemfonts in plaats van eeuwig
+  // achter de native splash te blijven wachten (fontsLoaded blijft dan false).
+  if (!fontsLoaded && !fontError) return null;
 
   return (
     <CrashReportingBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaProvider>
-          <StatusBar style={isLight ? 'dark' : 'light'} />
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="(onboarding)" options={{ animation: 'fade' }} />
-            <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
-            <Stack.Screen name="session/active" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="session/summary" options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="paywall" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="strava-callback" options={{ animation: 'fade' }} />
-          </Stack>
-        </SafeAreaProvider>
+        <AnimatedSplash>
+          <SafeAreaProvider>
+            <StatusBar style={isLight ? 'dark' : 'light'} />
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(onboarding)" options={{ animation: 'fade' }} />
+              <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+              <Stack.Screen name="session/active" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="session/summary" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="paywall" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="strava-callback" options={{ animation: 'fade' }} />
+            </Stack>
+          </SafeAreaProvider>
+        </AnimatedSplash>
       </GestureHandlerRootView>
     </CrashReportingBoundary>
   );

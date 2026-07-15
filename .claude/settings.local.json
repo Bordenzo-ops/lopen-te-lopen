@@ -3,7 +3,8 @@
     "allow": [
       "PowerShell(claude mcp *)",
       "PowerShell(npm audit)",
-      "Bash(npm audit *)"
+      "Bash(npm audit *)",
+      "mcp__sentry__update_issue"
     ]
   }
 }

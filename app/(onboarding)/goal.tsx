@@ -10,7 +10,7 @@ import { colors, palette, typography, spacing, radius, shadows, type ThemeColors
 import { useThemeColors } from '../../src/theme/useTheme';
 import { Button } from '../../src/components/ui/Button';
 import { trainingPlans } from '../../src/data/trainingPlans';
-import { getUpcomingRaces, weeksUntilRace, formatRaceDate } from '../../src/data/rotterdamRaces';
+import { getUpcomingRaces, weeksUntilLabel, formatRaceDate } from '../../src/data/rotterdamRaces';
 import type { GoalType } from '../../src/data/trainingPlans';
 import type { RotterdamRace } from '../../src/data/rotterdamRaces';
 import { usePremium } from '../../src/hooks/usePremium';
@@ -91,7 +91,7 @@ export default function GoalScreen() {
           <Text style={styles.step}>Stap 1 van 3</Text>
           <Text style={styles.title}>Hoe wil je trainen?</Text>
           <Text style={styles.sub}>
-            Kies een vrij trainingsschema of train gericht op een wedstrijd in Rotterdam.
+            Kies een vrij trainingsschema of train gericht op een wedstrijd.
           </Text>
         </View>
 
@@ -261,7 +261,6 @@ function RaceModeContent({
       <View style={styles.cards}>
         {races.map(race => {
           const isSelected = selected?.id === race.id;
-          const weeks = weeksUntilRace(race.date);
           const accent = race.accentColor;
           const locked = !hasAccess && !isRaceDistanceFree(race.distance);
           return (
@@ -306,7 +305,7 @@ function RaceModeContent({
                   <View style={styles.raceMetaItem}>
                     <Clock size={12} color={accent} strokeWidth={2} />
                     <Text style={[styles.raceMetaText, { color: accent }]}>
-                      {weeks} weken te gaan
+                      {weeksUntilLabel(race.date)}
                     </Text>
                   </View>
                 </View>
