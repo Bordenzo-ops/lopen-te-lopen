@@ -70,7 +70,15 @@ export function useShareRun() {
       return shareGeneric(imageUri);
     }
 
-    const isInstagramAvailable = await Linking.canOpenURL(INSTAGRAM_STORIES_SCHEME);
+    // canOpenURL gooit op iOS een error als het scheme niet in LSApplicationQueriesSchemes
+    // staat — vang dat af zodat we altijd netjes terugvallen op het native deelmenu.
+    let isInstagramAvailable = false;
+    try {
+      isInstagramAvailable = await Linking.canOpenURL(INSTAGRAM_STORIES_SCHEME);
+    } catch (err) {
+      console.error('[useShareRun] canOpenURL:', err);
+      return shareGeneric(imageUri);
+    }
     if (!isInstagramAvailable) {
       return shareGeneric(imageUri);
     }
@@ -87,8 +95,13 @@ export function useShareRun() {
         .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
         .join('&');
       const fullUrl = `${INSTAGRAM_STORIES_SCHEME}?${queryString}`;
-      await Linking.openURL(fullUrl);
-      return { success: true, method: 'instagram' };
+      try {
+        await Linking.openURL(fullUrl);
+        return { success: true, method: 'instagram' };
+      } catch (err) {
+        console.error('[useShareRun] openURL:', err);
+        return shareGeneric(imageUri);
+      }
     }
 
     if (Platform.OS === 'android') {
@@ -144,7 +157,9 @@ export function useShareRun() {
       );
       return { success: false, error: 'permission_denied' };
     }
-    await MediaLibrary.saveToLibraryAsync(imageUri);
+    // saveToLibraryAsync is deprecated in expo-media-library 56 en gooit een runtime-error;
+    // Asset.create() is de vervangende API voor het opslaan van een bestand in de bibliotheek.
+    await MediaLibrary.Asset.create(imageUri);
     Alert.alert('Opgeslagen!', 'Je run-kaart staat in je fotobibliotheek. Open Instagram om te delen.');
     return { success: true, method: 'saved' };
   }, []);
@@ -160,6 +175,10 @@ export function useShareRun() {
       if (!uri) return { success: false, error: 'capture_failed' };
 
       return await shareToInstagram(uri);
+    } catch (err: any) {
+      // Laatste vangnet: nooit een onafgehandelde exception naar de UI laten lekken.
+      console.error('[useShareRun] share:', err);
+      return { success: false, error: err?.message ?? 'unknown_error' };
     } finally {
       setIsSharing(false);
     }
