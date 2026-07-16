@@ -3,11 +3,13 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert } from 'rea
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CheckCircle2, Home, Share2, Trophy, Sparkles, FileDown, Zap, Crown } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
-import { getTrainingPlan, zoneInfo } from '../../src/data/trainingPlans';
+import { zoneInfo } from '../../src/data/trainingPlans';
 import type { TrainingWeek } from '../../src/data/trainingPlans';
+import { resolveActivePlan } from '../../src/data/activePlan';
 import { selectTotalKm, selectShowRunUpsell } from '../../src/store/appStore';
 import type { KmSplit } from '../../src/store/appStore';
 import { detectPersonalRecords, detectCumulativeMilestone } from '../../src/data/achievements';
@@ -18,6 +20,9 @@ import { ShareRunSheet } from '../../src/components/ui/ShareRunSheet';
 import { exportSessionAsGpx } from '../../src/services/exportService';
 import { maybeAskForReview } from '../../src/services/reviewService';
 import { usePremium } from '../../src/hooks/usePremium';
+import { ScaleIn } from '../../src/components/motion/ScaleIn';
+import { FadeSlideIn } from '../../src/components/motion/FadeSlideIn';
+import { CountUpText } from '../../src/components/motion/CountUpText';
 
 export default function SummaryScreen() {
   const { distanceKm, durationSeconds, avgPace, sessionId, weekNumber, splits: splitsParam } =
@@ -32,9 +37,9 @@ export default function SummaryScreen() {
 
   const profile           = useAppStore(s => s.profile);
   const racePlan          = useAppStore(s => s.racePlan);
+  const customPlan        = useAppStore(s => s.customPlan);
   const schemaMode        = useAppStore(s => s.schemaMode);
   const completedSessions = useAppStore(s => s.completedSessions);
-  const currentWeek       = useAppStore(s => s.currentWeek);
   const [showShare, setShowShare] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const completedInWeek = useAppStore(s =>
@@ -63,9 +68,7 @@ export default function SummaryScreen() {
     if (showRunUpsell) return;
 
     const weekNumForReview = parseInt(weekNumber ?? '1');
-    const planForReview = schemaMode === 'race' && racePlan
-      ? racePlan.weeks
-      : getTrainingPlan(profile.goal).plan;
+    const planForReview = resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal }).weeks;
     const sessionForReview = planForReview
       .find(w => w.weekNumber === weekNumForReview)
       ?.sessions.find(s => s.id === sessionId);
@@ -81,6 +84,21 @@ export default function SummaryScreen() {
       });
     }, 2000);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Eenmalige, lichte haptic bij een persoonlijk record, zelfde patroon als
+  // de km-splits in session/active.tsx (geen platform-guard nodig, expo-haptics
+  // is daar zelf al veilig in). Deze hook herleidt de PR-status zelf en staat
+  // bewust vóór de "!profile"-guard hieronder (rules of hooks), net als de
+  // reviewvraag hierboven.
+  useEffect(() => {
+    const lastCompleted = completedSessions[completedSessions.length - 1];
+    if (!lastCompleted) return;
+    const record = detectPersonalRecords(lastCompleted, completedSessions.slice(0, -1));
+    if (record.longestRun || record.fastestPace) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -130,14 +148,11 @@ export default function SummaryScreen() {
       ? 'Mijlpaal: je hebt nu samen 10 km gelopen!'
       : null;
 
-  // Zoek week en sessie op in het juiste plan (vrij of race)
+  // Zoek week en sessie op in het juiste plan (sjabloon, vrij schema of race)
   const weekNum = parseInt(weekNumber ?? '1');
-  const resolveWeek = (): TrainingWeek | undefined => {
-    if (schemaMode === 'race' && racePlan) {
-      return racePlan.weeks.find(w => w.weekNumber === weekNum);
-    }
-    return getTrainingPlan(profile.goal).plan.find(w => w.weekNumber === weekNum);
-  };
+  const activePlan = resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal });
+  const resolveWeek = (): TrainingWeek | undefined =>
+    activePlan.weeks.find(w => w.weekNumber === weekNum);
 
   const week    = resolveWeek();
   const session = week?.sessions.find(s => s.id === sessionId);
@@ -197,9 +212,7 @@ export default function SummaryScreen() {
   const weekDone = completedInWeek >= totalInWeek;
 
   // Controleer of het hele schema nu klaar is
-  const totalWeeks = schemaMode === 'race' && racePlan
-    ? racePlan.totalWeeks
-    : getTrainingPlan(profile.goal).weeks;
+  const totalWeeks = activePlan.totalWeeks;
   const schemaComplete = weekDone && weekNum >= totalWeeks;
 
   const getMessage = () => {
@@ -213,33 +226,33 @@ export default function SummaryScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Hero */}
         <View style={styles.hero}>
-          <View style={styles.checkIcon}>
+          <ScaleIn style={styles.checkIcon}>
             <CheckCircle2 size={48} color={colors.success} strokeWidth={1.5} />
-          </View>
+          </ScaleIn>
           <Text style={styles.heroTitle}>Sessie voltooid</Text>
           <Text style={styles.heroSub}>{getMessage()}</Text>
         </View>
 
         {/* Grote afstand */}
         <View style={styles.bigStat}>
-          <Text style={styles.bigStatValue}>{km.toFixed(2)}</Text>
+          <CountUpText value={km} format={(n) => n.toFixed(2)} textStyle={styles.bigStatValue} />
           <Text style={styles.bigStatUnit}>kilometer</Text>
         </View>
 
         {/* Persoonlijk record */}
         {prText && (
-          <View style={styles.prBanner}>
+          <FadeSlideIn style={styles.prBanner}>
             <Trophy size={18} color={colors.premium} strokeWidth={2} />
             <Text style={styles.prBannerText}>{prText}</Text>
-          </View>
+          </FadeSlideIn>
         )}
 
         {/* Vroeg mijlpaal-moment: eerste training of 5/10 km cumulatief */}
         {milestoneText && (
-          <View style={styles.milestoneBanner}>
+          <FadeSlideIn style={styles.milestoneBanner} delay={prText ? 90 : 0}>
             <Sparkles size={18} color={colors.brandPrimary} strokeWidth={2} />
             <Text style={styles.milestoneBannerText}>{milestoneText}</Text>
-          </View>
+          </FadeSlideIn>
         )}
 
         {/* Stats grid */}

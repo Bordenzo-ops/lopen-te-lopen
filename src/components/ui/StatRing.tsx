@@ -1,8 +1,19 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
+import Animated, {
+  Easing,
+  useAnimatedProps,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { typography, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
+import { CountUpText } from '../motion/CountUpText';
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const RING_FILL_DURATION_MS = 600;
 
 interface StatRingProps {
   value: number;       // 0-100 (percentage)
@@ -11,6 +22,10 @@ interface StatRingProps {
   color?: string;
   label: string;
   sublabel?: string;
+  /** Optioneel: telt dit getal in het midden op i.p.v. de statische `label`-tekst te tonen. */
+  countValue?: number;
+  /** Formatteert `countValue` tijdens en na het optellen. Standaard: afgerond geheel getal. */
+  countFormat?: (n: number) => string;
 }
 
 export function StatRing({
@@ -20,9 +35,12 @@ export function StatRing({
   color,
   label,
   sublabel,
+  countValue,
+  countFormat,
 }: StatRingProps) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const reducedMotion = useReducedMotion();
   const strokeColor = color ?? colors.brandPrimary;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -31,6 +49,26 @@ export function StatRing({
   const center = size / 2;
   const roundedProgress = Math.round(progress);
   const accessibleLabel = sublabel ? `${label}, ${sublabel}` : label;
+
+  // Animeert het vullen van de ring bij mount en bij elke waardeverandering.
+  // Begint bij een lege ring (volledige offset) zodat de eerste keer tonen
+  // ook zichtbaar vult in plaats van meteen in eindtoestand te verschijnen.
+  const animatedOffset = useSharedValue(circumference);
+  useEffect(() => {
+    if (reducedMotion) {
+      animatedOffset.value = strokeDashoffset;
+      return;
+    }
+    animatedOffset.value = withTiming(strokeDashoffset, {
+      duration: RING_FILL_DURATION_MS,
+      easing: Easing.out(Easing.cubic),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [strokeDashoffset, reducedMotion]);
+
+  const animatedCircleProps = useAnimatedProps(() => ({
+    strokeDashoffset: animatedOffset.value,
+  }));
 
   return (
     <View
@@ -51,7 +89,7 @@ export function StatRing({
           fill="transparent"
         />
         {/* Progress */}
-        <Circle
+        <AnimatedCircle
           cx={center}
           cy={center}
           r={radius}
@@ -59,13 +97,17 @@ export function StatRing({
           strokeWidth={strokeWidth}
           fill="transparent"
           strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
+          animatedProps={animatedCircleProps}
           strokeLinecap="round"
           transform={`rotate(-90 ${center} ${center})`}
         />
       </Svg>
       <View style={styles.labelContainer}>
-        <Text style={styles.label}>{label}</Text>
+        {countValue != null ? (
+          <CountUpText value={countValue} format={countFormat} textStyle={styles.label} />
+        ) : (
+          <Text style={styles.label}>{label}</Text>
+        )}
         {sublabel && <Text style={styles.sublabel}>{sublabel}</Text>}
       </View>
     </View>

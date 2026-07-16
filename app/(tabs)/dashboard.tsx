@@ -6,31 +6,38 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Play, TrendingUp, Flame, Timer, Award, Crown, X } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
-import { useAppStore, selectWeeklyKm, selectIsSessionCompleted, selectTotalKm } from '../../src/store/appStore';
-import { getTrainingPlan, remapWeekDays, DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
+import { useAppStore, selectWeeklyKm, selectIsSessionCompleted, selectTotalKm, selectCurrentWeek } from '../../src/store/appStore';
+import { remapWeekDays, DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
+import { resolveActivePlan } from '../../src/data/activePlan';
 import { SessionCard } from '../../src/components/ui/SessionCard';
 import { StatRing } from '../../src/components/ui/StatRing';
 import { Button } from '../../src/components/ui/Button';
+import { FadeSlideIn } from '../../src/components/motion/FadeSlideIn';
+import { ScaleIn } from '../../src/components/motion/ScaleIn';
+import { CountUpText } from '../../src/components/motion/CountUpText';
 import { useRacePace } from '../../src/hooks/useRacePace';
 import { usePremium } from '../../src/hooks/usePremium';
 import { computeRunStats, computeMilestones } from '../../src/data/achievements';
 import { formatPacePerKm } from '../../src/data/paceModel';
+import type { GoalType } from '../../src/data/trainingPlans';
 
-const goalLabel = {
+const goalLabel: Record<GoalType, string> = {
   '5km': '5 KM',
   '10km': '10 KM',
+  '15km': '15 KM',
   'half_marathon': 'Halve marathon',
   'marathon': 'Marathon',
 };
 
 export default function DashboardScreen() {
   const profile = useAppStore(s => s.profile);
-  const currentWeek = useAppStore(s => s.currentWeek);
+  const currentWeek = useAppStore(selectCurrentWeek);
   const completedSessions = useAppStore(s => s.completedSessions);
   const skippedSessions = useAppStore(s => s.skippedSessions);
   const skipSession = useAppStore(s => s.skipSession);
   const totalKm = useAppStore(selectTotalKm);
   const racePlan   = useAppStore(s => s.racePlan);
+  const customPlan = useAppStore(s => s.customPlan);
   const schemaMode = useAppStore(s => s.schemaMode);
   const { paceForType } = useRacePace();
   const { hasAccess } = usePremium();
@@ -50,25 +57,31 @@ export default function DashboardScreen() {
 
   if (!profile) return null;
 
-  const fallbackPlan = getTrainingPlan(profile.goal);
-  const useRace      = schemaMode === 'race' && !!racePlan;
-  const activePlan   = useRace ? racePlan!.weeks : fallbackPlan.plan;
-  const totalWeeks   = useRace ? racePlan!.totalWeeks : fallbackPlan.weeks;
-  const planLabel    = useRace ? racePlan!.race.name : goalLabel[profile.goal];
+  const resolved    = resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal });
+  const useRace     = resolved.isRace;
+  const isCustom    = resolved.isCustom;
+  const activePlan  = resolved.weeks;
+  const totalWeeks  = resolved.totalWeeks;
+  const planLabel   = useRace ? resolved.name : goalLabel[profile.goal];
 
   // Werkelijk totaal km van het schema (voor de voortgangsring)
   const planTotalKm = activePlan.reduce((sum, w) => sum + w.totalKm, 0);
 
   const trainingDays = profile.trainingDays ?? DEFAULT_TRAINING_DAYS;
-  // Remap de getoonde week naar de zelfgekozen trainingsdagen. De sessie-id's
-  // blijven gelijk, alleen het dagveld verandert, dus de voltooide-sessie-
-  // matching blijft werken.
+  // Remap de getoonde week naar de zelfgekozen trainingsdagen — maar niet
+  // voor een eigen vrij schema (customPlan): daar kiest de gebruiker de dag
+  // al bewust per sessie. Voor het sjabloon en het wedstrijdschema blijft dit
+  // exact het bestaande gedrag. De sessie-id's blijven in beide gevallen
+  // gelijk, alleen het dagveld verandert, dus de voltooide-sessie-matching
+  // blijft werken.
   const rawWeek = activePlan[currentWeek - 1];
-  const week = rawWeek ? remapWeekDays(rawWeek, trainingDays) : rawWeek;
+  const week = rawWeek ? (isCustom ? rawWeek : remapWeekDays(rawWeek, trainingDays)) : rawWeek;
   const weekKm = completedSessions
     .filter(s => s.weekNumber === currentWeek)
     .reduce((sum, s) => sum + s.actualDistanceKm, 0);
-  const weekProgress = week ? Math.min(100, (weekKm / week.totalKm) * 100) : 0;
+  // Guard tegen delen door nul: een lege week in een vrij schema heeft
+  // totalKm 0 en telt dan gewoon als 0% in plaats van NaN.
+  const weekProgress = week && week.totalKm > 0 ? Math.min(100, (weekKm / week.totalKm) * 100) : 0;
 
   const nextSession = week?.sessions.find(
     s => !completedSessions.some(c => c.sessionId === s.id) &&
@@ -209,6 +222,8 @@ export default function DashboardScreen() {
               color={colors.brandPrimary}
               label={`${overallProgress}%`}
               sublabel="schema"
+              countValue={overallProgress}
+              countFormat={(n) => `${Math.round(n)}%`}
             />
             <Text style={styles.ringLabel}>Voortgang</Text>
           </View>
@@ -219,6 +234,8 @@ export default function DashboardScreen() {
               color={colors.zone2}
               label={`${weekKm.toFixed(1)}`}
               sublabel={`van ${week?.totalKm ?? 0} km`}
+              countValue={weekKm}
+              countFormat={(n) => n.toFixed(1)}
             />
             <Text style={styles.ringLabel}>Deze week</Text>
           </View>
@@ -229,6 +246,8 @@ export default function DashboardScreen() {
               color={colors.info}
               label={`${totalKm.toFixed(0)}`}
               sublabel="km totaal"
+              countValue={totalKm}
+              countFormat={(n) => n.toFixed(0)}
             />
             <Text style={styles.ringLabel}>Totaal</Text>
           </View>
@@ -278,16 +297,32 @@ export default function DashboardScreen() {
               <Text style={styles.skipBtnText}>Niet fit vandaag? Sla over</Text>
             </TouchableOpacity>
           </View>
+        ) : isCustom && (!week || week.sessions.length === 0) ? (
+          // Lege week (of nog geen enkele week) in een vrij schema: telt
+          // meteen als "af" (zie appStore.completeSession/skipSession), maar
+          // "Week X afgerond" zou hier misleidend zijn omdat er nooit iets
+          // voltooid is. Wijs in plaats daarvan naar het Schema-tabblad.
+          <FadeSlideIn style={styles.weekCompleteCard}>
+            <ScaleIn>
+              <Text style={styles.weekCompleteEmoji}>📅</Text>
+            </ScaleIn>
+            <Text style={styles.weekCompleteTitle}>Deze week is nog leeg</Text>
+            <Text style={styles.weekCompleteSub}>
+              Voeg sessies toe via het Schema-tabblad om aan de slag te gaan.
+            </Text>
+          </FadeSlideIn>
         ) : (
-          <View style={styles.weekCompleteCard}>
-            <Text style={styles.weekCompleteEmoji}>🎉</Text>
+          <FadeSlideIn style={styles.weekCompleteCard}>
+            <ScaleIn>
+              <Text style={styles.weekCompleteEmoji}>🎉</Text>
+            </ScaleIn>
             <Text style={styles.weekCompleteTitle}>Week {currentWeek - 1} afgerond!</Text>
             <Text style={styles.weekCompleteSub}>
               {currentWeek <= totalWeeks
                 ? `Goed werk. Week ${currentWeek} start ${getNextMondayLabel()}.`
                 : 'Je hebt het hele schema afgerond. Gefeliciteerd!'}
             </Text>
-          </View>
+          </FadeSlideIn>
         )}
 
         {/* Sessies deze week */}
@@ -339,7 +374,11 @@ export default function DashboardScreen() {
               <View style={styles.prRow}>
                 <View style={styles.prItem}>
                   <TrendingUp size={18} color={colors.zone2} strokeWidth={2} />
-                  <Text style={styles.prValue}>{stats.longestRunKm.toFixed(1)}</Text>
+                  <CountUpText
+                    value={stats.longestRunKm}
+                    format={(n) => n.toFixed(1)}
+                    textStyle={styles.prValue}
+                  />
                   <Text style={styles.prLabel}>langste (km)</Text>
                 </View>
                 {stats.bestPaceSecPerKm != null && (

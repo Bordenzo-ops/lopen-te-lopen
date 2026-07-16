@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Check, Trophy, Dumbbell, Calendar, Clock, Target, Medal } from 'lucide-react-native';
+import { ChevronLeft, Check, Trophy, Dumbbell, Calendar, Clock, Target, Medal, Flame } from 'lucide-react-native';
 import { colors, palette, typography, spacing, radius, shadows, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { Button } from '../../src/components/ui/Button';
@@ -26,6 +26,7 @@ if (Platform.OS === 'android') {
 const goalMeta: Record<GoalType, { icon: React.ReactNode; tagline: string }> = {
   '5km':           { icon: <Target size={26} color={colors.brandLight} strokeWidth={2} />,   tagline: 'Ideaal als eerste doel' },
   '10km':          { icon: <Dumbbell size={26} color={colors.brandLight} strokeWidth={2} />, tagline: 'De klassieke uitdaging' },
+  '15km':          { icon: <Flame size={26} color={colors.brandLight} strokeWidth={2} />,    tagline: 'Voor de 10 Engelse mijl' },
   'half_marathon': { icon: <Medal size={26} color={colors.brandLight} strokeWidth={2} />,    tagline: 'Het ultieme doel' },
   'marathon':      { icon: <Trophy size={26} color={colors.brandLight} strokeWidth={2} />,   tagline: 'De ultieme uitdaging' },
 };

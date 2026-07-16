@@ -199,7 +199,7 @@ export default function SettingsScreen() {
   const maxHr = profile.maxHeartRate;
 
   const goalLabel: Record<string, string> = {
-    '5km': '5 KM', '10km': '10 KM',
+    '5km': '5 KM', '10km': '10 KM', '15km': '15 KM',
     'half_marathon': 'Halve marathon', 'marathon': 'Marathon',
   };
 

@@ -4,7 +4,7 @@ import { Redirect } from 'expo-router';
 import { useAppStore, useHasHydrated } from '../src/store/appStore';
 import { type ThemeColors } from '../src/theme/tokens';
 import { useThemeColors } from '../src/theme/useTheme';
-import { getTrainingPlan } from '../src/data/trainingPlans';
+import { resolveActivePlan } from '../src/data/activePlan';
 import {
   loadSnapshot, clearSnapshot, type RunSnapshot,
 } from '../src/services/runRecoveryService';
@@ -23,12 +23,11 @@ const SNAPSHOT_MAX_AGE_MS = 12 * 60 * 60 * 1000; // 12 uur
  */
 async function saveRecoveredRun(snapshot: RunSnapshot): Promise<void> {
   try {
-    const { profile, racePlan, schemaMode, startSession, completeSession } = useAppStore.getState();
+    const { profile, racePlan, customPlan, schemaMode, startSession, completeSession } = useAppStore.getState();
     if (!profile) return;
 
-    const week = schemaMode === 'race' && racePlan
-      ? racePlan.weeks.find(w => w.weekNumber === snapshot.weekNumber)
-      : getTrainingPlan(profile.goal).plan.find(w => w.weekNumber === snapshot.weekNumber);
+    const week = resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal })
+      .weeks.find(w => w.weekNumber === snapshot.weekNumber);
     const session = week?.sessions.find(s => s.id === snapshot.sessionId);
 
     if (!week || !session) return;

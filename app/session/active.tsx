@@ -12,8 +12,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
-import { getTrainingPlan, zoneInfo } from '../../src/data/trainingPlans';
+import { zoneInfo } from '../../src/data/trainingPlans';
 import type { TrainingWeek } from '../../src/data/trainingPlans';
+import { resolveActivePlan } from '../../src/data/activePlan';
 import { ZoneBadge } from '../../src/components/ui/ZoneBadge';
 import { useVoiceGuidance } from '../../src/hooks/useVoiceGuidance';
 import { useRoutePlanner } from '../../src/hooks/useRoutePlanner';
@@ -144,6 +145,7 @@ export default function ActiveSessionScreen() {
   const { sessionId, weekNumber } = useLocalSearchParams<{ sessionId: string; weekNumber: string }>();
   const profile         = useAppStore(s => s.profile);
   const racePlan        = useAppStore(s => s.racePlan);
+  const customPlan      = useAppStore(s => s.customPlan);
   const schemaMode      = useAppStore(s => s.schemaMode);
   const startSession    = useAppStore(s => s.startSession);
   const completeSession = useAppStore(s => s.completeSession);
@@ -233,10 +235,8 @@ export default function ActiveSessionScreen() {
   const weekNum = parseInt(weekNumber ?? '1');
   const resolveWeek = (): TrainingWeek | undefined => {
     if (!profile) return undefined;
-    if (schemaMode === 'race' && racePlan) {
-      return racePlan.weeks.find(w => w.weekNumber === weekNum);
-    }
-    return getTrainingPlan(profile.goal).plan.find(w => w.weekNumber === weekNum);
+    return resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal })
+      .weeks.find(w => w.weekNumber === weekNum);
   };
   const week    = resolveWeek();
   const session = week?.sessions.find(s => s.id === sessionId);

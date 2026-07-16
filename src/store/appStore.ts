@@ -1,12 +1,27 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getTrainingPlan } from '../data/trainingPlans';
+import { getTrainingPlan, remapWeekDays } from '../data/trainingPlans';
 import type { GoalType, Session, TrainingWeek } from '../data/trainingPlans';
 import type { RacePlan } from '../data/buildRacePlan';
+import { resolveActivePlan } from '../data/activePlan';
 import { ensureAnonymousSession } from '../services/authService';
 import { syncAll } from '../services/syncService';
 import { isPremiumActive as fetchPremiumActive } from '../services/purchaseService';
+
+// ── Hulpfuncties voor het vrije schema ────────
+/**
+ * Genereert een uniek, stabiel sessie-id voor het vrije schema. Blijft
+ * ongewijzigd zolang de sessie bestaat: voltooiing/overslaan matcht op dit id.
+ */
+function generateCustomSessionId(): string {
+  return `custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Herberekent totalKm van een week op basis van de actuele sessies. */
+function recalcTotalKm(sessions: Session[]): number {
+  return Math.round(sessions.reduce((sum, s) => sum + s.distanceKm, 0) * 10) / 10;
+}
 
 // ── Hulpfuncties ──────────────────────────────
 /**
@@ -100,13 +115,27 @@ interface AppState {
   completedSessions: CompletedSession[];
   /** Bewust overgeslagen sessies (telt als afgehandeld, niet als prestatie) */
   skippedSessions: SkippedSession[];
-  currentWeek: number;
+  /**
+   * Weekvoortgang van het trainingsschema (sjabloon of eigen vrij schema) en
+   * het wedstrijdschema, volledig losgekoppeld: wisselen van modus neemt geen
+   * weeknummer van de andere modus mee. Gebruik `selectCurrentWeek` om op
+   * basis van `schemaMode` het juiste veld te lezen.
+   */
+  currentWeekTraining: number;
+  currentWeekRace: number;
 
   // Actieve loop-sessie (niet persistent, crash-safe)
   activeSession: ActiveSession | null;
 
   // Wedstrijdschema
   racePlan: RacePlan | null;
+
+  /**
+   * Het eigen, vrij samengestelde trainingsschema van de gebruiker. Null
+   * zolang er geen "Vrij schema" gestart is; dan valt training-modus terug
+   * op het doelgebaseerde sjabloon (bestaand gedrag). Zie resolveActivePlan.
+   */
+  customPlan: TrainingWeek[] | null;
 
   /**
    * Doeltijd voor de gekozen wedstrijd in totale seconden. Premium-feature:
@@ -293,6 +322,37 @@ interface AppState {
   ) => void;
   /** Wist voortgang én de persistente opslag */
   resetProgress: () => Promise<void>;
+
+  // ── Vrij schema ("Mijn schema") ──────────────
+  /**
+   * Start een nieuw vrij schema. 'template' kopieert het huidige doelplan
+   * diep MET behoud van sessie-id's en de zelfgekozen trainingsdagen: wie
+   * het sjabloon als basis neemt, houdt zo zijn voltooide sessies en
+   * weekvoortgang — de overstap voelt als "mijn schema bewerken", niet als
+   * opnieuw beginnen. 'empty' maakt 4 lege weken aan en start wél bij week 1.
+   * Doet niets als er al een customPlan actief is (gebruik eerst
+   * clearCustomPlan).
+   */
+  initCustomPlan: (source: 'template' | 'empty') => void;
+  /** Voegt een lege week achteraan het vrije schema toe. */
+  addCustomWeek: () => void;
+  /**
+   * Verwijdert een week uit het vrije schema en hernummert de resterende
+   * weken aaneengesloten vanaf 1. Klemt currentWeekTraining binnen het
+   * resterende aantal weken.
+   */
+  removeCustomWeek: (weekNumber: number) => void;
+  /** Voegt een sessie toe aan een week van het vrije schema (genereert een id). */
+  addCustomSession: (weekNumber: number, session: Omit<Session, 'id'>) => void;
+  /** Werkt een bestaande sessie in het vrije schema bij (id blijft gelijk). */
+  updateCustomSession: (weekNumber: number, session: Session) => void;
+  /** Verwijdert een sessie uit een week van het vrije schema. */
+  removeCustomSession: (weekNumber: number, sessionId: string) => void;
+  /**
+   * Wist het vrije schema volledig: training-modus valt weer terug op het
+   * doelgebaseerde sjabloon. Klemt currentWeekTraining binnen het sjabloon.
+   */
+  clearCustomPlan: () => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -302,9 +362,11 @@ export const useAppStore = create<AppState>()(
       profile: null,
       completedSessions: [],
       skippedSessions: [],
-      currentWeek: 1,
+      currentWeekTraining: 1,
+      currentWeekRace: 1,
       activeSession: null,
       racePlan: null,
+      customPlan: null,
       raceTargetSeconds: null,
       schemaMode: 'training',
       themePreference: 'system',
@@ -460,7 +522,12 @@ export const useAppStore = create<AppState>()(
       setThemePreference: (preference) => set({ themePreference: preference }),
 
       completeOnboarding: (profile) => {
-        set({ profile, hasCompletedOnboarding: true, currentWeek: 1 });
+        set({
+          profile,
+          hasCompletedOnboarding: true,
+          currentWeekTraining: 1,
+          currentWeekRace: 1,
+        });
         // Best-effort sync, blokkeert de onboarding niet
         void get().syncNow();
       },
@@ -492,7 +559,10 @@ export const useAppStore = create<AppState>()(
         })),
 
       completeSession: (result, weekSessions) => {
-        const { activeSession, completedSessions, currentWeek, racePlan, schemaMode, profile } = get();
+        const {
+          activeSession, completedSessions, currentWeekTraining, currentWeekRace,
+          racePlan, schemaMode, profile, customPlan,
+        } = get();
         if (!activeSession) return;
 
         // Voorkom dubbele opslag als completeSession twee keer snel wordt aangeroepen
@@ -515,20 +585,22 @@ export const useAppStore = create<AppState>()(
 
         const updatedCompleted = [...completedSessions, completed];
 
-        // Controleer of alle sessies van de huidige week nu klaar zijn
+        // Controleer of alle sessies van de huidige week nu klaar zijn. Een
+        // lege week (0 sessies, mogelijk in een vrij schema) telt meteen als
+        // af: weekSessions.length is dan 0 en completedInWeek.length >= 0 is
+        // altijd waar, zonder deling door nul.
         const weekSessionIds = weekSessions.map(s => s.id);
         const completedInWeek = updatedCompleted.filter(
           c => weekSessionIds.includes(c.sessionId),
         );
         const weekDone = completedInWeek.length >= weekSessions.length;
 
-        // Bereken de bovengrens zodat currentWeek nooit voorbij het schema loopt
-        const totalWeeks =
-          schemaMode === 'race' && racePlan
-            ? racePlan.totalWeeks
-            : profile
-            ? getTrainingPlan(profile.goal).weeks
-            : currentWeek; // fallback: niet ophogen
+        // Hoog het weekveld van de ACTIEVE modus op, geklemd binnen het
+        // actieve schema (sjabloon, vrij schema of wedstrijdschema).
+        const currentWeek = schemaMode === 'race' ? currentWeekRace : currentWeekTraining;
+        const totalWeeks = profile
+          ? resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal }).totalWeeks
+          : currentWeek; // fallback: niet ophogen
 
         const nextWeek = weekDone
           ? Math.min(currentWeek + 1, totalWeeks)
@@ -537,7 +609,9 @@ export const useAppStore = create<AppState>()(
         set({
           completedSessions: updatedCompleted,
           activeSession: null,
-          currentWeek: nextWeek,
+          ...(schemaMode === 'race'
+            ? { currentWeekRace: nextWeek }
+            : { currentWeekTraining: nextWeek }),
         });
 
         // Best-effort sync van de nieuwe sessie naar de cloud
@@ -584,7 +658,10 @@ export const useAppStore = create<AppState>()(
       cancelSession: () => set({ activeSession: null }),
 
       skipSession: (sessionId, weekNumber, weekSessions) => {
-        const { skippedSessions, completedSessions, currentWeek, racePlan, schemaMode, profile } = get();
+        const {
+          skippedSessions, completedSessions, currentWeekTraining, currentWeekRace,
+          racePlan, schemaMode, profile, customPlan,
+        } = get();
 
         // Al voltooid of al overgeslagen: niets doen
         const alreadyHandled =
@@ -598,29 +675,40 @@ export const useAppStore = create<AppState>()(
         ];
 
         // Een week is afgehandeld zodra elke sessie ervan voltooid of
-        // overgeslagen is. Zo loopt de gebruiker na een mindere week gewoon door.
+        // overgeslagen is. Zo loopt de gebruiker na een mindere week gewoon
+        // door. Een lege week (weekSessions.length === 0) is triviaal altijd
+        // "elke sessie afgehandeld" en telt dus meteen als af.
         const handledIds = new Set<string>([
           ...completedSessions.map(c => c.sessionId),
           ...updatedSkipped.map(s => s.sessionId),
         ]);
         const weekDone = weekSessions.every(s => handledIds.has(s.id));
 
-        const totalWeeks =
-          schemaMode === 'race' && racePlan
-            ? racePlan.totalWeeks
-            : profile
-            ? getTrainingPlan(profile.goal).weeks
-            : currentWeek;
+        const currentWeek = schemaMode === 'race' ? currentWeekRace : currentWeekTraining;
+        const totalWeeks = profile
+          ? resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal }).totalWeeks
+          : currentWeek;
 
         const nextWeek = weekDone
           ? Math.min(currentWeek + 1, totalWeeks)
           : currentWeek;
 
-        set({ skippedSessions: updatedSkipped, currentWeek: nextWeek });
+        set({
+          skippedSessions: updatedSkipped,
+          ...(schemaMode === 'race'
+            ? { currentWeekRace: nextWeek }
+            : { currentWeekTraining: nextWeek }),
+        });
       },
 
       resetProgress: async () => {
-        set({ completedSessions: [], skippedSessions: [], currentWeek: 1, activeSession: null });
+        set({
+          completedSessions: [],
+          skippedSessions: [],
+          currentWeekTraining: 1,
+          currentWeekRace: 1,
+          activeSession: null,
+        });
         // Wis ook de persistente opslag zodat een herstart schoon begint
         try {
           await AsyncStorage.removeItem('app-store');
@@ -628,18 +716,136 @@ export const useAppStore = create<AppState>()(
           // Negeer storage-fouten bij reset
         }
       },
+
+      // ── Vrij schema ("Mijn schema") ──────────────
+      initCustomPlan: (source) => {
+        const { profile, customPlan } = get();
+        // Al een actief vrij schema: niet overschrijven (eerst clearCustomPlan).
+        if (!profile || customPlan) return;
+
+        if (source === 'template') {
+          const template = getTrainingPlan(profile.goal).plan;
+          // Diepe kopie via remapWeekDays: dat kopieert week én sessies, zet
+          // de sessies op de zelfgekozen trainingsdagen (zoals de gebruiker
+          // het schema al kende) en behoudt de sessie-id's. Daardoor blijven
+          // voltooide sessies gewoon afgevinkt en blijft currentWeekTraining
+          // staan waar de gebruiker was.
+          const cloned: TrainingWeek[] = template.map(week =>
+            remapWeekDays(week, profile.trainingDays),
+          );
+          set({ customPlan: cloned });
+        } else {
+          const emptyWeeks: TrainingWeek[] = Array.from({ length: 4 }, (_, i) => ({
+            weekNumber: i + 1,
+            totalKm: 0,
+            focus: 'Eigen invulling',
+            sessions: [],
+          }));
+          set({ customPlan: emptyWeeks, currentWeekTraining: 1 });
+        }
+      },
+
+      addCustomWeek: () => {
+        const { customPlan } = get();
+        if (!customPlan) return;
+        const newWeek: TrainingWeek = {
+          weekNumber: customPlan.length + 1,
+          totalKm: 0,
+          focus: 'Eigen invulling',
+          sessions: [],
+        };
+        set({ customPlan: [...customPlan, newWeek] });
+      },
+
+      removeCustomWeek: (weekNumber) => {
+        const { customPlan, currentWeekTraining } = get();
+        if (!customPlan) return;
+        const renumbered = customPlan
+          .filter(w => w.weekNumber !== weekNumber)
+          .map((w, i) => ({ ...w, weekNumber: i + 1 }));
+        set({
+          customPlan: renumbered,
+          currentWeekTraining: Math.min(currentWeekTraining, Math.max(renumbered.length, 1)),
+        });
+      },
+
+      addCustomSession: (weekNumber, session) => {
+        const { customPlan } = get();
+        if (!customPlan) return;
+        const newSession: Session = { ...session, id: generateCustomSessionId() };
+        set({
+          customPlan: customPlan.map(w => {
+            if (w.weekNumber !== weekNumber) return w;
+            const sessions = [...w.sessions, newSession];
+            return { ...w, sessions, totalKm: recalcTotalKm(sessions) };
+          }),
+        });
+      },
+
+      updateCustomSession: (weekNumber, session) => {
+        const { customPlan } = get();
+        if (!customPlan) return;
+        set({
+          customPlan: customPlan.map(w => {
+            if (w.weekNumber !== weekNumber) return w;
+            const sessions = w.sessions.map(s => (s.id === session.id ? session : s));
+            return { ...w, sessions, totalKm: recalcTotalKm(sessions) };
+          }),
+        });
+      },
+
+      removeCustomSession: (weekNumber, sessionId) => {
+        const { customPlan } = get();
+        if (!customPlan) return;
+        set({
+          customPlan: customPlan.map(w => {
+            if (w.weekNumber !== weekNumber) return w;
+            const sessions = w.sessions.filter(s => s.id !== sessionId);
+            return { ...w, sessions, totalKm: recalcTotalKm(sessions) };
+          }),
+        });
+      },
+
+      clearCustomPlan: () => {
+        const { profile, currentWeekTraining } = get();
+        const totalWeeks = profile ? getTrainingPlan(profile.goal).weeks : currentWeekTraining;
+        set({ customPlan: null, currentWeekTraining: Math.min(currentWeekTraining, totalWeeks) });
+      },
     }),
     {
       name: 'app-store',
       storage: createJSONStorage(() => AsyncStorage),
+      // Versie 1: currentWeek (één gedeeld weeknummer voor beide schema-
+      // modi) is vervangen door currentWeekTraining/currentWeekRace, zodat
+      // training- en wedstrijdvoortgang volledig losstaan. De migratie
+      // hieronder kopieert het bestaande weeknummer naar beide nieuwe
+      // velden, zodat bestaande gebruikers hun voortgang behouden.
+      version: 1,
+      migrate: (persistedState: any, version: number): any => {
+        const state = (persistedState ?? {}) as Record<string, unknown> & { currentWeek?: number };
+        if (version < 1) {
+          const week = typeof state.currentWeek === 'number' ? state.currentWeek : 1;
+          const rest = { ...state };
+          delete rest.currentWeek;
+          return {
+            ...rest,
+            currentWeekTraining: week,
+            currentWeekRace: week,
+            customPlan: (state as { customPlan?: TrainingWeek[] | null }).customPlan ?? null,
+          };
+        }
+        return state;
+      },
       // activeSession en _hasHydrated bewust NIET opslaan
       partialize: (state) => ({
         hasCompletedOnboarding: state.hasCompletedOnboarding,
         profile:                state.profile,
         completedSessions:      state.completedSessions,
         skippedSessions:        state.skippedSessions,
-        currentWeek:            state.currentWeek,
+        currentWeekTraining:    state.currentWeekTraining,
+        currentWeekRace:        state.currentWeekRace,
         racePlan:               state.racePlan,
+        customPlan:             state.customPlan,
         raceTargetSeconds:      state.raceTargetSeconds,
         schemaMode:             state.schemaMode,
         themePreference:        state.themePreference,
@@ -676,6 +882,14 @@ export const useAppStore = create<AppState>()(
 export const useHasHydrated = () => useAppStore(s => s._hasHydrated);
 
 // ── Selectors ─────────────────────────────────
+
+/**
+ * Geeft het weeknummer van de ACTIEVE modus terug (training of race), zodat
+ * schermen niet zelf hoeven te kiezen tussen currentWeekTraining en
+ * currentWeekRace.
+ */
+export const selectCurrentWeek = (state: AppState): number =>
+  state.schemaMode === 'race' ? state.currentWeekRace : state.currentWeekTraining;
 
 /**
  * Aantal routes dat deze week al gepland is. Geeft 0 terug zodra er een

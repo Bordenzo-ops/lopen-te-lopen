@@ -9,6 +9,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
+import Animated, { FadeIn, ReduceMotion } from 'react-native-reanimated';
 import {
   addMonths,
   eachDayOfInterval,
@@ -26,6 +27,11 @@ import { nl } from 'date-fns/locale';
 import { typography, spacing, radius, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
 import type { CompletedSession } from '../../store/appStore';
+import { ScaleIn } from '../motion/ScaleIn';
+
+// Zachte crossfade bij maandwissel; respecteert de systeeminstelling voor
+// verminderde beweging automatisch.
+const gridEntering = FadeIn.duration(220).reduceMotion(ReduceMotion.System);
 
 interface RunCalendarProps {
   /** Voltooide runs, gegroepeerd per dag. Key = 'yyyy-MM-dd'. */
@@ -90,14 +96,26 @@ export function RunCalendar({ runsByDay, selectedDate, onSelectDate }: RunCalend
         ))}
       </View>
 
-      {/* Dagraster */}
-      <View style={styles.grid}>
+      {/* Dagraster — crossfadet zacht bij maandwissel (key = zichtbare maand) */}
+      <Animated.View key={monthLabel} style={styles.grid} entering={gridEntering}>
         {days.map(day => {
           const key = format(day, 'yyyy-MM-dd');
           const inMonth = isSameMonth(day, visibleMonth);
           const hasRuns = runsByDay.has(key);
           const isSelected = selectedDate === key;
           const isCurrentDay = isToday(day);
+          const circleStyle = [
+            styles.dayCircle,
+            hasRuns && styles.dayCircleFilled,
+            isCurrentDay && !hasRuns && styles.dayCircleToday,
+            isSelected && styles.dayCircleSelected,
+          ];
+          const textStyle = [
+            styles.dayText,
+            !inMonth && styles.dayTextDimmed,
+            hasRuns && styles.dayTextOnFilled,
+            isSelected && !hasRuns && styles.dayTextSelected,
+          ];
 
           return (
             <TouchableOpacity
@@ -109,29 +127,22 @@ export function RunCalendar({ runsByDay, selectedDate, onSelectDate }: RunCalend
               accessibilityLabel={`${format(day, 'd MMMM', { locale: nl })}${hasRuns ? ', run gelopen' : ''}`}
               accessibilityState={{ selected: isSelected }}
             >
-              <View
-                style={[
-                  styles.dayCircle,
-                  hasRuns && styles.dayCircleFilled,
-                  isCurrentDay && !hasRuns && styles.dayCircleToday,
-                  isSelected && styles.dayCircleSelected,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.dayText,
-                    !inMonth && styles.dayTextDimmed,
-                    hasRuns && styles.dayTextOnFilled,
-                    isSelected && !hasRuns && styles.dayTextSelected,
-                  ]}
-                >
-                  {format(day, 'd')}
-                </Text>
-              </View>
+              {isSelected ? (
+                // Eenmalige, zachte highlight-puls (geen loop) zodra deze dag
+                // geselecteerd wordt. `key` zorgt dat elke nieuwe selectie
+                // opnieuw mount en dus opnieuw pulseert.
+                <ScaleIn key={key} fromScale={1.15} fade={false} style={circleStyle}>
+                  <Text style={textStyle}>{format(day, 'd')}</Text>
+                </ScaleIn>
+              ) : (
+                <View style={circleStyle}>
+                  <Text style={textStyle}>{format(day, 'd')}</Text>
+                </View>
+              )}
             </TouchableOpacity>
           );
         })}
-      </View>
+      </Animated.View>
     </View>
   );
 }

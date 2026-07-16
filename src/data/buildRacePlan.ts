@@ -12,6 +12,20 @@
  *  5. Herbereken weeknummers en pas de race-week sessie-beschrijving aan met de wedstrijdnaam
  *
  * De structuur van TrainingWeek/Session blijft identiek zodat bestaande UI gewoon werkt.
+ *
+ * BEKENDE BEPERKING: wanneer het aantal beschikbare weken gelijk is aan of
+ * kleiner is dan het basisprogramma (de "perfect past"- en "trim"-takken
+ * hieronder), hergebruikt het wedstrijdschema de sessie-id's van het
+ * doelgebaseerde sjabloon (bijv. 'hm-3-1') ongewijzigd. Voltooit een
+ * gebruiker een sessie in training-modus en schakelt hij daarna over naar
+ * race-modus (of andersom) met hetzelfde doel, dan kan een sessie met
+ * toevallig hetzelfde id al als "voltooid" verschijnen. We prefixen deze
+ * id's bewust niet: bestaande gebruikers hebben al voltooide race-sessies
+ * onder deze ongewijzigde id's opgeslagen, en een prefix zou die matching
+ * met terugwerkende kracht breken. Alleen de "extra opbouwweken"-tak
+ * (buildExtraWeek) gebruikt al een 'extra-' prefix en is hier niet gevoelig
+ * voor. Het introduceren van een eigen vrij schema (customPlan) is hier niet
+ * door geraakt: dat genereert altijd gloednieuwe 'custom-' id's.
  */
 
 import { getTrainingPlan } from './trainingPlans';
@@ -23,12 +37,35 @@ import { weeksUntilRace } from './rotterdamRaces';
 const PLAN_BOUNDS: Record<GoalType, { min: number; base: number; max: number }> = {
   '5km':           { min: 4,  base: 8,  max: 14 },
   '10km':          { min: 6,  base: 12, max: 20 },
+  '15km':          { min: 8,  base: 14, max: 22 },
   'half_marathon': { min: 10, base: 20, max: 28 },
   'marathon':      { min: 16, base: 24, max: 32 },
 };
 
 // Hoeveel weken taper + race altijd behouden worden
 const TAPER_WEEKS = 3;
+
+/** Bepaal het trainingsdoel op basis van de wedstrijdafstand. */
+function goalForDistance(distance: RotterdamRace['distance']): GoalType {
+  switch (distance) {
+    case 'marathon':      return 'marathon';
+    case 'half_marathon': return 'half_marathon';
+    case '15km':          return '15km';
+    case '10km':          return '10km';
+    default:               return '5km';
+  }
+}
+
+/** Afstand in km die bij een wedstrijdcategorie hoort, voor de racedag-sessie. */
+function kmForDistance(distance: RotterdamRace['distance']): number {
+  switch (distance) {
+    case 'marathon':      return 42.2;
+    case 'half_marathon': return 21.1;
+    case '15km':          return 15;
+    case '10km':          return 10;
+    default:               return 5;
+  }
+}
 
 export interface RacePlan {
   race: RotterdamRace;
@@ -61,21 +98,43 @@ function buildExtraWeek(
   };
 }
 
-/** Pas de race-dag sessie-beschrijving aan met de wedstrijdnaam */
-function injectRaceName(week: TrainingWeek, raceName: string, isMarathon: boolean): TrainingWeek {
+/**
+ * Pas de race-dag sessie-beschrijving aan met de wedstrijdnaam en de echte
+ * wedstrijdafstand. De racedag is altijd de sessie met de hoogste `day` in
+ * de laatste week (ongeacht type of afstand van het onderliggende sjabloon),
+ * zodat dit ook werkt voor de korte schema's (5km/10km) waar de racesessie
+ * geen 'long'-type of >=10 km heeft.
+ */
+function injectRaceName(
+  week: TrainingWeek,
+  raceName: string,
+  goal: GoalType,
+  raceKm: number,
+): TrainingWeek {
+  if (week.sessions.length === 0) return week;
+
+  const raceIndex = week.sessions.reduce(
+    (maxIdx, sess, idx, arr) => (sess.day > arr[maxIdx].day ? idx : maxIdx),
+    0,
+  );
+
+  const isMarathon = goal === 'marathon';
+  const coachTip = isMarathon
+    ? `Vandaag ren je de ${raceName}. Loop de eerste 10 km langzamer dan je wilt. Voeding elk halfuur. Daarna kun je loslaten.`
+    : goal === '15km'
+      ? `Vandaag ren je de ${raceName}. Loop de eerste 3 km langzamer dan je wilt, dan lekker doortrekken.`
+      : `Vandaag ren je de ${raceName}. Loop de eerste 5 km langzamer dan je wilt. Daarna kun je los.`;
+
+  const sessions = week.sessions.map((sess, idx) =>
+    idx === raceIndex
+      ? { ...sess, description: `${raceName}: RACE DAG!`, distanceKm: raceKm, coachTip }
+      : sess,
+  );
+
   return {
     ...week,
-    sessions: week.sessions.map(s =>
-      s.type === 'long' && s.distanceKm >= 10
-        ? {
-            ...s,
-            description: `${raceName}: RACE DAG!`,
-            coachTip: isMarathon
-              ? `Vandaag ren je de ${raceName}. Loop de eerste 10 km langzamer dan je wilt. Voeding elk halfuur. Daarna kun je loslaten.`
-              : `Vandaag ren je de ${raceName}. Loop de eerste 5 km langzamer dan je wilt. Daarna kun je los.`,
-          }
-        : s,
-    ),
+    sessions,
+    totalKm: Math.round(sessions.reduce((sum, sess) => sum + sess.distanceKm, 0) * 10) / 10,
   };
 }
 
@@ -94,11 +153,7 @@ export function buildRacePlan(
   customStartDate?: string,
 ): RacePlan | null {
   // Bepaal doel op basis van afstand
-  const goal: GoalType =
-    race.distance === 'marathon'      ? 'marathon'      :
-    race.distance === 'half_marathon' ? 'half_marathon' :
-    race.distance === '10km'          ? '10km'          :
-    '5km';
+  const goal: GoalType = goalForDistance(race.distance);
 
   const bounds       = PLAN_BOUNDS[goal];
   const availWeeks   = weeksUntilRace(race.date, today);
@@ -107,8 +162,12 @@ export function buildRacePlan(
   // Te weinig weken: minimaal TAPER_WEEKS + 1 nodig
   if (availWeeks < TAPER_WEEKS + 1) return null;
 
-  // Klem de beschikbare weken binnen bounds
-  const targetWeeks  = Math.min(Math.max(availWeeks, bounds.min), bounds.max);
+  // Klem de beschikbare weken binnen de max lengte. bounds.min is BEWUST hier
+  // niet als ondergrens toegepast: Math.max(availWeeks, bounds.min) zou bij
+  // te weinig beschikbare weken het schema optrekken tot bounds.min, waardoor
+  // de racedag ná de wedstrijddatum zou vallen. bounds.min wordt alleen nog
+  // gebruikt in canTrainForRace om de gebruiker te waarschuwen dat het krap is.
+  const targetWeeks  = Math.min(availWeeks, bounds.max);
   const baseWeeks    = basePlan.plan.length;
 
   let weeks: TrainingWeek[] = [...basePlan.plan];
@@ -146,10 +205,10 @@ export function buildRacePlan(
     adaptationNote = `Schema ingekort van ${baseWeeks} naar ${targetWeeks} weken: opbouw gecomprimeerd, taper behouden.`;
   }
 
-  // Injecteer wedstrijdnaam in de race-week
-  const isMarathon = goal === 'marathon';
+  // Injecteer wedstrijdnaam en -afstand in de race-week
+  const raceKm = kmForDistance(race.distance);
   weeks = weeks.map((w, i) =>
-    i === weeks.length - 1 ? injectRaceName(w, race.name, isMarathon) : w,
+    i === weeks.length - 1 ? injectRaceName(w, race.name, goal, raceKm) : w,
   );
 
   // Startdatum = customStartDate, of anders vandaag (snap naar aankomende maandag)
@@ -176,10 +235,7 @@ export function canTrainForRace(
   today = new Date(),
 ): { possible: boolean; reason?: string } {
   const weeks = weeksUntilRace(race.date, today);
-  const goal: GoalType =
-    race.distance === 'marathon'      ? 'marathon'      :
-    race.distance === 'half_marathon' ? 'half_marathon' :
-    race.distance === '10km'          ? '10km'          : '5km';
+  const goal: GoalType = goalForDistance(race.distance);
   const { min } = PLAN_BOUNDS[goal];
 
   if (weeks < TAPER_WEEKS + 1) {

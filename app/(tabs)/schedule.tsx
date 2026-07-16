@@ -1,33 +1,57 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
+import React, { useState, useMemo, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { ChevronDown, ChevronRight, CalendarDays } from 'lucide-react-native';
+import { ChevronDown, ChevronRight, CalendarDays, Pencil, Check, Trash2, Plus } from 'lucide-react-native';
+import Animated, { FadeIn, FadeOut, ReduceMotion } from 'react-native-reanimated';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
-import { useAppStore, selectIsSessionCompleted } from '../../src/store/appStore';
+import { useAppStore, selectIsSessionCompleted, selectCurrentWeek } from '../../src/store/appStore';
 import { getTrainingPlan, zoneInfo, remapWeekDays, DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
+import type { Session } from '../../src/data/trainingPlans';
+import { resolveActivePlan } from '../../src/data/activePlan';
 import { DayPicker } from '../../src/components/ui/DayPicker';
+import { SessionEditorSheet } from '../../src/components/ui/SessionEditorSheet';
 import { weeksUntilLabel } from '../../src/data/rotterdamRaces';
 import { Dumbbell, Trophy } from 'lucide-react-native';
 import { useRacePace } from '../../src/hooks/useRacePace';
 import { formatPacePerKm } from '../../src/data/paceModel';
+import { PressableScale } from '../../src/components/motion/PressableScale';
+import { ScaleIn } from '../../src/components/motion/ScaleIn';
+
+// Zachte fade + korte slide (8px) voor het uit-/inklappen van een weekblok.
+// `.reduceMotion` zorgt dat de systeeminstelling voor verminderde beweging
+// automatisch gerespecteerd wordt (dan verschijnt/verdwijnt de lijst direct).
+const sessionListEntering = FadeIn.duration(260)
+  .withInitialValues({ opacity: 0, transform: [{ translateY: -8 }] })
+  .reduceMotion(ReduceMotion.System);
+const sessionListExiting = FadeOut.duration(180).reduceMotion(ReduceMotion.System);
 
 const dayLabel = ['', 'Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'];
 
 export default function ScheduleScreen() {
   const profile = useAppStore(s => s.profile);
-  const currentWeek = useAppStore(s => s.currentWeek);
+  const currentWeek = useAppStore(selectCurrentWeek);
   const completedSessions = useAppStore(s => s.completedSessions);
   const skippedSessions = useAppStore(s => s.skippedSessions);
   const racePlan = useAppStore(s => s.racePlan);
+  const customPlan = useAppStore(s => s.customPlan);
   const schemaMode = useAppStore(s => s.schemaMode);
   const setSchemaMode = useAppStore(s => s.setSchemaMode);
   const updateProfile = useAppStore(s => s.updateProfile);
+  const initCustomPlan = useAppStore(s => s.initCustomPlan);
+  const addCustomWeek = useAppStore(s => s.addCustomWeek);
+  const removeCustomWeek = useAppStore(s => s.removeCustomWeek);
+  const addCustomSession = useAppStore(s => s.addCustomSession);
+  const updateCustomSession = useAppStore(s => s.updateCustomSession);
+  const removeCustomSession = useAppStore(s => s.removeCustomSession);
+  const clearCustomPlan = useAppStore(s => s.clearCustomPlan);
   const { paceForType } = useRacePace();
   const [expandedWeek, setExpandedWeek] = useState<number>(currentWeek);
   const [showDayPicker, setShowDayPicker] = useState(false);
   const [draftDays, setDraftDays] = useState<number[] | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editorState, setEditorState] = useState<{ weekNumber: number; session: Session | null } | null>(null);
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -40,14 +64,73 @@ export default function ScheduleScreen() {
   const pickerDays = draftDays ?? trainingDays;
 
   const fallbackPlan = getTrainingPlan(profile.goal);
-  const useRace = schemaMode === 'race' && !!racePlan;
-  // Zet de sessies op de zelfgekozen trainingsdagen. Muteert het schema niet.
-  const planWeeks = (useRace ? racePlan!.weeks : fallbackPlan.plan).map(w =>
-    remapWeekDays(w, trainingDays),
-  );
-  const planName  = useRace ? racePlan!.race.name : fallbackPlan.name;
-  const planTotal = useRace ? racePlan!.totalWeeks : fallbackPlan.weeks;
-  const weeksLeftLabel = useRace ? weeksUntilLabel(racePlan!.race.date) : null;
+  const activePlan = resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal });
+  const useRace = activePlan.isRace;
+  const isCustom = activePlan.isCustom;
+  // Zet de sessies op de zelfgekozen trainingsdagen — maar alleen voor het
+  // sjabloon-plan (training zonder customPlan) en het wedstrijdschema, exact
+  // zoals voorheen. Een eigen vrij schema kiest de dag per sessie zelf, dus
+  // daar remappen we niets: dat zou de bewuste keuze van de gebruiker
+  // overschrijven. Muteert het schema niet.
+  const planWeeks = isCustom
+    ? activePlan.weeks
+    : activePlan.weeks.map(w => remapWeekDays(w, trainingDays));
+  const planName  = activePlan.name;
+  const planTotal = activePlan.totalWeeks;
+  const weeksLeftLabel = useRace && racePlan ? weeksUntilLabel(racePlan.race.date) : null;
+
+  // Bewerkmodus is alleen zinvol met een actief vrij schema; verlaat hem
+  // automatisch zodra dat niet meer zo is (schema gewist of van modus gewisseld).
+  useEffect(() => {
+    if (!isCustom && editMode) setEditMode(false);
+  }, [isCustom, editMode]);
+
+  const handleDeleteSession = (weekNumber: number, session: Session) => {
+    Alert.alert(
+      'Sessie verwijderen',
+      `Weet je zeker dat je "${session.description}" wilt verwijderen?`,
+      [
+        { text: 'Annuleren', style: 'cancel' },
+        { text: 'Verwijderen', style: 'destructive', onPress: () => removeCustomSession(weekNumber, session.id) },
+      ],
+    );
+  };
+
+  const handleDeleteWeek = (weekNumber: number) => {
+    Alert.alert(
+      'Week verwijderen',
+      `Weet je zeker dat je week ${weekNumber} wilt verwijderen? De overige weken schuiven op.`,
+      [
+        { text: 'Annuleren', style: 'cancel' },
+        { text: 'Verwijderen', style: 'destructive', onPress: () => removeCustomWeek(weekNumber) },
+      ],
+    );
+  };
+
+  const handleClearPlan = () => {
+    Alert.alert(
+      'Schema wissen',
+      'Je eigen schema wordt gewist en je valt terug op het standaardschema. Dit kan niet ongedaan worden gemaakt.',
+      [
+        { text: 'Annuleren', style: 'cancel' },
+        {
+          text: 'Wissen',
+          style: 'destructive',
+          onPress: () => { clearCustomPlan(); setEditMode(false); },
+        },
+      ],
+    );
+  };
+
+  const handleSaveSession = (session: Session | Omit<Session, 'id'>) => {
+    if (!editorState) return;
+    if ('id' in session) {
+      updateCustomSession(editorState.weekNumber, session);
+    } else {
+      addCustomSession(editorState.weekNumber, session);
+    }
+    setEditorState(null);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -56,23 +139,21 @@ export default function ScheduleScreen() {
 
         {/* Toggle trainingsschema / wedstrijdschema */}
         <View style={styles.modeToggle}>
-          <TouchableOpacity
+          <PressableScale
             style={[styles.modeBtn, schemaMode === 'training' && styles.modeBtnActive]}
             onPress={() => setSchemaMode('training')}
-            activeOpacity={0.8}
             accessibilityRole="button"
-            accessibilityLabel="Trainingsschema"
+            accessibilityLabel="Vrij schema"
             accessibilityState={{ selected: schemaMode === 'training' }}
           >
             <Dumbbell size={13} color={schemaMode === 'training' ? '#fff' : colors.textSecondary} strokeWidth={2} />
             <Text style={[styles.modeBtnLabel, schemaMode === 'training' && styles.modeBtnLabelActive]}>
-              Trainingsschema
+              Vrij schema
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
+          </PressableScale>
+          <PressableScale
             style={[styles.modeBtn, schemaMode === 'race' && styles.modeBtnActive]}
             onPress={() => setSchemaMode('race')}
-            activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel="Wedstrijdschema"
             accessibilityState={{ selected: schemaMode === 'race' }}
@@ -81,7 +162,7 @@ export default function ScheduleScreen() {
             <Text style={[styles.modeBtnLabel, schemaMode === 'race' && styles.modeBtnLabelActive]}>
               Wedstrijdschema
             </Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
 
         {/* Sub-info */}
@@ -89,9 +170,32 @@ export default function ScheduleScreen() {
           <View style={styles.raceInfo}>
             <Text style={styles.raceInfoName}>{planName}</Text>
             <Text style={styles.raceInfoMeta}>
-              🏁 {new Date(racePlan!.race.date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}
+              🏁 {racePlan ? new Date(racePlan.race.date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}
               {'  ·  '}{weeksLeftLabel} · {planTotal}-wekenschema
             </Text>
+          </View>
+        ) : isCustom ? (
+          <View style={styles.customHeaderRow}>
+            <Text style={styles.sub}>{planName} · {planTotal} weken</Text>
+            <PressableScale
+              onPress={() => setEditMode(v => !v)}
+              style={styles.editToggleBtn}
+              accessibilityRole="button"
+              accessibilityLabel={editMode ? 'Klaar met bewerken' : 'Schema bewerken'}
+              accessibilityState={{ selected: editMode }}
+            >
+              {/* key wisselt bij het togglen: laat ScaleIn opnieuw mounten
+                  voor een klein cross-fade/scale-momentje tussen potlood en vinkje. */}
+              <ScaleIn key={editMode ? 'done' : 'edit'} style={styles.editToggleContent} fromScale={0.8}>
+                {editMode
+                  ? <Check size={15} color={colors.success} strokeWidth={2.5} />
+                  : <Pencil size={15} color={colors.brandPrimary} strokeWidth={2} />
+                }
+                <Text style={[styles.editToggleText, editMode && styles.editToggleTextDone]}>
+                  {editMode ? 'Klaar' : 'Bewerk'}
+                </Text>
+              </ScaleIn>
+            </PressableScale>
           </View>
         ) : (
           <Text style={styles.sub}>{planName} · {planTotal} weken</Text>
@@ -118,26 +222,67 @@ export default function ScheduleScreen() {
           </View>
         )}
 
-        {/* Trainingsdagen aanpassen */}
-        <TouchableOpacity
-          style={styles.daysToggle}
-          onPress={() => setShowDayPicker(v => !v)}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel="Trainingsdagen aanpassen"
-          accessibilityState={{ expanded: showDayPicker }}
-        >
-          <CalendarDays size={14} color={colors.brandPrimary} strokeWidth={2} />
-          <Text style={styles.daysToggleText}>
-            Trainingsdagen: {trainingDays.slice().sort((a, b) => a - b).map(d => dayLabel[d]).join(', ')}
-          </Text>
-          {showDayPicker
-            ? <ChevronDown size={16} color={colors.textSecondary} strokeWidth={2} />
-            : <ChevronRight size={16} color={colors.textSecondary} strokeWidth={2} />
-          }
-        </TouchableOpacity>
+        {/* Nog geen eigen vrij schema: bied aan het sjabloon over te nemen of
+            helemaal opnieuw te beginnen. Het sjabloon-plan blijft ondertussen
+            gewoon zichtbaar en bruikbaar hieronder. */}
+        {schemaMode === 'training' && !isCustom && (
+          <View style={styles.noRaceBox}>
+            <View style={styles.noRaceRow}>
+              <Pencil size={14} color={colors.brandPrimary} strokeWidth={2} />
+              <Text style={styles.noRaceText}>
+                Maak er jouw schema van: pas het sjabloon aan of begin helemaal opnieuw.
+              </Text>
+            </View>
+            <View style={styles.customCtaRow}>
+              <TouchableOpacity
+                style={[styles.noRaceBtn, styles.customCtaBtnFull]}
+                onPress={() => initCustomPlan('template')}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={`Start met ${fallbackPlan.name} als basis`}
+              >
+                <Text style={styles.noRaceBtnText} numberOfLines={2}>
+                  Start met {fallbackPlan.name} als basis
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.customCtaSecondaryBtn}
+                onPress={() => initCustomPlan('empty')}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Begin met een leeg schema"
+              >
+                <Text style={styles.customCtaSecondaryBtnText} numberOfLines={2}>
+                  Begin met een leeg schema
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
-        {showDayPicker && (
+        {/* Trainingsdagen aanpassen: bij een eigen vrij schema kies je de dag
+            per sessie, dus is deze sectie dan niet relevant. */}
+        {!isCustom && (
+          <TouchableOpacity
+            style={styles.daysToggle}
+            onPress={() => setShowDayPicker(v => !v)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Trainingsdagen aanpassen"
+            accessibilityState={{ expanded: showDayPicker }}
+          >
+            <CalendarDays size={14} color={colors.brandPrimary} strokeWidth={2} />
+            <Text style={styles.daysToggleText}>
+              Trainingsdagen: {trainingDays.slice().sort((a, b) => a - b).map(d => dayLabel[d]).join(', ')}
+            </Text>
+            {showDayPicker
+              ? <ChevronDown size={16} color={colors.textSecondary} strokeWidth={2} />
+              : <ChevronRight size={16} color={colors.textSecondary} strokeWidth={2} />
+            }
+          </TouchableOpacity>
+        )}
+
+        {!isCustom && showDayPicker && (
           <View style={styles.daysPickerBox}>
             <DayPicker
               value={pickerDays}
@@ -214,7 +359,21 @@ export default function ScheduleScreen() {
                   </View>
                 </View>
                 <View style={styles.weekHeaderRight}>
-                  <Text style={styles.weekKm}>{week.totalKm} km</Text>
+                  <View style={styles.weekKmBlock}>
+                    <Text style={styles.weekKm} numberOfLines={1}>{week.totalKm} km</Text>
+                    <Text style={styles.weekKmLabel} numberOfLines={1}>totaal</Text>
+                  </View>
+                  {isCustom && editMode && (
+                    <TouchableOpacity
+                      onPress={() => handleDeleteWeek(week.weekNumber)}
+                      hitSlop={8}
+                      style={styles.weekDeleteBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Week ${week.weekNumber} verwijderen`}
+                    >
+                      <Trash2 size={16} color={colors.error} strokeWidth={2} />
+                    </TouchableOpacity>
+                  )}
                   {isExpanded
                     ? <ChevronDown size={18} color={colors.textSecondary} strokeWidth={2} />
                     : <ChevronRight size={18} color={colors.textSecondary} strokeWidth={2} />
@@ -223,36 +382,106 @@ export default function ScheduleScreen() {
               </TouchableOpacity>
 
               {isExpanded && (
-                <View style={styles.sessionList}>
+                <Animated.View
+                  entering={sessionListEntering}
+                  exiting={sessionListExiting}
+                  style={styles.sessionList}
+                >
                   {week.sessions.map(session => {
                     const isCompleted = completedSessions.some(c => c.sessionId === session.id);
                     const isSkipped = skippedSessions.some(sk => sk.sessionId === session.id);
                     const isHandled = isCompleted || isSkipped;
                     const pace = paceForType(session.type);
+                    const canEditRow = isCustom && editMode;
                     return (
-                      <View key={session.id} style={[styles.sessionRow, isHandled && styles.sessionRowDone]}>
-                        <View style={[styles.sessionDot, { backgroundColor: zoneInfo[session.zone].color }, isHandled && styles.sessionDotDone]} />
+                      <TouchableOpacity
+                        key={session.id}
+                        activeOpacity={canEditRow ? 0.7 : 1}
+                        disabled={!canEditRow}
+                        onPress={() => setEditorState({ weekNumber: week.weekNumber, session })}
+                        style={[styles.sessionRow, isHandled && !canEditRow && styles.sessionRowDone]}
+                        accessibilityRole={canEditRow ? 'button' : undefined}
+                        accessibilityLabel={canEditRow ? `${session.description} bewerken` : undefined}
+                      >
+                        <View style={[styles.sessionDot, { backgroundColor: zoneInfo[session.zone].color }, isHandled && !canEditRow && styles.sessionDotDone]} />
                         <Text style={styles.sessionDay}>{dayLabel[session.day]}</Text>
-                        <Text style={[styles.sessionDesc, isHandled && styles.textMuted]} numberOfLines={1}>
+                        <Text style={[styles.sessionDesc, isHandled && !canEditRow && styles.textMuted]} numberOfLines={1}>
                           {session.description}
                         </Text>
                         {/* Persoonlijk trainingstempo naast de afstand (premium + doeltijd) */}
-                        {pace != null && pace > 0 && !isSkipped && (
+                        {!canEditRow && pace != null && pace > 0 && !isSkipped && (
                           <Text style={styles.sessionPace}>{formatPacePerKm(pace)}</Text>
                         )}
-                        {isSkipped
-                          ? <Text style={styles.skippedMark}>overgeslagen</Text>
-                          : <Text style={styles.sessionKm}>{session.distanceKm} km</Text>
-                        }
-                        {isCompleted && <Text style={styles.checkmark}>✓</Text>}
-                      </View>
+                        {!canEditRow && isSkipped ? (
+                          <Text style={styles.skippedMark}>overgeslagen</Text>
+                        ) : (
+                          <Text style={styles.sessionKm}>{session.distanceKm} km</Text>
+                        )}
+                        {!canEditRow && isCompleted && <Text style={styles.checkmark}>✓</Text>}
+                        {canEditRow && (
+                          <TouchableOpacity
+                            onPress={() => handleDeleteSession(week.weekNumber, session)}
+                            hitSlop={8}
+                            style={styles.sessionDeleteBtn}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${session.description} verwijderen`}
+                          >
+                            <Trash2 size={15} color={colors.error} strokeWidth={2} />
+                          </TouchableOpacity>
+                        )}
+                      </TouchableOpacity>
                     );
                   })}
-                </View>
+
+                  {isCustom && editMode && (
+                    <TouchableOpacity
+                      onPress={() => setEditorState({ weekNumber: week.weekNumber, session: null })}
+                      style={styles.addSessionRow}
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel="Sessie toevoegen"
+                    >
+                      <Plus size={16} color={colors.brandPrimary} strokeWidth={2.5} />
+                      <Text style={styles.addSessionText}>Sessie toevoegen</Text>
+                    </TouchableOpacity>
+                  )}
+                </Animated.View>
               )}
             </View>
           );
         }}
+        ListFooterComponent={
+          isCustom && editMode ? (
+            <View style={styles.customFooter}>
+              <TouchableOpacity
+                onPress={addCustomWeek}
+                style={styles.addWeekBtn}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Week toevoegen"
+              >
+                <Plus size={16} color={colors.brandPrimary} strokeWidth={2.5} />
+                <Text style={styles.addWeekText}>Week toevoegen</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleClearPlan}
+                style={styles.clearPlanBtn}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Schema wissen"
+              >
+                <Text style={styles.clearPlanText}>Schema wissen</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null
+        }
+      />
+
+      <SessionEditorSheet
+        visible={!!editorState}
+        initialSession={editorState?.session ?? null}
+        onClose={() => setEditorState(null)}
+        onSave={handleSaveSession}
       />
     </SafeAreaView>
   );
@@ -313,6 +542,61 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   noRaceBtnText: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm, color: '#fff',
+  },
+  customHeaderRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  editToggleBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    minHeight: 36, paddingHorizontal: spacing[1.5],
+    borderRadius: radius.full, borderWidth: 1, borderColor: colors.brandPrimary + '44',
+    backgroundColor: colors.brandPrimary + '11',
+  },
+  editToggleContent: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+  },
+  editToggleText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.xs,
+    color: colors.brandPrimary,
+  },
+  editToggleTextDone: { color: colors.success },
+  customCtaRow: { gap: spacing[1] },
+  customCtaBtnFull: { alignSelf: 'stretch' },
+  customCtaSecondaryBtn: {
+    minHeight: 44, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: spacing[2], borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.brandPrimary + '55',
+    alignSelf: 'stretch',
+  },
+  customCtaSecondaryBtnText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm, color: colors.brandPrimary,
+  },
+  weekDeleteBtn: { padding: 4 },
+  sessionDeleteBtn: { padding: 4, marginLeft: 2 },
+  addSessionRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingVertical: spacing[1], minHeight: 40,
+  },
+  addSessionText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
+    color: colors.brandPrimary,
+  },
+  customFooter: { gap: spacing[1.5], paddingTop: spacing[1], alignItems: 'center' },
+  addWeekBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    minHeight: 44, width: '100%',
+    borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.brandPrimary + '55',
+    borderStyle: 'dashed',
+  },
+  addWeekText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
+    color: colors.brandPrimary,
+  },
+  clearPlanBtn: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[2] },
+  clearPlanText: {
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.xs,
+    color: colors.textTertiary, textDecorationLine: 'underline',
   },
   daysToggle: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -388,8 +672,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
     color: colors.textSecondary, marginTop: 2,
   },
+  weekKmBlock: { alignItems: 'flex-end' },
   weekKm: {
     fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.sm, color: colors.textSecondary,
+  },
+  weekKmLabel: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs, color: colors.textSecondary,
+    opacity: 0.7, marginTop: -1,
   },
   sessionList: {
     borderTopWidth: 1, borderTopColor: colors.borderSubtle,

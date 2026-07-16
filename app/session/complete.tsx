@@ -10,23 +10,27 @@ import React, { useState, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Trophy, Share2, RefreshCw, ChevronRight, Dumbbell, Medal } from 'lucide-react-native';
+import { Trophy, Share2, RefreshCw, ChevronRight, Dumbbell, Medal, Flame } from 'lucide-react-native';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
+import { resolveActivePlan } from '../../src/data/activePlan';
 import { Button } from '../../src/components/ui/Button';
 import { ShareRunSheet } from '../../src/components/ui/ShareRunSheet';
+import { ScaleIn } from '../../src/components/motion/ScaleIn';
 
 const goalLabel: Record<string, string> = {
   '5km':           '5 KM',
   '10km':          '10 KM',
+  '15km':          '15 KM',
   'half_marathon': 'Halve Marathon',
   'marathon':      'Marathon',
 };
 
 const nextGoalSuggestion: Record<string, string | null> = {
   '5km':           '10km',
-  '10km':          'half_marathon',
+  '10km':          '15km',
+  '15km':          'half_marathon',
   'half_marathon': 'marathon',
   'marathon':      null,
 };
@@ -45,6 +49,7 @@ export default function SchemaCompleteScreen() {
   const profile           = useAppStore(s => s.profile);
   const completedSessions = useAppStore(s => s.completedSessions);
   const racePlan          = useAppStore(s => s.racePlan);
+  const customPlan        = useAppStore(s => s.customPlan);
   const schemaMode        = useAppStore(s => s.schemaMode);
   const [showShare, setShowShare] = useState(false);
   const colors = useThemeColors();
@@ -54,9 +59,8 @@ export default function SchemaCompleteScreen() {
 
   const lastSession = completedSessions[completedSessions.length - 1];
 
-  const planName = schemaMode === 'race' && racePlan
-    ? racePlan.race.name
-    : goalLabel[profile.goal] ?? profile.goal;
+  const resolved = resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal });
+  const planName = resolved.isRace || resolved.isCustom ? resolved.name : (goalLabel[profile.goal] ?? profile.goal);
 
   const totalRunKm = completedSessions.reduce((s, c) => s + c.actualDistanceKm, 0);
   const totalRuns  = completedSessions.length;
@@ -74,9 +78,9 @@ export default function SchemaCompleteScreen() {
 
         {/* Hero */}
         <View style={styles.hero}>
-          <View style={styles.trophyBox}>
+          <ScaleIn style={styles.trophyBox}>
             <Trophy size={56} color={colors.brandPrimary} strokeWidth={1.5} />
-          </View>
+          </ScaleIn>
           <Text style={styles.heroTitle}>Schema voltooid!</Text>
           <Text style={styles.heroSub}>
             Je hebt het volledige {planName}-schema afgerond.{'\n'}
@@ -123,9 +127,11 @@ export default function SchemaCompleteScreen() {
                 <View style={styles.nextGoalIcon}>
                   {nextGoal === '10km'
                     ? <Dumbbell size={22} color={colors.brandLight} strokeWidth={2} />
-                    : nextGoal === 'half_marathon'
-                      ? <Medal size={22} color={colors.brandLight} strokeWidth={2} />
-                      : <Trophy size={22} color={colors.brandLight} strokeWidth={2} />}
+                    : nextGoal === '15km'
+                      ? <Flame size={22} color={colors.brandLight} strokeWidth={2} />
+                      : nextGoal === 'half_marathon'
+                        ? <Medal size={22} color={colors.brandLight} strokeWidth={2} />
+                        : <Trophy size={22} color={colors.brandLight} strokeWidth={2} />}
                 </View>
                 <View>
                   <Text style={styles.nextGoalTitle}>{goalLabel[nextGoal]}</Text>

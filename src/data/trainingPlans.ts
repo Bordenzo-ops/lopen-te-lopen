@@ -14,7 +14,7 @@
 // Z5 Max:       91-100%
 
 export type HeartRateZone = 'Z1' | 'Z2' | 'Z3' | 'Z4' | 'Z5';
-export type GoalType = '5km' | '10km' | 'half_marathon' | 'marathon';
+export type GoalType = '5km' | '10km' | '15km' | 'half_marathon' | 'marathon';
 
 export interface Session {
   id: string;
@@ -127,12 +127,12 @@ const plan5km: TrainingWeek[] = [
   },
   {
     weekNumber: 8,
-    totalKm: 8,
+    totalKm: 10,
     focus: 'Race-week: afbouwen',
     sessions: [
       s('5k-8-1', 1, 'easy',  3, 'Z2', 'Afbouwloop', 'Lichte duurloop. Benen fris houden voor de race.'),
       s('5k-8-2', 3, 'easy',  2, 'Z1', 'Activeringsloopje', 'Korte, makkelijke loop. Benen losmaken, niet vermoeien.'),
-      s('5k-8-3', 6, 'easy',  3, 'Z3', '5 KM RACE DAG!', 'Jij bent klaar. Geniet ervan. Loop de eerste km rustiger dan je denkt dat nodig is.'),
+      s('5k-8-3', 6, 'easy',  5, 'Z3', '5 KM RACE DAG!', 'Jij bent klaar. Geniet ervan. Loop de eerste km rustiger dan je denkt dat nodig is.'),
     ],
   },
 ];
@@ -194,10 +194,10 @@ const plan10km: TrainingWeek[] = [
     s('10k-11-2', 3, 'easy',  4, 'Z2', 'Duurloop', 'Niet te hard. Benen fris houden.'),
     s('10k-11-3', 6, 'long',  7, 'Z2', 'Rustige lange duurloop', 'Laatste langere loop. Daarna rusten.'),
   ]},
-  { weekNumber: 12, totalKm: 10, focus: 'Race-week', sessions: [
+  { weekNumber: 12, totalKm: 17, focus: 'Race-week', sessions: [
     s('10k-12-1', 1, 'easy',  4, 'Z2', 'Afbouwloop', 'Lekker loopje. Benen losmaken.'),
     s('10k-12-2', 3, 'easy',  3, 'Z1', 'Activeringsloopje', 'Kort en makkelijk. Benen niet vermoeien.'),
-    s('10k-12-3', 6, 'easy',  3, 'Z3', '10 KM RACE DAG!', 'Je bent hier klaar voor. Loop de eerste 3 km langzamer dan je wilt. Het loont.'),
+    s('10k-12-3', 6, 'easy', 10, 'Z3', '10 KM RACE DAG!', 'Je bent hier klaar voor. Loop de eerste 3 km langzamer dan je wilt. Het loont.'),
   ]},
 ];
 
@@ -236,7 +236,7 @@ const planHalfMarathon: TrainingWeek[] = [
   { weekNumber: 7,  totalKm: 28, focus: 'Kracht opbouwen', sessions: [
     s('hm-7-1', 1, 'easy',  8, 'Z2', 'Duurloop', 'Acht km. Je bent er klaar voor.'),
     s('hm-7-2', 3, 'tempo', 7, 'Z3', 'Tempoduurloop', 'Houd het tempo door. Tweede helft even snel als eerste.'),
-    s('hm-7-3', 6, 'long', 13, 'Z2', 'Lange duurloop', 'Dertien km. Eerste keer boven de 10 km in de lange loop.'),
+    s('hm-7-3', 6, 'long', 13, 'Z2', 'Lange duurloop', 'Dertien km, je nieuwe afstandsrecord. Loop de eerste helft bewust rustig.'),
   ]},
   { weekNumber: 8,  totalKm: 21, focus: 'Herstelweek', sessions: [
     s('hm-8-1', 1, 'easy',  6, 'Z1', 'Herstelloop', 'Heel rustig. Spierherstel prioriteit.'),
@@ -296,9 +296,9 @@ const planHalfMarathon: TrainingWeek[] = [
   { weekNumber: 19, totalKm: 12, focus: 'Race-week voorbereiding', sessions: [
     s('hm-19-1', 1, 'easy',  5, 'Z2', 'Duurloop', 'Vijf km. Helemaal ontspannen.'),
     s('hm-19-2', 3, 'easy',  4, 'Z1', 'Activeringsloop', 'Vier km heel rustig. Benen losmaken.'),
-    s('hm-19-3', 6, 'easy',  3, 'Z2', 'Dag-voor-race loopje', 'Drie km makkelijk. Morgen is het zover!'),
+    s('hm-19-3', 6, 'easy',  3, 'Z2', 'Dag-voor-race loopje', 'Drie km makkelijk. Volgende week is het zover — fris blijven.'),
   ]},
-  { weekNumber: 20, totalKm: 21, focus: 'RACE WEEK', sessions: [
+  { weekNumber: 20, totalKm: 27, focus: 'RACE WEEK', sessions: [
     s('hm-20-1', 1, 'easy',  3, 'Z1', 'Rustig loopje', 'Drie km heel rustig. Race is zondag.'),
     s('hm-20-2', 3, 'easy',  3, 'Z1', 'Activeringsloop', 'Drie km. Techniek en ontspanning.'),
     s('hm-20-3', 6, 'long', 21, 'Z3', 'HALVE MARATHON RACE DAG!', 'Twintig weken. Duizenden kilometers. Nu is het moment. Loop de eerste 5 km langzamer dan je wilt. Ga dan lekker.'),
@@ -422,12 +422,88 @@ const planMarathon: TrainingWeek[] = [
   { weekNumber: 23, totalKm: 14, focus: 'Race-week voorbereiding', sessions: [
     s('m-23-1', 1, 'easy',  6, 'Z2', 'Duurloop', 'Zes km. Helemaal ontspannen.'),
     s('m-23-2', 3, 'easy',  5, 'Z1', 'Activeringsloop', 'Vijf km heel rustig. Benen losmaken.'),
-    s('m-23-3', 6, 'easy',  3, 'Z2', 'Dag-voor-race loopje', 'Drie km makkelijk. Morgen is het zover!'),
+    s('m-23-3', 6, 'easy',  3, 'Z2', 'Dag-voor-race loopje', 'Drie km makkelijk. Volgende week is het zover — fris blijven.'),
   ]},
-  { weekNumber: 24, totalKm: 42, focus: 'RACE WEEK', sessions: [
+  { weekNumber: 24, totalKm: 48, focus: 'RACE WEEK', sessions: [
     s('m-24-1', 1, 'easy',  3, 'Z1', 'Rustig loopje', 'Drie km heel rustig. Race is zondag.'),
     s('m-24-2', 3, 'easy',  3, 'Z1', 'Activeringsloop', 'Drie km. Techniek en ontspanning.'),
     s('m-24-3', 6, 'long', 42, 'Z3', 'MARATHON RACE DAG!', 'Vierentwintig weken. Tienduizenden meters. Nu is het moment. Loop de eerste 10 km langzamer dan je wilt. Daarna zet je aan. Geniet van elk kilometer.'),
+  ]},
+];
+
+// ── 15 KM / 10 MIJL SCHEMA (14 weken) ─────────
+// Doelgroep: loopt al comfortabel 8-10 km en wil de stap naar 15 km / 10
+// Engelse mijl maken (bijv. Zevenheuvelenloop, Tilburg Ten Miles).
+const plan15km: TrainingWeek[] = [
+  { weekNumber: 1, totalKm: 17, focus: 'Basis bevestigen', sessions: [
+    s('15k-1-1', 1, 'easy',  5, 'Z2', 'Rustige duurloop', 'Vijf km op een prettig tempo. Dit wordt je basis voor de komende 14 weken.'),
+    s('15k-1-2', 3, 'tempo', 4, 'Z3', 'Tempoduurloop', 'Vier km iets sneller dan je duurlooptempo. Je kunt nog een paar woorden zeggen.'),
+    s('15k-1-3', 6, 'long',  8, 'Z2', 'Lange duurloop', 'Acht km rustig. Langste sessie van de week, neem de tijd.'),
+  ]},
+  { weekNumber: 2, totalKm: 19, focus: 'Ritme opbouwen', sessions: [
+    s('15k-2-1', 1, 'easy',  5, 'Z2', 'Rustige duurloop', 'Zelfde gevoel als vorige week. Let op een gelijkmatige ademhaling.'),
+    s('15k-2-2', 3, 'tempo', 5, 'Z3', 'Tempoduurloop', 'Vijf km op tempo. Probeer je ritme de hele sessie vast te houden.'),
+    s('15k-2-3', 6, 'long',  9, 'Z2', 'Lange duurloop', 'Negen km. Eén stapje verder dan vorige week.'),
+  ]},
+  { weekNumber: 3, totalKm: 21, focus: 'Afstand opbouwen', sessions: [
+    s('15k-3-1', 1, 'easy',  6, 'Z2', 'Duurloop', 'Zes km makkelijk. Je lichaam went aan de opbouw.'),
+    s('15k-3-2', 3, 'tempo', 5, 'Z3', 'Tempoduurloop', 'Vijf km op tempo, gecontroleerd en sterk.'),
+    s('15k-3-3', 6, 'long', 10, 'Z2', 'Lange duurloop: 10 km', 'Tien km! Mooie mijlpaal onderweg naar de 15.'),
+  ]},
+  { weekNumber: 4, totalKm: 16, focus: 'Herstelweek', sessions: [
+    s('15k-4-1', 1, 'easy',  4, 'Z1', 'Herstelloop', 'Heel rustig. Herstelweek: minder km, beter worden.'),
+    s('15k-4-2', 3, 'easy',  5, 'Z2', 'Duurloop', 'Vijf km ontspannen. Focus op techniek: rechtop lopen, losse schouders.'),
+    s('15k-4-3', 6, 'long',  7, 'Z2', 'Rustige lange duurloop', 'Bewust minder dan vorige week. Herstel is training.'),
+  ]},
+  { weekNumber: 5, totalKm: 22, focus: 'Duurvermogen', sessions: [
+    s('15k-5-1', 1, 'easy',  6, 'Z2', 'Duurloop', 'Zes km stabiel. Je basis wordt steeds sterker.'),
+    s('15k-5-2', 3, 'tempo', 5, 'Z3', 'Tempoduurloop', 'Vijf km op een uitdagend maar houdbaar tempo.'),
+    s('15k-5-3', 6, 'long', 11, 'Z2', 'Lange duurloop', 'Elf km. Loop de eerste helft bewust rustig.'),
+  ]},
+  { weekNumber: 6, totalKm: 24, focus: 'Tempo verhogen', sessions: [
+    s('15k-6-1', 1, 'easy',  6, 'Z2', 'Duurloop', 'Zes km vlot en ontspannen.'),
+    s('15k-6-2', 3, 'tempo', 6, 'Z3', 'Tempoduurloop', 'Zes km op tempo, de langste temposessie tot nu toe.'),
+    s('15k-6-3', 6, 'long', 12, 'Z2', 'Lange duurloop', 'Twaalf km. Neem gel of water mee na 45 minuten.'),
+  ]},
+  { weekNumber: 7, totalKm: 26, focus: 'Kracht opbouwen', sessions: [
+    s('15k-7-1', 1, 'easy',  7, 'Z2', 'Duurloop', 'Zeven km. Je bent er duidelijk sterker op geworden.'),
+    s('15k-7-2', 3, 'tempo', 6, 'Z3', 'Tempoduurloop', 'Zes km op tempo. Houd het tempo de hele sessie vast.'),
+    s('15k-7-3', 6, 'long', 13, 'Z2', 'Lange duurloop: 13 km', 'Dertien km, je nieuwe afstandsrecord. Rustig starten, sterk eindigen.'),
+  ]},
+  { weekNumber: 8, totalKm: 19, focus: 'Herstelweek', sessions: [
+    s('15k-8-1', 1, 'easy',  5, 'Z1', 'Herstelloop', 'Rustig. Spierherstel heeft nu prioriteit.'),
+    s('15k-8-2', 3, 'easy',  6, 'Z2', 'Duurloop', 'Zes km ontspannen. Techniek: cadans en armschommel.'),
+    s('15k-8-3', 6, 'long',  8, 'Z2', 'Rustige lange duurloop', 'Mindere week zodat je fris bent voor de laatste opbouw.'),
+  ]},
+  { weekNumber: 9, totalKm: 27, focus: 'Race-tempo oefenen', sessions: [
+    s('15k-9-1', 1, 'easy',  7, 'Z2', 'Duurloop', 'Zeven km stabiel en krachtig.'),
+    s('15k-9-2', 3, 'tempo', 6, 'Z4', 'Drempelloop op doeltempo', 'Zes km op je beoogde racetempo. Zo gaat het straks voelen.'),
+    s('15k-9-3', 6, 'long', 14, 'Z2', 'Lange duurloop: 14 km', 'Veertien km. Bijna de wedstrijdafstand, mooi vertrouwen voor de piekweek.'),
+  ]},
+  { weekNumber: 10, totalKm: 29, focus: 'Piekweek', sessions: [
+    s('15k-10-1', 1, 'easy',  7, 'Z2', 'Duurloop', 'Zeven km makkelijk. Je lichaam kent deze afstanden nu.'),
+    s('15k-10-2', 3, 'tempo', 7, 'Z3', 'Tempoduurloop', 'Zeven km op tempo, de langste temposessie van het schema.'),
+    s('15k-10-3', 6, 'long', 15, 'Z2', 'Lange duurloop: 15 km', 'Vijftien km, de volledige wedstrijdafstand! Rustig lopen, dit is puur duurvermogen bevestigen.'),
+  ]},
+  { weekNumber: 11, totalKm: 26, focus: 'Bevestigen', sessions: [
+    s('15k-11-1', 1, 'easy',  7, 'Z2', 'Duurloop', 'Zeven km vlot. Je bent race-klaar aan het worden.'),
+    s('15k-11-2', 3, 'tempo', 6, 'Z4', 'Drempelloop', 'Zes km op drempelintensiteit. Moeilijk maar doenbaar.'),
+    s('15k-11-3', 6, 'long', 13, 'Z2', 'Lange duurloop', 'Dertien km. Herhaling van week 7, voel het verschil.'),
+  ]},
+  { weekNumber: 12, totalKm: 21, focus: 'Afbouwen fase 1', sessions: [
+    s('15k-12-1', 1, 'easy',  6, 'Z2', 'Duurloop', 'Zes km. Bewust iets minder, energie sparen.'),
+    s('15k-12-2', 3, 'tempo', 5, 'Z3', 'Tempoduurloop', 'Vijf km op race-tempo. Lekker gevoel vinden.'),
+    s('15k-12-3', 6, 'long', 10, 'Z2', 'Rustige lange duurloop', 'Tien km rustig. Je bewaart energie voor de race.'),
+  ]},
+  { weekNumber: 13, totalKm: 17, focus: 'Afbouwen fase 2', sessions: [
+    s('15k-13-1', 1, 'easy',  5, 'Z2', 'Duurloop', 'Vijf km. Benen fris houden.'),
+    s('15k-13-2', 3, 'tempo', 4, 'Z3', 'Tempoduurloop', 'Vier km op race-tempo. Een van de laatste keer.'),
+    s('15k-13-3', 6, 'long',  8, 'Z2', 'Rustige lange duurloop', 'Acht km rustig. Laatste echte duurloop voor de race.'),
+  ]},
+  { weekNumber: 14, totalKm: 22, focus: 'Race-week', sessions: [
+    s('15k-14-1', 1, 'easy',  4, 'Z2', 'Afbouwloop', 'Vier km rustig. Benen fris houden voor de race.'),
+    s('15k-14-2', 3, 'easy',  3, 'Z1', 'Activeringsloopje', 'Drie km heel rustig. Benen losmaken, niet vermoeien.'),
+    s('15k-14-3', 6, 'easy', 15, 'Z3', '15 KM RACE DAG!', 'Veertien weken werk komen hier samen. Loop de eerste 3 km langzamer dan je wilt, dan lekker doortrekken.'),
   ]},
 ];
 
@@ -448,6 +524,14 @@ export const trainingPlans: TrainingPlan[] = [
     targetDistance: 10,
     description: 'Bouw op naar een comfortabele 10 km in 12 weken.',
     plan: plan10km,
+  },
+  {
+    id: '15km',
+    name: '15 KM / 10 Mijl',
+    weeks: 14,
+    targetDistance: 15,
+    description: 'Van comfortabel 8-10 km naar 15 km (10 Engelse mijl) in 14 weken. Perfect voor de Zevenheuvelenloop of Tilburg Ten Miles.',
+    plan: plan15km,
   },
   {
     id: 'half_marathon',
