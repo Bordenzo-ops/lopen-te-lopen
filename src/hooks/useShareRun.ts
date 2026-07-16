@@ -137,31 +137,54 @@ export function useShareRun() {
 
   /** Slaat de kaart op in de fotobibliotheek (vraagt toestemming indien nodig) */
   const saveToLibrary = useCallback(async (imageUri: string): Promise<ShareResult> => {
-    let MediaLibrary: typeof import('expo-media-library');
     try {
-      MediaLibrary = require('expo-media-library');
-    } catch {
-      // Native module ontbreekt (bijv. in Expo Go): sla netjes af in plaats van crashen
+      let MediaLibrary: typeof import('expo-media-library');
+      try {
+        MediaLibrary = require('expo-media-library');
+      } catch {
+        // Native module ontbreekt (bijv. in Expo Go): sla netjes af in plaats van crashen
+        Alert.alert(
+          'Niet beschikbaar',
+          'Opslaan in je fotobibliotheek werkt niet in Expo Go. Gebruik het deelmenu of een development build.',
+        );
+        return { success: false, error: 'media_library_unavailable' };
+      }
+      // LET OP: MediaLibrary.Asset.create() (de "Next"-API) doet op iOS zélf een
+      // interne permissiecheck die altijd de VOLLEDIGE (niet write-only) requester
+      // gebruikt en eist dat accessPrivileges === 'all' is — zie
+      // node_modules/expo-media-library/ios/next/MediaLibraryNextModule.swift
+      // regel 296-321 (checkIfPermissionGranted). Vragen we hier alleen write-only/
+      // add-only toestemming aan (writeOnly: true), dan is die volledige toestemming
+      // nooit verleend en gooit Asset.create() op iOS altijd FailedToGrantPermissions.
+      // Android controleert dit niet op deze manier — assetFactory.create() in
+      // MediaLibraryNextModule.kt (regel 180) doet geen eigen permissiecheck — dus
+      // daar blijft write-only volstaan en behouden we het bestaande gedrag.
+      const writeOnly = Platform.OS !== 'ios';
+      const { status } = await MediaLibrary.requestPermissionsAsync(writeOnly);
+      if (status !== 'granted') {
+        Alert.alert(
+          'Geen toegang',
+          'Geef toegang tot je fotobibliotheek om de kaart op te slaan.',
+        );
+        return { success: false, error: 'permission_denied' };
+      }
+      // saveToLibraryAsync is deprecated in expo-media-library 56 en gooit een runtime-error;
+      // Asset.create() is de vervangende API voor het opslaan van een bestand in de bibliotheek.
+      // Kan alsnog gooien (bv. bij 'beperkte toegang' op iOS, waar accessPrivileges
+      // 'limited' i.p.v. 'all' is) — daarom volledig binnen deze try/catch.
+      await MediaLibrary.Asset.create(imageUri);
+      Alert.alert('Opgeslagen!', 'Je run-kaart staat in je fotobibliotheek. Open Instagram om te delen.');
+      return { success: true, method: 'saved' };
+    } catch (err: any) {
+      // Nooit een onafgehandelde rejection laten ontstaan (zie Sentry ANDROID-5 /
+      // FailedToGrantPermissions op iOS) — altijd netjes afvangen en teruggeven.
+      console.error('[useShareRun] saveToLibrary:', err);
       Alert.alert(
-        'Niet beschikbaar',
-        'Opslaan in je fotobibliotheek werkt niet in Expo Go. Gebruik het deelmenu of een development build.',
+        'Opslaan mislukt',
+        'Kon de kaart niet opslaan in je fotobibliotheek. Probeer het opnieuw of gebruik het deelmenu.',
       );
-      return { success: false, error: 'media_library_unavailable' };
+      return { success: false, error: err?.message ?? 'save_failed' };
     }
-    // writeOnly: de app hoeft alleen op te slaan, niet de bibliotheek te lezen
-    const { status } = await MediaLibrary.requestPermissionsAsync(true);
-    if (status !== 'granted') {
-      Alert.alert(
-        'Geen toegang',
-        'Geef toegang tot je fotobibliotheek om de kaart op te slaan.',
-      );
-      return { success: false, error: 'permission_denied' };
-    }
-    // saveToLibraryAsync is deprecated in expo-media-library 56 en gooit een runtime-error;
-    // Asset.create() is de vervangende API voor het opslaan van een bestand in de bibliotheek.
-    await MediaLibrary.Asset.create(imageUri);
-    Alert.alert('Opgeslagen!', 'Je run-kaart staat in je fotobibliotheek. Open Instagram om te delen.');
-    return { success: true, method: 'saved' };
   }, []);
 
   /**

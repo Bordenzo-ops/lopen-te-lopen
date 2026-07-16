@@ -70,9 +70,15 @@ export function ShareRunSheet({
   }, [share, onClose]);
 
   const handleSave = useCallback(async () => {
-    const uri = await captureCard();
-    if (uri) {
-      await saveToLibrary(uri);
+    // onPress awaits deze functie niet — vang alles af zodat er nooit een
+    // onafgehandelde rejection ontstaat (zie Sentry ANDROID-5).
+    try {
+      const uri = await captureCard();
+      if (uri) {
+        await saveToLibrary(uri);
+      }
+    } catch (err) {
+      console.error('[ShareRunSheet] handleSave:', err);
     }
   }, [captureCard, saveToLibrary]);
 
