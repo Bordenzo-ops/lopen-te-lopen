@@ -93,6 +93,7 @@
       ],
       "expo-asset",
       "react-native-health-connect",
+      "./plugins/withHealthConnectDelegate.js",
       "expo-secure-store",
       [
         "@sentry/react-native",
