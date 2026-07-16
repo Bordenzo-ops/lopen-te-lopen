@@ -105,6 +105,16 @@ Sentry meldde twee nieuwe issues die een vriend tijdens het testen op zijn iPhon
 - **Nu**: bouw zonder `--auto-submit` (`eas build --platform android --profile production`) en sleep de `.aab` handmatig in de Play Console.
 - **Eenmalig instellen**: Google Service Account aanmaken via Play Console > Setup > API access -> service account in Google Cloud -> JSON-key downloaden -> rechten geven in Play Console (Release + View app information) -> bestand opslaan als `google-service-account.json` in de projectroot (staat al in .gitignore). Daarna werkt `--auto-submit` ook voor Android zonder prompt. Gids: https://expo.fyi/creating-google-service-account. (Lars is deze route aan het uitvoeren.)
 
+### Nieuwe feature: Logboek-tab met kalender en periode-deelkaarten (2026-07-16)
+
+Gebouwd met twee parallelle Sonnet-agents (contract-first, disjuncte bestanden), gecommit als `cc9c4e02` op master. Lost het probleem op dat een run alleen direct na de sessie deelbaar was.
+
+- **Nieuwe tab "Logboek"** (tussen Schema en Wedstrijd, `app/(tabs)/logbook.tsx` + regel in `_layout.tsx`): zelfgebouwde maandkalender (`src/components/ui/RunCalendar.tsx`, geen library) met gemarkeerde run-dagen; dagdetail toont per run afstand/duur/tempo/bron met een deelknop die de bestaande `ShareRunSheet` opent. Elke oude run is dus alsnog naar Instagram/socials te delen — data zat altijd al in `completedSessions` (zustand-persist).
+- **Periode-delen (eigen Strava-recap)**: segmentcontrol Week/Maand/Kwartaal/Jaar met statsoverzicht en "Deel je …"-knop. `src/utils/periodStats.ts` (pure aggregaties, ISO-weken ma-zo, vergelijking t.o.v. vorige periode; % alleen getoond als er toen al historie was), `SharePeriodCard.tsx` (9:16, drie stijlvarianten: gradient/minimaal/grid; jaar krijgt "Jaaroverzicht"-label) en `SharePeriodSheet.tsx` (live stijlkiezer, hergebruikt `useShareRun`). Alles gratis (bewuste keuze Lars: delen = gratis marketing), geen nieuwe npm-packages, `tsc --noEmit` schoon.
+- **Zit nog in GEEN build**: iOS build 8 en de Android v13-build zijn ouder dan deze commit. Meenemen in de eerstvolgende builds (iOS wordt 9, Android 14, tenzij v13 nog niet gebouwd was).
+- **Testpunten fysiek toestel**: kalendermarkering en dagdetail bij bestaande runs; oude run delen naar Instagram Stories én opslaan; periode-sheet met alle drie stijlen (licht + donker thema); lege staten (geen runs, dag zonder run); delta-percentage pas na 2+ periodes met data.
+- **Let op**: parallelle sessie werkte tegelijk aan de stemmen-fix; `src/services/voiceService.ts` stond bij afronden nog ongecommit in de working tree en is bewust buiten commit `cc9c4e02` gehouden.
+
 ## Al voorbereid in code (niet opnieuw doen)
 
 - `src/services/purchaseService.ts`: kiest de RevenueCat-key per platform. iOS -> `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`, Android -> `EXPO_PUBLIC_REVENUECAT_API_KEY`, zonder platform-fallback (sinds 2026-07-13; zie de subsectie hierboven). `getTrialInfo` leest op iOS `product.introPrice`.
