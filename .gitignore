@@ -45,7 +45,8 @@ Thumbs.db
 *.zip
 assets/Lopen te Lopen - live.html
 
-# Losse marketing- en website-map (aparte projecten, geen app-broncode)
-website/
-marketing/
+# Losse projecten en interne documenten (geen app-broncode, horen niet op GitHub):
+# handover-notities, commerciele strategie, security/design reviews, de losse
+# website- en marketing-projecten, en losse dev-tools zoals elevenlabs-mcp.
+_workspace/
 .agents/
