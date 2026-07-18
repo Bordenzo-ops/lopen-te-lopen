@@ -412,6 +412,14 @@ function ConfirmModal({
   const [targetSeconds, setTargetSeconds]     = useState<number | null>(null);
   const [comfortableKm, setComfortableKmState] = useState<number>(initialComfortableKm ?? 0);
 
+  // Wedstrijdschema's zijn kalender-verankerd (week 1 = aankomende maandag),
+  // dus een nieuw schema begint altijd opnieuw bij week 1. Als de gebruiker
+  // al voortgang had in een vorig schema, laten we dat hier weten zodat de
+  // reset geen verrassing is (geen keuzedialoog, gewoon een infotekst).
+  const existingRacePlan   = useAppStore(s => s.racePlan);
+  const existingWeekRace   = useAppStore(s => s.currentWeekRace);
+  const showsResetNotice   = existingRacePlan !== null && existingWeekRace > 1;
+
   // Herbouw het schema live zodra de gebruiker zijn niveau wijzigt. Bij 0
   // ("Nul, ik begin") gedraagt buildRacePlan zich identiek aan zonder niveau.
   const plan = useMemo(
@@ -463,6 +471,12 @@ function ConfirmModal({
                 </View>
               ))}
             </View>
+
+            {showsResetNotice && (
+              <Text style={styles.resetNotice}>
+                Je stond op week {existingWeekRace} van je vorige schema. Dit nieuwe schema start opnieuw bij week 1.
+              </Text>
+            )}
 
             {/* Niveau: hoeveel loop je nu al comfortabel? */}
             <View style={styles.levelBox}>
@@ -1118,6 +1132,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   modalStat: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   modalStatLabel: { fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm, color: colors.textSecondary },
   modalStatValue: { fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm, color: colors.textPrimary, textTransform: 'capitalize' },
+  resetNotice: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
+    color: colors.textSecondary, textAlign: 'center', lineHeight: typography.fontSize.xs * 1.55,
+    paddingHorizontal: spacing[1], marginTop: spacing[0.5],
+  },
   confirmBtn: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[1], paddingVertical: spacing[1.5], borderRadius: radius.xl, marginTop: spacing[0.5] },
   confirmBtnText: { fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base, color: '#fff' },
   cancelBtn: { paddingVertical: spacing[1] },

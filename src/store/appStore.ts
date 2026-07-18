@@ -526,8 +526,13 @@ export const useAppStore = create<AppState>()(
 
       setHasHydrated: (v) => set({ _hasHydrated: v }),
       // Een nieuw (of gewist) wedstrijdschema reset altijd de doeltijd, zodat
-      // een tempo van een vorige wedstrijd nooit blijft hangen.
-      setRacePlan: (plan) => set({ racePlan: plan, raceTargetSeconds: null }),
+      // een tempo van een vorige wedstrijd nooit blijft hangen. Wedstrijd-
+      // schema's zijn kalender-verankerd (week 1 = aankomende maandag,
+      // laatste week = racedatum), dus we resetten ook currentWeekRace naar
+      // 1 — anders zou de gebruiker in de nieuwe race weken vóór lopen op de
+      // kalender. Geldt ook bij het wissen (plan = null): zonder racePlan
+      // heeft currentWeekRace toch geen betekenis.
+      setRacePlan: (plan) => set({ racePlan: plan, raceTargetSeconds: null, currentWeekRace: 1 }),
       setRaceTargetSeconds: (seconds) => set({ raceTargetSeconds: seconds }),
       setComfortableKm: (km) => set({ comfortableKm: km }),
       setSchemaMode: (mode) => set({ schemaMode: mode }),
