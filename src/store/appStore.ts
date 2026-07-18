@@ -879,6 +879,11 @@ export const useAppStore = create<AppState>()(
         isPremium:                   state.isPremium,
         premiumExpiredNoticePending: state.premiumExpiredNoticePending,
         dashboardUpsellDismissed:    state.dashboardUpsellDismissed,
+        // Expliciete gebruikerskeuze, moet een herstart overleven. isSignedIn
+        // en syncStatus blijven bewust ongepersisteerd: syncNow() (aangeroepen
+        // vanuit onRehydrateStorage hieronder) herstelt die vluchtige
+        // runtime-status zelf zodra cloudsync aan staat.
+        cloudSyncEnabled: state.cloudSyncEnabled,
       }),
       onRehydrateStorage: () => (state) => {
         // Gezet na succesvolle én mislukte rehydratie
