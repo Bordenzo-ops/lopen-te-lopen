@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import {
   ChevronDown, ChevronRight, ChevronLeft,
-  MapPin, Calendar, Clock, Trophy, CheckCircle2, X, Lock, Timer, Crown,
+  MapPin, Calendar, Clock, Trophy, CheckCircle2, X, Lock, Timer, Crown, Gauge,
 } from 'lucide-react-native';
 import { palette, typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
@@ -30,6 +30,19 @@ import {
 import { PremiumBadge } from './PremiumBadge';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Modal } from 'react-native';
+import { useAppStore } from '../../store/appStore';
+
+// Niveau-chips voor "hoeveel loop je nu al comfortabel?". Stappen aansluitend
+// bij de sjabloonschema's in trainingPlans.ts (van eerste 5 km-mijlpaal tot
+// de 15 km-instap-afstand).
+const COMFORT_LEVELS: { km: number; label: string }[] = [
+  { km: 0,  label: 'Nul, ik begin' },
+  { km: 3,  label: '3 km' },
+  { km: 5,  label: '5 km' },
+  { km: 8,  label: '8 km' },
+  { km: 10, label: '10 km' },
+  { km: 15, label: '15 km' },
+];
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -384,19 +397,35 @@ function TargetTimeInput({
 }
 
 function ConfirmModal({
-  plan, onConfirm, onCancel, hasAccess, onUpgrade,
+  race, initialComfortableKm, onConfirm, onCancel, hasAccess, onUpgrade,
 }: {
-  plan: RacePlan;
-  onConfirm: (targetSeconds: number | null) => void;
+  race: Race;
+  /** Laatst opgeslagen niveau van de gebruiker, vooringevuld in de chips. */
+  initialComfortableKm: number | null;
+  onConfirm: (plan: RacePlan, targetSeconds: number | null, comfortableKm: number | null) => void;
   onCancel: () => void;
   hasAccess: boolean;
   onUpgrade: () => void;
 }) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [targetSeconds, setTargetSeconds]     = useState<number | null>(null);
+  const [comfortableKm, setComfortableKmState] = useState<number>(initialComfortableKm ?? 0);
+
+  // Herbouw het schema live zodra de gebruiker zijn niveau wijzigt. Bij 0
+  // ("Nul, ik begin") gedraagt buildRacePlan zich identiek aan zonder niveau.
+  const plan = useMemo(
+    () => buildRacePlan(race, undefined, undefined, comfortableKm > 0 ? comfortableKm : undefined),
+    [race, comfortableKm],
+  );
+
+  // Kan in theorie niet null zijn: de aanroeper heeft de haalbaarheid al
+  // gecontroleerd zonder niveau, en een niveau maakt het schema alleen maar
+  // korter, nooit onhaalbaar. Defensief toch afvangen.
+  if (!plan) return null;
+
   const accent = plan.race.accentColor;
   const raceKm = raceDistanceToKm(plan.race.distance);
-  const [targetSeconds, setTargetSeconds] = useState<number | null>(null);
   const startStr = new Date(plan.startDate).toLocaleDateString('nl-NL', {
     day: 'numeric', month: 'long', year: 'numeric',
   });
@@ -435,6 +464,37 @@ function ConfirmModal({
               ))}
             </View>
 
+            {/* Niveau: hoeveel loop je nu al comfortabel? */}
+            <View style={styles.levelBox}>
+              <View style={styles.levelHeaderRow}>
+                <Gauge size={15} color={accent} strokeWidth={2} />
+                <Text style={styles.levelTitle}>Wat loop je nu al comfortabel?</Text>
+              </View>
+              <Text style={styles.levelSub}>
+                Dan hoeft je schema niet op 0 te beginnen.
+              </Text>
+              <View style={styles.levelChipsRow}>
+                {COMFORT_LEVELS.map(({ km, label }) => {
+                  const selected = comfortableKm === km;
+                  return (
+                    <TouchableOpacity
+                      key={km}
+                      style={[styles.levelChip, selected && { backgroundColor: accent, borderColor: accent }]}
+                      onPress={() => setComfortableKmState(km)}
+                      activeOpacity={0.85}
+                      accessibilityRole="radio"
+                      accessibilityLabel={label}
+                      accessibilityState={{ selected }}
+                    >
+                      <Text style={[styles.levelChipText, selected && styles.levelChipTextSelected]}>
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
             {/* Doeltijd-invoer (premium) */}
             <TargetTimeInput
               raceKm={raceKm}
@@ -446,7 +506,7 @@ function ConfirmModal({
 
             <TouchableOpacity
               style={[styles.confirmBtn, { backgroundColor: accent }]}
-              onPress={() => onConfirm(hasAccess ? targetSeconds : null)}
+              onPress={() => onConfirm(plan, hasAccess ? targetSeconds : null, comfortableKm)}
               activeOpacity={0.85}
             >
               <CheckCircle2 size={18} color="#fff" strokeWidth={2.5} />
@@ -555,9 +615,11 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
   const [openProvinces, setOpenProvinces] = useState<Set<string>>(new Set(['zuid-holland']));
   const [openCities,    setOpenCities]    = useState<Set<string>>(new Set(['rotterdam']));
   const [openEvents,    setOpenEvents]    = useState<Set<string>>(new Set());
-  const [pendingPlan,   setPendingPlan]   = useState<RacePlan | null>(null);
+  const [pendingRace,   setPendingRace]   = useState<Race | null>(null);
 
   const { hasAccess, promptUpgrade, goToPaywall } = usePremium();
+  const comfortableKm    = useAppStore(s => s.comfortableKm);
+  const setComfortableKm = useAppStore(s => s.setComfortableKm);
 
   // Gratis krijgt de halve marathon als standaardschema; andere afstanden
   // (en wedstrijden) zijn premium. Offline-first: onbekende status telt als gratis.
@@ -636,7 +698,7 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
       );
       return;
     }
-    setPendingPlan(plan);
+    setPendingRace(race);
   }
 
   return (
@@ -721,16 +783,18 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
         </Text>
       </ScrollView>
 
-      {pendingPlan && (
+      {pendingRace && (
         <ConfirmModal
-          plan={pendingPlan}
+          race={pendingRace}
+          initialComfortableKm={comfortableKm}
           hasAccess={hasAccess}
           onUpgrade={goToPaywall}
-          onConfirm={(targetSeconds) => {
-            onSelectRace(pendingPlan, targetSeconds);
-            setPendingPlan(null);
+          onConfirm={(plan, targetSeconds, chosenComfortableKm) => {
+            setComfortableKm(chosenComfortableKm);
+            onSelectRace(plan, targetSeconds);
+            setPendingRace(null);
           }}
-          onCancel={() => setPendingPlan(null)}
+          onCancel={() => setPendingRace(null)}
         />
       )}
     </SafeAreaView>
@@ -962,6 +1026,34 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderTopLeftRadius: radius['2xl'], borderTopRightRadius: radius['2xl'],
     padding: spacing[3], paddingBottom: spacing[5], alignItems: 'center', gap: spacing[1.5],
   },
+
+  // Niveau: hoeveel loop je nu al comfortabel?
+  levelBox: {
+    width: '100%', backgroundColor: colors.bgCard, borderRadius: radius.xl,
+    padding: spacing[2], gap: spacing[1], marginTop: spacing[0.5],
+    borderWidth: 1, borderColor: colors.borderSubtle,
+  },
+  levelHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
+  levelTitle: {
+    flex: 1,
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm, color: colors.textPrimary,
+  },
+  levelSub: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
+    color: colors.textSecondary, lineHeight: typography.fontSize.xs * 1.55,
+  },
+  levelChipsRow: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: spacing[1], marginTop: spacing[0.5],
+  },
+  levelChip: {
+    paddingHorizontal: spacing[1.5], paddingVertical: spacing[1], minHeight: 36,
+    borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.borderDefault,
+    backgroundColor: colors.bgSurface, alignItems: 'center', justifyContent: 'center',
+  },
+  levelChipText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.xs, color: colors.textSecondary,
+  },
+  levelChipTextSelected: { color: '#fff' },
 
   // Doeltijd-invoer (premium)
   targetBox: {

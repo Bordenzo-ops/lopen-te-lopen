@@ -146,11 +146,18 @@ function injectRaceName(
  * @param race            De gekozen wedstrijd
  * @param today           Optionele 'vandaag' voor tests
  * @param customStartDate Optionele vaste startdatum (ISO string). Standaard = today.
+ * @param comfortableKm   Optioneel: hoeveel km de gebruiker nu al comfortabel
+ *                        loopt. Als gezet (en > 0), worden de weken vooraan die
+ *                        de gebruiker al aankan (langste sessie < comfortableKm)
+ *                        overgeslagen, zodat het schema niet "op 0" begint.
+ *                        Zonder deze parameter is het resultaat identiek aan
+ *                        voorheen.
  */
 export function buildRacePlan(
   race: RotterdamRace,
   today = new Date(),
   customStartDate?: string,
+  comfortableKm?: number,
 ): RacePlan | null {
   // Bepaal doel op basis van afstand
   const goal: GoalType = goalForDistance(race.distance);
@@ -205,6 +212,29 @@ export function buildRacePlan(
     adaptationNote = `Schema ingekort van ${baseWeeks} naar ${targetWeeks} weken: opbouw gecomprimeerd, taper behouden.`;
   }
 
+  // ── Niveau-aanpassing: sla vooraan weken over die de gebruiker al aankan ──
+  //
+  // Loopt de gebruiker al comfortabel een bepaalde afstand, dan hoeft het
+  // schema niet meer "op 0" te beginnen. We slaan weken vooraan over zolang
+  // de langste sessie van die week ONDER het opgegeven niveau ligt (dus
+  // zwaardere of gelijke weken worden nooit weggesneden) en zolang er
+  // minimaal TAPER_WEEKS + 1 weken overblijven. De startdatum schuift
+  // evenveel weken op, zodat het schema nog steeds op de racedatum eindigt.
+  let comfortWeeksSkipped = 0;
+  if (typeof comfortableKm === 'number' && comfortableKm > 0) {
+    const maxSkippable = weeks.length - (TAPER_WEEKS + 1);
+    while (
+      comfortWeeksSkipped < maxSkippable &&
+      Math.max(...weeks[comfortWeeksSkipped].sessions.map(s => s.distanceKm)) < comfortableKm
+    ) {
+      comfortWeeksSkipped++;
+    }
+    if (comfortWeeksSkipped > 0) {
+      weeks = weeks.slice(comfortWeeksSkipped).map((w, i) => ({ ...w, weekNumber: i + 1 }));
+      adaptationNote += ` Gestart op jouw niveau van ~${comfortableKm} km: ${comfortWeeksSkipped} ${comfortWeeksSkipped === 1 ? 'opbouwweek' : 'opbouwweken'} overgeslagen.`;
+    }
+  }
+
   // Injecteer wedstrijdnaam en -afstand in de race-week
   const raceKm = kmForDistance(race.distance);
   weeks = weeks.map((w, i) =>
@@ -217,6 +247,12 @@ export function buildRacePlan(
   if (dow !== 1) {
     // Snap naar aankomende maandag (0=zo→+1, anders 8-dow dagen vooruit)
     startDate.setDate(startDate.getDate() + (dow === 0 ? 1 : 8 - dow));
+  }
+  // Zijn er weken vooraan overgeslagen op basis van het niveau? Dan start de
+  // gebruiker pas later: schuif de startdatum evenveel weken op zodat het
+  // schema, met minder weken, nog steeds op de racedatum eindigt.
+  if (comfortWeeksSkipped > 0) {
+    startDate.setDate(startDate.getDate() + comfortWeeksSkipped * 7);
   }
 
   return {

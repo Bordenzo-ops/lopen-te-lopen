@@ -145,6 +145,16 @@ interface AppState {
    */
   raceTargetSeconds: number | null;
 
+  /**
+   * Hoeveel km de gebruiker nu al comfortabel loopt, zoals aangegeven bij het
+   * kiezen van een wedstrijd. Gebruikt door buildRacePlan om weken vooraan
+   * over te slaan die de gebruiker al aankan, zodat het schema niet "op 0"
+   * begint. Null zolang de gebruiker nog geen niveau opgegeven heeft.
+   * Gepersisteerd zodat een volgende wedstrijdkeuze dit vooringevuld toont.
+   */
+  comfortableKm: number | null;
+  setComfortableKm: (km: number | null) => void;
+
   // Schema-modus: vrij trainen of voor een wedstrijd
   schemaMode: 'training' | 'race';
 
@@ -368,6 +378,7 @@ export const useAppStore = create<AppState>()(
       racePlan: null,
       customPlan: null,
       raceTargetSeconds: null,
+      comfortableKm: null,
       schemaMode: 'training',
       themePreference: 'system',
       routePlanCount: 0,
@@ -518,6 +529,7 @@ export const useAppStore = create<AppState>()(
       // een tempo van een vorige wedstrijd nooit blijft hangen.
       setRacePlan: (plan) => set({ racePlan: plan, raceTargetSeconds: null }),
       setRaceTargetSeconds: (seconds) => set({ raceTargetSeconds: seconds }),
+      setComfortableKm: (km) => set({ comfortableKm: km }),
       setSchemaMode: (mode) => set({ schemaMode: mode }),
       setThemePreference: (preference) => set({ themePreference: preference }),
 
@@ -847,6 +859,7 @@ export const useAppStore = create<AppState>()(
         racePlan:               state.racePlan,
         customPlan:             state.customPlan,
         raceTargetSeconds:      state.raceTargetSeconds,
+        comfortableKm:          state.comfortableKm,
         schemaMode:             state.schemaMode,
         themePreference:        state.themePreference,
         routePlanCount:         state.routePlanCount,
