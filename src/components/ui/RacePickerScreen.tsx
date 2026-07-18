@@ -1,8 +1,9 @@
 /**
  * RacePickerScreen
  *
- * Drill-down keuze: Provincie → Stad → Wedstrijd
- * Elke laag toont een dropdown/accordion.
+ * Drill-down keuze: Land → Provincie → Stad → Wedstrijd
+ * Elke laag toont een dropdown/accordion. Een zoekbalk en filterchips
+ * (afstand, land, inschrijfstatus) filteren de hiërarchie live.
  */
 
 import React, { useState, useMemo } from 'react';
@@ -13,12 +14,13 @@ import {
 import {
   ChevronDown, ChevronRight, ChevronLeft,
   MapPin, Calendar, Clock, Trophy, CheckCircle2, X, Lock, Timer, Crown, Gauge,
+  Search, Globe2, SlidersHorizontal, RotateCcw,
 } from 'lucide-react-native';
 import { palette, typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
 import {
-  PROVINCES, weeksUntilRace, weeksUntilLabel, formatRaceDate,
-  type Race, type RaceCity, type RaceProvince,
+  COUNTRIES, weeksUntilRace, weeksUntilLabel, formatRaceDate,
+  type Race, type RaceCity, type RaceProvince, type RaceCountry, type RaceDistance,
 } from '../../data/rotterdamRaces';
 import { buildRacePlan, canTrainForRace, type RacePlan } from '../../data/buildRacePlan';
 import { usePremium } from '../../hooks/usePremium';
@@ -53,7 +55,73 @@ const distanceLabel: Record<Race['distance'], string> = {
   'half_marathon': 'Halve Marathon', 'marathon': 'Marathon',
 };
 
+// Afstand-filterchips in de zoekbalk-sectie.
+const DISTANCE_FILTERS: { value: RaceDistance; label: string }[] = [
+  { value: '5km', label: '5 KM' },
+  { value: '10km', label: '10 KM' },
+  { value: '15km', label: '15 KM' },
+  { value: 'half_marathon', label: 'Halve marathon' },
+  { value: 'marathon', label: 'Hele marathon' },
+];
+
+// ── Zoek- en filterlogica ────────────────────────────────────────────────────
+//
+// Zoekterm en filters combineren met EN-logica: een wedstrijd moet aan alle
+// actieve criteria voldoen. Bij event-groepen (races met subRaces) telt een
+// match op een van de sub-afstanden ook mee, zodat "Halve Westland" met
+// filter "10km" nog steeds de groep toont (met alleen de matchende afstand
+// zichtbaar in de subrijen).
+
+function raceMatchesQuery(race: Race, city: RaceCity, query: string): boolean {
+  if (!query) return true;
+  const nameMatch = race.name.toLowerCase().includes(query)
+    || (race.subRaces?.some(sub => sub.name.toLowerCase().includes(query)) ?? false);
+  const cityMatch = city.name.toLowerCase().includes(query);
+  const locationMatch = race.location.toLowerCase().includes(query)
+    || (race.subRaces?.some(sub => sub.location.toLowerCase().includes(query)) ?? false);
+  return nameMatch || cityMatch || locationMatch;
+}
+
+function raceMatchesDistances(race: Race, distances: Set<RaceDistance>): boolean {
+  if (distances.size === 0) return true;
+  if (distances.has(race.distance)) return true;
+  return race.subRaces?.some(sub => distances.has(sub.distance)) ?? false;
+}
+
+function raceMatchesRegistration(race: Race, openOnly: boolean): boolean {
+  if (!openOnly) return true;
+  if (race.registrationOpen) return true;
+  return race.subRaces?.some(sub => sub.registrationOpen) ?? false;
+}
+
 // ── Subcomponents ─────────────────────────────────────────────────────────────
+
+function CountryRow({
+  country, isOpen, onToggle,
+}: { country: RaceCountry; isOpen: boolean; onToggle: () => void }) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const totalRaces = country.provinces.reduce(
+    (s, p) => s + p.cities.reduce((s2, c) => s2 + c.races.length, 0), 0,
+  );
+  return (
+    <TouchableOpacity style={styles.countryRow} onPress={onToggle} activeOpacity={0.8}>
+      <View style={styles.countryLeft}>
+        <View style={styles.countryIcon}>
+          <Globe2 size={16} color={colors.brandPrimary} strokeWidth={2} />
+        </View>
+        <View>
+          <Text style={styles.countryName}>{country.name}</Text>
+          <Text style={styles.countrySub}>{country.provinces.length} provincies · {totalRaces} wedstrijden</Text>
+        </View>
+      </View>
+      {isOpen
+        ? <ChevronDown size={18} color={colors.textSecondary} strokeWidth={2} />
+        : <ChevronRight size={18} color={colors.textSecondary} strokeWidth={2} />
+      }
+    </TouchableOpacity>
+  );
+}
 
 function ProvinceRow({
   province, isOpen, onToggle,
@@ -626,10 +694,17 @@ export interface RacePickerScreenProps {
 export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [openCountries, setOpenCountries] = useState<Set<string>>(new Set(['nederland']));
   const [openProvinces, setOpenProvinces] = useState<Set<string>>(new Set(['zuid-holland']));
   const [openCities,    setOpenCities]    = useState<Set<string>>(new Set(['rotterdam']));
   const [openEvents,    setOpenEvents]    = useState<Set<string>>(new Set());
   const [pendingRace,   setPendingRace]   = useState<Race | null>(null);
+
+  // Zoekbalk en filterchips
+  const [searchQuery, setSearchQuery]             = useState('');
+  const [selectedDistances, setSelectedDistances] = useState<Set<RaceDistance>>(new Set());
+  const [selectedCountries, setSelectedCountries] = useState<Set<string>>(new Set());
+  const [registrationOpenOnly, setRegistrationOpenOnly] = useState(false);
 
   const { hasAccess, promptUpgrade, goToPaywall } = usePremium();
   const comfortableKm    = useAppStore(s => s.comfortableKm);
@@ -640,10 +715,59 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
   const isRaceLocked = (race: Race): boolean =>
     !hasAccess && !isRaceDistanceFree(race.distance);
 
-  // Verzamel alle featured races (niet verlopen)
-  const featuredRaces = PROVINCES
-    .flatMap(p => p.cities.flatMap(c => c.races))
-    .filter(r => r.featured && new Date(r.date) > new Date());
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filtersActive = normalizedQuery !== ''
+    || selectedDistances.size > 0
+    || selectedCountries.size > 0
+    || registrationOpenOnly;
+
+  // Land → provincie → stad, gefilterd op zoekterm + chips (EN-logica). Als er
+  // filters actief zijn, vallen lege steden/provincies/landen weg; zonder
+  // filters blijft de volledige (ook nog lege) hiërarchie zichtbaar, zoals de
+  // voorbereide Belgische steden.
+  const filteredCountries = useMemo(() => {
+    return COUNTRIES
+      .filter(country => selectedCountries.size === 0 || selectedCountries.has(country.id))
+      .map(country => ({
+        ...country,
+        provinces: country.provinces
+          .map(province => ({
+            ...province,
+            cities: province.cities
+              .map(city => ({
+                ...city,
+                races: city.races.filter(race =>
+                  raceMatchesQuery(race, city, normalizedQuery)
+                  && raceMatchesDistances(race, selectedDistances)
+                  && raceMatchesRegistration(race, registrationOpenOnly),
+                ),
+              }))
+              .filter(city => !filtersActive || city.races.length > 0),
+          }))
+          .filter(province => !filtersActive || province.cities.length > 0),
+      }))
+      .filter(country => !filtersActive || country.provinces.length > 0);
+  }, [normalizedQuery, selectedDistances, selectedCountries, registrationOpenOnly, filtersActive]);
+
+  // Verzamel alle featured races (niet verlopen), ook onderworpen aan de filters
+  const featuredRaces = useMemo(() => {
+    return filteredCountries
+      .flatMap(country => country.provinces.flatMap(p => p.cities.flatMap(c => c.races)))
+      .filter(r => r.featured && new Date(r.date) > new Date());
+  }, [filteredCountries]);
+
+  const hasAnyResults = filteredCountries.some(country =>
+    country.provinces.some(p => p.cities.some(c => c.races.length > 0)),
+  );
+
+  function toggleCountry(id: string) {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setOpenCountries(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   function toggleProvince(id: string) {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -670,6 +794,37 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
+  }
+
+  function toggleDistanceFilter(value: RaceDistance) {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setSelectedDistances(prev => {
+      const next = new Set(prev);
+      next.has(value) ? next.delete(value) : next.add(value);
+      return next;
+    });
+  }
+
+  function toggleCountryFilter(id: string) {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setSelectedCountries(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function toggleRegistrationFilter() {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setRegistrationOpenOnly(prev => !prev);
+  }
+
+  function clearFilters() {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setSearchQuery('');
+    setSelectedDistances(new Set());
+    setSelectedCountries(new Set());
+    setRegistrationOpenOnly(false);
   }
 
   // Eén wedstrijd(-groep)-rij renderen; gedeeld tussen aankomende en afgelopen races.
@@ -726,7 +881,92 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
         )}
         <View style={styles.headerText}>
           <Text style={styles.headerTitle}>Kies een wedstrijd</Text>
-          <Text style={styles.headerSub}>Provincie · Stad · Wedstrijd</Text>
+          <Text style={styles.headerSub}>Land · Provincie · Stad · Wedstrijd</Text>
+        </View>
+      </View>
+
+      {/* Zoekbalk */}
+      <View style={styles.searchBarWrap}>
+        <View style={styles.searchBar}>
+          <Search size={16} color={colors.textTertiary} strokeWidth={2} />
+          <TextInput
+            style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Zoek op wedstrijd, stad of locatie"
+            placeholderTextColor={colors.textTertiary}
+            returnKeyType="search"
+            accessibilityLabel="Zoek een wedstrijd op naam, stad of locatie"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8} accessibilityLabel="Zoekterm wissen">
+              <X size={16} color={colors.textTertiary} strokeWidth={2} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Filterchips */}
+        <View style={styles.filtersSection}>
+          <View style={styles.filterGroupHeaderRow}>
+            <SlidersHorizontal size={13} color={colors.textTertiary} strokeWidth={2} />
+            <Text style={styles.filterGroupHeaderText}>Filters</Text>
+            {filtersActive && (
+              <TouchableOpacity style={styles.clearFiltersBtn} onPress={clearFilters} hitSlop={8}>
+                <RotateCcw size={12} color={colors.brandPrimary} strokeWidth={2} />
+                <Text style={styles.clearFiltersText}>Wis filters</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={styles.filterChipsRow}>
+            {DISTANCE_FILTERS.map(({ value, label }) => {
+              const selected = selectedDistances.has(value);
+              return (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.filterChip, selected && styles.filterChipActive]}
+                  onPress={() => toggleDistanceFilter(value)}
+                  activeOpacity={0.85}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel={`Filter op afstand ${label}`}
+                  accessibilityState={{ checked: selected }}
+                >
+                  <Text style={[styles.filterChipText, selected && styles.filterChipTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={styles.filterChipsRow}>
+            {COUNTRIES.map(country => {
+              const selected = selectedCountries.has(country.id);
+              return (
+                <TouchableOpacity
+                  key={country.id}
+                  style={[styles.filterChip, selected && styles.filterChipActive]}
+                  onPress={() => toggleCountryFilter(country.id)}
+                  activeOpacity={0.85}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel={`Filter op land ${country.name}`}
+                  accessibilityState={{ checked: selected }}
+                >
+                  <Text style={[styles.filterChipText, selected && styles.filterChipTextActive]}>{country.name}</Text>
+                </TouchableOpacity>
+              );
+            })}
+            <TouchableOpacity
+              style={[styles.filterChip, registrationOpenOnly && styles.filterChipActive]}
+              onPress={toggleRegistrationFilter}
+              activeOpacity={0.85}
+              accessibilityRole="checkbox"
+              accessibilityLabel="Filter op wedstrijden waar inschrijving open is"
+              accessibilityState={{ checked: registrationOpenOnly }}
+            >
+              <Text style={[styles.filterChipText, registrationOpenOnly && styles.filterChipTextActive]}>
+                Inschrijving open
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -747,44 +987,68 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
           </View>
         )}
 
-        {/* Alle wedstrijden per provincie */}
+        {/* Alle wedstrijden per land / provincie */}
         <Text style={styles.allRacesLabel}>Alle wedstrijden</Text>
 
-        {PROVINCES.map(province => (
-          <View key={province.id} style={styles.provinceBlock}>
-            {/* Provincie header */}
-            <ProvinceRow
-              province={province}
-              isOpen={openProvinces.has(province.id)}
-              onToggle={() => toggleProvince(province.id)}
+        {!hasAnyResults && (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>
+              Geen wedstrijden gevonden. Probeer een andere zoekterm of pas de filters aan.
+            </Text>
+          </View>
+        )}
+
+        {filteredCountries.map(country => (
+          <View key={country.id} style={styles.countryBlock}>
+            {/* Land header */}
+            <CountryRow
+              country={country}
+              isOpen={filtersActive || openCountries.has(country.id)}
+              onToggle={() => toggleCountry(country.id)}
             />
 
-            {/* Steden */}
-            {openProvinces.has(province.id) && (
-              <View style={styles.citiesContainer}>
-                {province.cities.map(city => (
-                  <View key={city.id} style={styles.cityBlock}>
-                    <CityRow
-                      city={city}
-                      isOpen={openCities.has(city.id)}
-                      onToggle={() => toggleCity(city.id)}
+            {/* Provincies */}
+            {(filtersActive || openCountries.has(country.id)) && (
+              <View style={styles.provincesContainer}>
+                {country.provinces.map(province => (
+                  <View key={province.id} style={styles.provinceBlock}>
+                    {/* Provincie header */}
+                    <ProvinceRow
+                      province={province}
+                      isOpen={filtersActive || openProvinces.has(province.id)}
+                      onToggle={() => toggleProvince(province.id)}
                     />
 
-                    {/* Wedstrijden: eerst aankomend, afgelopen races onderaan gegroepeerd */}
-                    {openCities.has(city.id) && (() => {
-                      const now = new Date();
-                      const upcomingRaces = city.races.filter(r => new Date(r.date) > now);
-                      const pastRaces     = city.races.filter(r => new Date(r.date) <= now);
-                      return (
-                        <View style={styles.racesContainer}>
-                          {upcomingRaces.map(renderRaceItem)}
-                          {pastRaces.length > 0 && (
-                            <Text style={styles.pastRacesLabel}>Afgelopen</Text>
-                          )}
-                          {pastRaces.map(renderRaceItem)}
-                        </View>
-                      );
-                    })()}
+                    {/* Steden */}
+                    {(filtersActive || openProvinces.has(province.id)) && (
+                      <View style={styles.citiesContainer}>
+                        {province.cities.map(city => (
+                          <View key={city.id} style={styles.cityBlock}>
+                            <CityRow
+                              city={city}
+                              isOpen={filtersActive || openCities.has(city.id)}
+                              onToggle={() => toggleCity(city.id)}
+                            />
+
+                            {/* Wedstrijden: eerst aankomend, afgelopen races onderaan gegroepeerd */}
+                            {(filtersActive || openCities.has(city.id)) && (() => {
+                              const now = new Date();
+                              const upcomingRaces = city.races.filter(r => new Date(r.date) > now);
+                              const pastRaces     = city.races.filter(r => new Date(r.date) <= now);
+                              return (
+                                <View style={styles.racesContainer}>
+                                  {upcomingRaces.map(renderRaceItem)}
+                                  {pastRaces.length > 0 && (
+                                    <Text style={styles.pastRacesLabel}>Afgelopen</Text>
+                                  )}
+                                  {pastRaces.map(renderRaceItem)}
+                                </View>
+                              );
+                            })()}
+                          </View>
+                        ))}
+                      </View>
+                    )}
                   </View>
                 ))}
               </View>
@@ -837,7 +1101,86 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     letterSpacing: typography.letterSpacing.wide,
   },
 
+  // Zoekbalk en filters
+  searchBarWrap: {
+    paddingHorizontal: spacing[2], paddingTop: spacing[1.5], paddingBottom: spacing[1],
+    borderBottomWidth: 1, borderBottomColor: colors.borderSubtle,
+    gap: spacing[1],
+  },
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing[1],
+    backgroundColor: colors.bgCard, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.borderDefault,
+    paddingHorizontal: spacing[1.5], minHeight: 44,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.base,
+    color: colors.textPrimary,
+  },
+  filtersSection: { gap: spacing[0.5] },
+  filterGroupHeaderRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing[0.5],
+  },
+  filterGroupHeaderText: {
+    flex: 1,
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.xs,
+    color: colors.textTertiary, textTransform: 'uppercase', letterSpacing: typography.letterSpacing.wide,
+  },
+  clearFiltersBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  clearFiltersText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.xs, color: colors.brandPrimary,
+  },
+  filterChipsRow: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: spacing[1],
+  },
+  filterChip: {
+    paddingHorizontal: spacing[1.5], paddingVertical: spacing[1], minHeight: 34,
+    borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.borderDefault,
+    backgroundColor: colors.bgSurface, alignItems: 'center', justifyContent: 'center',
+  },
+  filterChipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  filterChipText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.xs, color: colors.textSecondary,
+  },
+  filterChipTextActive: { color: '#fff' },
+
   list: { padding: spacing[2], gap: spacing[1.5], paddingBottom: spacing[6] },
+
+  emptyState: {
+    padding: spacing[3], alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.bgCard, borderRadius: radius.xl,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+  },
+  emptyStateText: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm,
+    color: colors.textSecondary, textAlign: 'center', lineHeight: typography.fontSize.sm * 1.55,
+  },
+
+  // Land
+  countryBlock: { gap: spacing[1] },
+  countryRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    padding: spacing[2],
+    backgroundColor: colors.bgCard, borderRadius: radius.xl,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+    ...shadows.sm,
+  },
+  countryLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing[1.5] },
+  countryIcon: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: colors.brandPrimary + '18',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  countryName: {
+    fontFamily: typography.fontFamily.display, fontSize: typography.fontSize.md, color: colors.textPrimary,
+  },
+  countrySub: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2,
+  },
+  provincesContainer: {
+    gap: spacing[1], paddingLeft: spacing[1.5],
+  },
 
   // Provincie
   provinceBlock: {

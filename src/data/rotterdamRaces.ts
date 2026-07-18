@@ -1,9 +1,11 @@
 /**
- * Hardloopwedstrijden Nederland — gestructureerd per provincie > stad
+ * Hardloopwedstrijden per land, gestructureerd als land > provincie > stad
  *
  * Voeg nieuwe wedstrijden toe door een nieuw object in de juiste stad te plaatsen.
  * Voeg een nieuwe stad toe door een nieuw object in de juiste provincie te plaatsen.
- * Voeg een nieuwe provincie toe door een nieuw object in PROVINCES te plaatsen.
+ * Voeg een nieuwe provincie toe door een nieuw object in de provincies-array van
+ * het juiste land te plaatsen.
+ * Voeg een nieuw land toe door een nieuw object in COUNTRIES te plaatsen.
  */
 
 export type RaceDistance = '5km' | '10km' | '15km' | 'half_marathon' | 'marathon';
@@ -43,9 +45,15 @@ export interface RaceProvince {
   cities: RaceCity[];
 }
 
+export interface RaceCountry {
+  id: string;
+  name: string;
+  provinces: RaceProvince[];
+}
+
 // ── Data ──────────────────────────────────────────────────────────────────────
 
-export const PROVINCES: RaceProvince[] = [
+const NL_PROVINCES: RaceProvince[] = [
   {
     id: 'zuid-holland',
     name: 'Zuid-Holland',
@@ -842,13 +850,221 @@ export const PROVINCES: RaceProvince[] = [
   },
 ];
 
+// België is voorbereid met de belangrijkste provincies/steden voor toekomstige
+// wedstrijden. De races-arrays zijn bewust leeg: die worden in een aparte
+// stap gevuld.
+const BE_PROVINCES: RaceProvince[] = [
+  {
+    id: 'west-vlaanderen',
+    name: 'West-Vlaanderen',
+    cities: [
+      {
+        id: 'brugge',
+        name: 'Brugge',
+        races: [
+          {
+            id: 'athora-bruges-marathon-2026',
+            name: 'Athora Bruges Marathon',
+            date: '2026-10-11',
+            distance: 'marathon',
+            url: 'https://athorabrugesmarathon.com/en/',
+            description: 'Vlak en snel parcours door de historische binnenstad van Brugge, via Zeebrugge, met finish op de Grote Markt.',
+            location: 'Grote Markt, Brugge',
+            accentColor: '#0F766E',
+            registrationOpen: true,
+            subRaces: [
+              {
+                id: 'athora-bruges-marathon-2026-marathon',
+                name: 'Athora Bruges Marathon - Marathon',
+                date: '2026-10-11',
+                distance: 'marathon',
+                url: 'https://athorabrugesmarathon.com/en/',
+                description: "De volledige 42,195 km door Brugge, van 't Zand via Zeebrugge naar de Grote Markt.",
+                location: 'Grote Markt, Brugge',
+                accentColor: '#0D9488',
+                registrationOpen: true,
+              },
+              {
+                id: 'athora-bruges-marathon-2026-hm',
+                name: 'Athora Bruges Marathon - Halve Marathon',
+                date: '2026-10-11',
+                distance: 'half_marathon',
+                url: 'https://athorabrugesmarathon.com/en/',
+                description: 'Halve marathon van 21,1 km door de historische binnenstad van Brugge, met finish op de Grote Markt.',
+                location: 'Grote Markt, Brugge',
+                accentColor: '#2DD4BF',
+                registrationOpen: true,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'oost-vlaanderen',
+    name: 'Oost-Vlaanderen',
+    cities: [
+      {
+        id: 'gent',
+        name: 'Gent',
+        races: [
+          {
+            id: 'maes-gent-10mijl-2026',
+            name: 'MAES Gent 10 Mijl',
+            date: '2026-09-20',
+            distance: '15km', // 10 mijl = 16,61 km; dichtstbijzijnde type
+            url: 'https://maesgent10mijl.be/',
+            description: 'Populairste loopfeest van Gent, met een parcours langs culturele hoogtepunten en een afterparty met live muziek.',
+            location: 'Zuiderlaan, Gent',
+            accentColor: '#FACC15',
+            registrationOpen: true,
+            subRaces: [
+              {
+                id: 'maes-gent-10mijl-2026-10mijl',
+                name: 'MAES Gent 10 Mijl - 10 Mijl',
+                date: '2026-09-20',
+                distance: '15km', // 10 mijl = 16,61 km; dichtstbijzijnde type
+                url: 'https://maesgent10mijl.be/',
+                description: 'De hoofdafstand van 10 mijl (16,61 km), met start bij Parking Oost en finish bij Sport Vlaanderen Gent.',
+                location: 'Parking Oost → Zuiderlaan, Gent',
+                accentColor: '#FACC15',
+                registrationOpen: true,
+              },
+              {
+                id: 'maes-gent-10mijl-2026-5mijl',
+                name: 'MAES Gent 10 Mijl - 5 Mijl',
+                date: '2026-09-20',
+                distance: '10km', // 5 mijl = 8,45 km; dichtstbijzijnde type
+                url: 'https://maesgent10mijl.be/',
+                description: '5 mijl (8,45 km) door Gent, langs culturele hoogtepunten.',
+                location: 'Zuiderlaan, Gent',
+                accentColor: '#FDE047',
+                registrationOpen: true,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'antwerpen',
+    name: 'Antwerpen',
+    cities: [
+      {
+        id: 'antwerpen-stad',
+        name: 'Antwerpen',
+        races: [
+          {
+            id: 'trek-antwerp-marathon-2026',
+            name: 'TREK Antwerp Marathon',
+            date: '2026-10-18',
+            distance: 'marathon',
+            url: 'https://antwerpmarathon.com/en/',
+            description: 'Grootste loopwedstrijd van Antwerpen met 20.000+ deelnemers, door de haven, tunnels en historische binnenstad. Finish bij het MAS.',
+            location: 'MAS, Antwerpen',
+            accentColor: '#B91C1C',
+            registrationOpen: true,
+            subRaces: [
+              {
+                id: 'trek-antwerp-marathon-2026-marathon',
+                name: 'TREK Antwerp Marathon - Marathon',
+                date: '2026-10-18',
+                distance: 'marathon',
+                url: 'https://antwerpmarathon.com/en/',
+                description: 'De volledige 42,195 km door Antwerpen, langs de haven en tunnels naar de finish bij het MAS.',
+                location: 'Kattendijkbrug → MAS, Antwerpen',
+                accentColor: '#DC2626',
+                registrationOpen: true,
+              },
+              {
+                id: 'trek-antwerp-marathon-2026-hm',
+                name: 'TREK Antwerp Marathon - Halve Marathon',
+                date: '2026-10-18',
+                distance: 'half_marathon',
+                url: 'https://antwerpmarathon.com/en/',
+                description: 'Halve marathon van 21,1 km door Antwerpen, met finish bij het MAS.',
+                location: 'Kattendijkbrug → MAS, Antwerpen',
+                accentColor: '#F87171',
+                registrationOpen: true,
+              },
+              {
+                id: 'trek-antwerp-marathon-2026-10km',
+                name: 'TREK Antwerp Marathon - 10 km',
+                date: '2026-10-18',
+                distance: '10km',
+                url: 'https://antwerpmarathon.com/en/',
+                description: '10 km door de binnenstad van Antwerpen, start aan de Orteliuskaai.',
+                location: 'Orteliuskaai → MAS, Antwerpen',
+                accentColor: '#FCA5A5',
+                registrationOpen: true,
+              },
+            ],
+          },
+          {
+            id: 'baloise-antwerp-10-miles-2027',
+            name: 'Baloise Antwerp 10 Miles',
+            date: '2027-04-18',
+            distance: '15km', // 10 mijl = 16,09 km; dichtstbijzijnde type
+            url: 'https://baloiseantwerp10miles.be/en/',
+            description: 'Populair hardloopevenement door Antwerpen met een parcours door de Kennedytunnel. De vorige editie was binnen twee dagen uitverkocht met 50.000 deelnemers.',
+            location: 'Antwerpen',
+            accentColor: '#2563EB',
+            registrationOpen: false,
+            subRaces: [
+              {
+                id: 'baloise-antwerp-10-miles-2027-10miles',
+                name: 'Baloise Antwerp 10 Miles - 10 Miles',
+                date: '2027-04-18',
+                distance: '15km', // 10 mijl = 16,09 km; dichtstbijzijnde type
+                url: 'https://baloiseantwerp10miles.be/en/',
+                description: 'De hoofdafstand van 10 mijl (16,09 km) door Antwerpen, via de Kennedytunnel.',
+                location: 'Antwerpen',
+                accentColor: '#2563EB',
+                registrationOpen: false,
+              },
+              {
+                id: 'baloise-antwerp-10-miles-2027-5miles',
+                name: 'Baloise Antwerp 10 Miles - 5 Miles',
+                date: '2027-04-17',
+                distance: '10km', // 5 mijl = 8,05 km; dichtstbijzijnde type
+                url: 'https://baloiseantwerp10miles.be/en/',
+                description: '5 mijl (8,05 km) door Antwerpen, op zaterdag voorafgaand aan de hoofdafstand.',
+                location: 'Antwerpen',
+                accentColor: '#60A5FA',
+                registrationOpen: false,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+];
+
+export const COUNTRIES: RaceCountry[] = [
+  { id: 'nederland', name: 'Nederland', provinces: NL_PROVINCES },
+  { id: 'belgie', name: 'België', provinces: BE_PROVINCES },
+];
+
+/**
+ * Backwards-compat: PROVINCES bevat alleen de Nederlandse provincies.
+ * Bestaande UI (o.a. RacePickerScreen) is oorspronkelijk gebouwd op een
+ * provincie > stad-hiërarchie zonder landniveau; deze alias houdt die code
+ * werkend. Nieuwe schermen die het landniveau tonen, gebruiken COUNTRIES.
+ */
+export const PROVINCES: RaceProvince[] = NL_PROVINCES;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Alle wedstrijden plat als array (inclusief sub-races) */
+/** Alle wedstrijden plat als array (inclusief sub-races), over alle landen */
 export function getAllRaces(): Race[] {
-  return PROVINCES.flatMap(p =>
-    p.cities.flatMap(c =>
-      c.races.flatMap(r => r.subRaces ? r.subRaces : [r]),
+  return COUNTRIES.flatMap(country =>
+    country.provinces.flatMap(p =>
+      p.cities.flatMap(c =>
+        c.races.flatMap(r => r.subRaces ? r.subRaces : [r]),
+      ),
     ),
   );
 }
