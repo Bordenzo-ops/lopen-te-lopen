@@ -417,7 +417,13 @@ export async function retryStravaQueue(): Promise<void> {
   if (state.stravaUploadQueue.length === 0) return;
 
   for (const sessionId of [...state.stravaUploadQueue]) {
-    const session = useAppStore.getState().completedSessions.find(s => s.sessionId === sessionId);
+    // Een sessionId kan intussen meerdere keren voorkomen in completedSessions
+    // (een opnieuw gelopen training, zie appStore.completeSession). Neem de
+    // meest recente match: dat is de run waarvoor deze wachtrij-vermelding
+    // hoogstwaarschijnlijk is aangemaakt (enqueueStravaUpload voegt een
+    // sessionId niet nogmaals toe zolang hij al in de wachtrij staat).
+    const completedForId = useAppStore.getState().completedSessions.filter(s => s.sessionId === sessionId);
+    const session = completedForId[completedForId.length - 1];
     if (!session) {
       // Sessie bestaat niet meer (bijv. na reset): verwijder uit de wachtrij
       useAppStore.getState().dequeueStravaUpload(sessionId);

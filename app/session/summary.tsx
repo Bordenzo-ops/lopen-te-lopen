@@ -42,9 +42,18 @@ export default function SummaryScreen() {
   const completedSessions = useAppStore(s => s.completedSessions);
   const [showShare, setShowShare] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const completedInWeek = useAppStore(s =>
-    s.completedSessions.filter(c => c.weekNumber === parseInt(weekNumber ?? '1')).length
-  );
+  // Gededupliceerd op sessionId: een opnieuw gelopen sessie (zie
+  // handleReopenSession in dashboard.tsx) levert een tweede
+  // CompletedSession-record met hetzelfde sessionId op (bewust toegestaan,
+  // zie appStore.completeSession). Voor "X/Y sessies deze week" en de
+  // voortgangsstippen hieronder mag zo'n herhaalde run niet dubbel meetellen.
+  const completedInWeek = useAppStore(s => {
+    const weekNum = parseInt(weekNumber ?? '1');
+    const ids = new Set(
+      s.completedSessions.filter(c => c.weekNumber === weekNum).map(c => c.sessionId),
+    );
+    return ids.size;
+  });
   const { hasAccess } = usePremium();
   // Maximaal 1x per 3 voltooide runs: niet opdringerig, wel regelmatig zichtbaar.
   // De hook wordt altijd aangeroepen (rules of hooks); de combinatie met

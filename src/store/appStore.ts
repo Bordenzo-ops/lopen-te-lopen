@@ -23,6 +23,28 @@ function recalcTotalKm(sessions: Session[]): number {
   return Math.round(sessions.reduce((sum, s) => sum + s.distanceKm, 0) * 10) / 10;
 }
 
+/**
+ * Bepaalt of alle sessies van een week afgehandeld zijn: voltooid ÓF bewust
+ * overgeslagen telt allebei als "af". Dedupliceert op sessionId, zodat een
+ * sessie die opnieuw gelopen is (zie completeSession — duplicaten op
+ * sessionId+weekNumber zijn daar bewust toegestaan) niet dubbel meetelt en
+ * een week niet vaker dan één keer "af" maakt. Gedeeld door completeSession
+ * en skipSession, zodat beide altijd dezelfde definitie van "week klaar"
+ * hanteren — ongeacht in welke volgorde sessies voltooid of overgeslagen zijn.
+ * Een lege week (weekSessions.length === 0) is triviaal altijd af.
+ */
+function isWeekHandled(
+  weekSessions: TrainingWeek['sessions'],
+  completed: CompletedSession[],
+  skipped: SkippedSession[],
+): boolean {
+  const handledIds = new Set<string>([
+    ...completed.map(c => c.sessionId),
+    ...skipped.map(s => s.sessionId),
+  ]);
+  return weekSessions.every(s => handledIds.has(s.id));
+}
+
 // ── Hulpfuncties ──────────────────────────────
 /**
  * Geeft de maandag van de week van een datum als ISO-datumstring (YYYY-MM-DD).
@@ -593,22 +615,22 @@ export const useAppStore = create<AppState>()(
 
       completeSession: (result, weekSessions) => {
         const {
-          activeSession, completedSessions, currentWeekTraining, currentWeekRace,
+          activeSession, completedSessions, skippedSessions, currentWeekTraining, currentWeekRace,
           racePlan, schemaMode, profile, customPlan,
         } = get();
         if (!activeSession) return;
 
-        // Voorkom dubbele opslag als completeSession twee keer snel wordt aangeroepen
-        const alreadySaved = completedSessions.some(
-          c =>
-            c.sessionId  === activeSession.session.id &&
-            c.weekNumber === activeSession.weekNumber,
-        );
-        if (alreadySaved) {
-          set({ activeSession: null });
-          return;
-        }
-
+        // Geen dubbele-opslag-guard meer op sessionId+weekNumber: een sessie
+        // die opnieuw gelopen wordt (bijv. per ongeluk gestart en daarna
+        // bewust herdaan, of gewoon een tweede keer dezelfde training lopen)
+        // moet als extra, volwaardige run in completedSessions terechtkomen,
+        // niet stilletjes weggegooid worden — zie het weekoverzicht in
+        // dashboard.tsx waar voltooide/overgeslagen sessies opnieuw te
+        // starten zijn. Dubbele invocaties van completeSession vóór de
+        // gebruiker iets doet (bijv. een dubbele tik) blijven onschadelijk
+        // dankzij de `if (!activeSession) return;` hierboven: zodra de eerste
+        // aanroep synchroon `activeSession: null` zet, ziet een tweede aanroep
+        // direct daarna geen activeSession meer en stopt vroeg.
         const completed: CompletedSession = {
           ...result,
           sessionId: activeSession.session.id,
@@ -618,15 +640,21 @@ export const useAppStore = create<AppState>()(
 
         const updatedCompleted = [...completedSessions, completed];
 
-        // Controleer of alle sessies van de huidige week nu klaar zijn. Een
-        // lege week (0 sessies, mogelijk in een vrij schema) telt meteen als
-        // af: weekSessions.length is dan 0 en completedInWeek.length >= 0 is
-        // altijd waar, zonder deling door nul.
-        const weekSessionIds = weekSessions.map(s => s.id);
-        const completedInWeek = updatedCompleted.filter(
-          c => weekSessionIds.includes(c.sessionId),
+        // Werd deze sessie eerder bewust overgeslagen en nu alsnog gelopen
+        // (de "Toch doen?"-flow bij een overgeslagen sessie in het
+        // weekoverzicht)? Dan telt hij voortaan als voltooid, niet meer als
+        // overgeslagen: verwijder de skip-markering zodat de sessiekaart en
+        // de streak-logica hem niet dubbel (als zowel overgeslagen als
+        // voltooid) meetellen.
+        const updatedSkipped = skippedSessions.filter(
+          s => !(s.sessionId === activeSession.session.id && s.weekNumber === activeSession.weekNumber),
         );
-        const weekDone = completedInWeek.length >= weekSessions.length;
+
+        // Controleer of alle sessies van de huidige week nu klaar zijn
+        // (voltooid ÓF overgeslagen, gededupliceerd op sessionId — zie
+        // isWeekHandled hierboven). Een lege week (0 sessies, mogelijk in een
+        // vrij schema) telt meteen als af.
+        const weekDone = isWeekHandled(weekSessions, updatedCompleted, updatedSkipped);
 
         // Hoog het weekveld van de ACTIEVE modus op, geklemd binnen het
         // actieve schema (sjabloon, vrij schema of wedstrijdschema).
@@ -641,6 +669,7 @@ export const useAppStore = create<AppState>()(
 
         set({
           completedSessions: updatedCompleted,
+          skippedSessions: updatedSkipped,
           activeSession: null,
           ...(schemaMode === 'race'
             ? { currentWeekRace: nextWeek }
@@ -718,14 +747,11 @@ export const useAppStore = create<AppState>()(
         ];
 
         // Een week is afgehandeld zodra elke sessie ervan voltooid of
-        // overgeslagen is. Zo loopt de gebruiker na een mindere week gewoon
+        // overgeslagen is (zie isWeekHandled hierboven, ook gebruikt door
+        // completeSession). Zo loopt de gebruiker na een mindere week gewoon
         // door. Een lege week (weekSessions.length === 0) is triviaal altijd
         // "elke sessie afgehandeld" en telt dus meteen als af.
-        const handledIds = new Set<string>([
-          ...completedSessions.map(c => c.sessionId),
-          ...updatedSkipped.map(s => s.sessionId),
-        ]);
-        const weekDone = weekSessions.every(s => handledIds.has(s.id));
+        const weekDone = isWeekHandled(weekSessions, completedSessions, updatedSkipped);
 
         const currentWeek = schemaMode === 'race' ? currentWeekRace : currentWeekTraining;
         const totalWeeks = profile

@@ -19,7 +19,7 @@ import { useRacePace } from '../../src/hooks/useRacePace';
 import { usePremium } from '../../src/hooks/usePremium';
 import { computeRunStats, computeMilestones } from '../../src/data/achievements';
 import { formatPacePerKm } from '../../src/data/paceModel';
-import type { GoalType } from '../../src/data/trainingPlans';
+import type { GoalType, Session } from '../../src/data/trainingPlans';
 
 const goalLabel: Record<GoalType, string> = {
   '5km': '5 KM',
@@ -76,6 +76,12 @@ export default function DashboardScreen() {
   // blijft werken.
   const rawWeek = activePlan[currentWeek - 1];
   const week = rawWeek ? (isCustom ? rawWeek : remapWeekDays(rawWeek, trainingDays)) : rawWeek;
+  // Bewust NIET gededupliceerd op sessionId: dit is een totaal-kilometers-
+  // stat voor de week ("hoeveel heb ik deze week echt gelopen"), geen
+  // schema-voortgang. Een opnieuw gelopen sessie (zie handleReopenSession)
+  // is een extra, echt gelopen run en telt daarom hier gewoon mee, net als
+  // bij totalKm en het logboek. De ring blijft door Math.min hieronder
+  // sowieso op 100% geplafonneerd.
   const weekKm = completedSessions
     .filter(s => s.weekNumber === currentWeek)
     .reduce((sum, s) => sum + s.actualDistanceKm, 0);
@@ -105,12 +111,44 @@ export default function DashboardScreen() {
     );
   };
 
+  // Een voltooide of overgeslagen sessie blijft aanklikbaar om hem opnieuw te
+  // lopen (bijvoorbeeld na een verkeerde tik die de training per ongeluk als
+  // voltooid registreerde, of gewoon om een training nog een keer te doen).
+  // Altijd eerst een bevestiging: de eerdere run blijft gewoon in het
+  // logboek staan, dit voegt er een nieuwe aan toe (zie appStore.completeSession).
+  const handleReopenSession = (session: Session, isSkippedSession: boolean) => {
+    Alert.alert(
+      isSkippedSession ? 'Toch doen?' : 'Training opnieuw doen?',
+      isSkippedSession
+        ? 'Je sloeg deze training eerder over. Wil je hem alsnog lopen?'
+        : 'Je hebt deze training al gelopen. De eerdere run blijft gewoon in je logboek staan; dit start een nieuwe run voor dezelfde training.',
+      [
+        { text: 'Annuleren', style: 'cancel' },
+        {
+          text: isSkippedSession ? 'Toch doen' : 'Opnieuw starten',
+          onPress: () => router.push({
+            pathname: '/session/active',
+            params: { sessionId: session.id, weekNumber: String(currentWeek) },
+          }),
+        },
+      ],
+    );
+  };
+
   // Voortgang op basis van werkelijk voltooide trainingen, niet op de kalenderweek.
   // Zo duwt elke afgewerkte sessie de hoofdring zichtbaar vooruit, in lijn met de
   // inspanning van de gebruiker.
   const planSessionIds = activePlan.flatMap(w => w.sessions.map(s => s.id));
   const planTotalSessions = planSessionIds.length;
-  const completedInPlan = completedSessions.filter(c => planSessionIds.includes(c.sessionId)).length;
+  // Dedupliceer op sessionId: een sessie die opnieuw gelopen is (zie
+  // handleReopenSession hieronder) levert een tweede CompletedSession-record
+  // op met hetzelfde sessionId (bewust, zie appStore.completeSession). Voor
+  // de schemavoortgang telt zo'n sessie nog steeds maar één keer mee, anders
+  // zou de ring over de 100% heen kunnen schieten.
+  const completedSessionIdsInPlan = new Set(
+    completedSessions.filter(c => planSessionIds.includes(c.sessionId)).map(c => c.sessionId),
+  );
+  const completedInPlan = completedSessionIdsInPlan.size;
   const overallProgress = planTotalSessions > 0
     ? Math.round((completedInPlan / planTotalSessions) * 100)
     : 0;
@@ -346,7 +384,9 @@ export default function DashboardScreen() {
                             pathname: '/session/active',
                             params: { sessionId: session.id, weekNumber: String(currentWeek) },
                           })
-                        : undefined
+                        // Voltooid of overgeslagen: blijft aanklikbaar om de
+                        // training opnieuw te doen, na bevestiging.
+                        : () => handleReopenSession(session, isSkipped)
                     }
                   />
                 );
