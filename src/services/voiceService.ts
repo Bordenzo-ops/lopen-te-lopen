@@ -3,40 +3,37 @@
  *
  * Centrale spraakservice voor coaching en routebegeleiding.
  *
- * Werking:
- *  1. Is er een ElevenLabs API-sleutel ingesteld (src/config/voiceConfig.ts)?
- *     Dan wordt de tekst omgezet naar natuurlijke spraak via ElevenLabs.
- *  2. Gegenereerde audio wordt op schijf gecachet, zodat herhaalde zinnen
- *     geen nieuwe API-aanroep (en dus geen extra kosten) veroorzaken.
- *  3. Geen sleutel, geen netwerk of een fout? Dan valt de app automatisch
- *     terug op de ingebouwde telefoonstem (expo-speech).
+ * Sinds de overstap op vooraf gegenereerde stempakketten (zie
+ * `_workspace/notities/Stempakketten-ontwerp.md`) loopt alle coachingtekst
+ * via `speakPhrases(utterance, voice)`: de aanroeper geeft een rij
+ * catalogus-clip-ids (`src/config/voicePhrases.ts`) plus een natuurlijke
+ * volzin als vangnet mee. In fase A/B bestaan de clips nog niet, dus
+ * spreekt de app altijd de vangnettekst uit via de ingebouwde telefoonstem
+ * (expo-speech); fase C voegt hierboven het afspelen van de echte clips
+ * toe (op het gemarkeerde punt in `speakPhrases` hieronder).
  *
- * Vereist: npx expo install expo-audio expo-file-system
+ * Het oude runtime-pad naar ElevenLabs (premium-check → Supabase edge
+ * function → mp3 downloaden → afspelen) is hier verwijderd: dat pad werkte
+ * in de praktijk nooit hoorbaar (zie ontwerpdoc, "Waarom") en ElevenLabs is
+ * nu alleen nog build-tijd-gereedschap voor het generatiescript (fase B).
+ *
+ * `speak(text, voice)` blijft bestaan voor vrije tekst (bv. toekomstige
+ * losse meldingen) en doet altijd de telefoonstem.
+ *
+ * Vereist (voor fase C, nu al geïnstalleerd t.b.v. audiosessiebeheer):
+ * npx expo install expo-audio expo-file-system
  */
 
 import * as Speech from 'expo-speech';
-// @ts-ignore: wordt geinstalleerd met "npx expo install expo-audio"
+// @ts-ignore: wordt geinstalleerd met "npx expo install expo-audio" — createAudioPlayer
+// wordt pas in fase C gebruikt (afspelen van de gedownloade clips), maar staat hier al
+// klaar zodat die fase geen importwijziging meer nodig heeft.
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
-// @ts-ignore: wordt geinstalleerd met "npx expo install expo-file-system"
-import { File, Directory, Paths } from 'expo-file-system';
-import { ELEVENLABS, isElevenLabsConfigured, VoiceType } from '../config/voiceConfig';
-import { ensureAnonymousSession } from './authService';
-import { hasPremiumAccess } from '../config/premiumConfig';
-import { useAppStore } from '../store/appStore';
+import type { VoiceType } from '../config/voiceConfig';
+import type { PhraseUtterance } from '../config/voicePhrases';
 
 let currentPlayer: any = null;
 let audioModeReady = false;
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/** Eenvoudige stringhash (djb2) voor cache-bestandsnamen */
-function hashText(text: string): string {
-  let h = 5381;
-  for (let i = 0; i < text.length; i++) {
-    h = ((h << 5) + h + text.charCodeAt(i)) >>> 0;
-  }
-  return h.toString(36);
-}
 
 // ── Stemkeuze voor de ingebouwde telefoonstem (vangnet) ─────────────────────
 //
@@ -264,8 +261,9 @@ async function fallbackSpeak(text: string, voice: VoiceType): Promise<void> {
 
   // Zonder actieve audiosessie speelt AVSpeechSynthesizer op iOS niets af
   // bij een vergrendeld scherm/achtergrond of met de stille-modus-schakelaar
-  // aan. Daarom ook hier (net als op het ElevenLabs-pad) eerst de audiosessie
-  // activeren. Defensief: ensureAudioMode() faalt nooit hard.
+  // aan (dezelfde audiosessie die fase C straks ook voor clip-afspelen
+  // gebruikt). Daarom eerst de audiosessie activeren. Defensief:
+  // ensureAudioMode() faalt nooit hard.
   await ensureAudioMode();
 
   let options: Speech.SpeechOptions = { language: 'nl-NL', pitch: 1.0, rate: 0.95 };
@@ -308,93 +306,41 @@ async function ensureAudioMode(): Promise<void> {
   audioModeReady = true;
 }
 
-function getCacheFile(voiceId: string, text: string): any {
-  const dir = new Directory(Paths.cache, 'tts');
-  try {
-    dir.create({ intermediates: true, idempotent: true });
-  } catch {
-    // Map bestaat al
-  }
-  return new File(dir, `${voiceId}-${hashText(text)}.mp3`);
-}
-
-/** Haalt mp3-audio op via de Supabase TTS Edge Function (sleutel blijft serverside) */
-async function fetchTts(voiceId: string, text: string): Promise<Uint8Array> {
-  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-
-  if (!supabaseUrl) throw new Error('Supabase URL niet geconfigureerd');
-
-  // De TTS-function vereist een geldige Supabase-sessietoken (ook anoniem).
-  // Belangrijk: premium-stemmen moeten óók werken als de gebruiker cloud-sync
-  // nooit heeft aangezet. Daarom starten we hier zo nodig zelf een anonieme
-  // sessie, puur voor deze TTS-aanroep. Er wordt daardoor niets gesynct:
-  // syncNow/initBackend blijven achter de cloudSyncEnabled-toestemming zitten.
-  // Lukt ook dat niet (offline, geen backend), dan gooien we hier, zodat
-  // speak() terugvalt op de telefoonstem.
-  const session = await ensureAnonymousSession();
-  const accessToken = session?.access_token ?? '';
-  if (!accessToken) throw new Error('Geen Supabase-sessie voor TTS');
-
-  const res = await fetch(`${supabaseUrl}/functions/v1/tts`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      voiceId,
-      text,
-      modelId: ELEVENLABS.modelId,
-      voiceSettings: ELEVENLABS.voiceSettings,
-    }),
-  });
-  if (!res.ok) throw new Error(`TTS-proxy antwoordde met status ${res.status}`);
-  return new Uint8Array(await res.arrayBuffer());
-}
-
 // ── Publieke API ──────────────────────────────────────────────────────────────
 
 /**
  * Spreekt een tekst uit met de gekozen stem.
- * Onderbreekt een eventueel lopende uitspraak.
+ * Onderbreekt een eventueel lopende uitspraak. Alleen voor vrije tekst
+ * (geen catalogus-ids) — gebruik voor coachingzinnen bij voorkeur
+ * `speakPhrases`, zodat fase C die straks als clips kan afspelen.
  */
 export async function speak(text: string, voice: VoiceType = 'female'): Promise<void> {
   stop();
-
-  // Premium-stemmen (ElevenLabs) zitten achter de paywall. Gratis gebruikers
-  // krijgen altijd de ingebouwde telefoonstem. Offline-first: een onbekende
-  // premium-status telt als gratis. Lees de status defensief uit de store.
-  let premiumVoices = false;
-  try {
-    premiumVoices = hasPremiumAccess(useAppStore.getState().isPremium);
-  } catch {
-    premiumVoices = hasPremiumAccess(false);
-  }
-
-  if (!premiumVoices || !isElevenLabsConfigured()) {
-    await fallbackSpeak(text, voice);
-    return;
-  }
-
-  try {
-    const voiceId = ELEVENLABS.voices[voice].id;
-    const file = getCacheFile(voiceId, text);
-
-    if (!file.exists) {
-      const audio = await fetchTts(voiceId, text);
-      file.write(audio);
-    }
-
-    await ensureAudioMode();
-    currentPlayer = createAudioPlayer({ uri: file.uri });
-    currentPlayer.play();
-  } catch {
-    // Netwerk weg, quotum op of afspeelfout: telefoonstem als vangnet
-    await fallbackSpeak(text, voice);
-  }
+  await fallbackSpeak(text, voice);
 }
 
-/** Stopt alle lopende spraak (ElevenLabs en telefoonstem) */
+/**
+ * Spreekt een catalogusboodschap uit (zie src/config/voicePhrases.ts):
+ * een rij clip-ids plus een natuurlijke volzin als vangnet.
+ *
+ * Fase A/B: de clips bestaan nog niet, dus wordt altijd de vangnettekst
+ * via de telefoonstem gesproken — functioneel identiek aan het bestaande
+ * gedrag. Fase C voegt hierboven, vóór de fallback, het pad toe dat eerst
+ * controleert of het stempakket voor `voice` compleet op schijf staat en zo
+ * ja de clips in `utterance.ids` sequentieel afspeelt (expo-audio); pas als
+ * dat niet lukt (geen pakket, ontbrekende clip, afspeelfout) valt het terug
+ * op onderstaande fallbackSpeak-aanroep.
+ */
+export async function speakPhrases(utterance: PhraseUtterance, voice: VoiceType = 'female'): Promise<void> {
+  stop();
+
+  // ── FASE C: hier komt het clip-afspeelpad (voicePackService + expo-audio) ──
+  // Zolang dat er niet is, spreekt de telefoonstem altijd de fallbackText.
+
+  await fallbackSpeak(utterance.fallbackText, voice);
+}
+
+/** Stopt alle lopende spraak (clip-afspelen (fase C) en telefoonstem) */
 export function stop(): void {
   Speech.stop();
   try {

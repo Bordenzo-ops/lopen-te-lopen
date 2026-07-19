@@ -1,14 +1,16 @@
 /**
  * ElevenLabs spraakconfiguratie
  *
- * De coaching en routebegeleiding gebruiken ElevenLabs text-to-speech
- * voor een natuurlijke stem. De API-aanroep loopt via een Supabase Edge
- * Function (supabase/functions/tts) zodat de ElevenLabs-sleutel nooit
- * in de app-bundel terechtkomt. Zonder actieve Supabase-configuratie
- * valt de app automatisch terug op de ingebouwde telefoonstem (expo-speech).
+ * Sinds de overstap op vooraf gegenereerde stempakketten (zie
+ * `_workspace/notities/Stempakketten-ontwerp.md`) is ElevenLabs GEEN
+ * runtime-afhankelijkheid meer van de app. Deze configuratie (voice-ids en
+ * voiceSettings) wordt uitsluitend nog gebruikt door het build-tijd-
+ * generatiescript (fase B, `_workspace/scripts/generate-voice-packs.ts`)
+ * om éénmalig alle clips uit de zinnencatalogus (`voicePhrases.ts`) om te
+ * zetten naar mp3's voor het stempakket. Tijdens het lopen spreekt de app
+ * altijd óf een gedownload stempakket-clip (fase C) óf de ingebouwde
+ * telefoonstem (expo-speech) — zie `src/services/voiceService.ts`.
  */
-
-import { sanitizeEnvValue, isHttpsUrl } from '../utils/env';
 
 export type VoiceType = 'female' | 'male';
 
@@ -38,16 +40,3 @@ export const ELEVENLABS = {
     use_speaker_boost: true,
   },
 };
-
-/**
- * TTS is beschikbaar zodra de Supabase Edge Function bereikbaar is.
- * De Supabase URL is publiek (EXPO_PUBLIC_), de ElevenLabs-sleutel
- * staat serverside als Supabase Secret en zit nooit in de bundel.
- *
- * Zelfde hardening als isSupabaseConfigured() in supabaseClient.ts: een
- * niet-geexpandeerde placeholder ("$EXPO_PUBLIC_SUPABASE_URL") wordt eerst
- * gesaneerd tot een lege string, en de overgebleven waarde moet met
- * "https://" beginnen om als geldig te tellen.
- */
-export const isElevenLabsConfigured = (): boolean =>
-  isHttpsUrl(sanitizeEnvValue(process.env.EXPO_PUBLIC_SUPABASE_URL));

@@ -8,6 +8,7 @@ import { useThemeColors } from '../../src/theme/useTheme';
 import { Button } from '../../src/components/ui/Button';
 import { useAppStore } from '../../src/store/appStore';
 import * as voiceService from '../../src/services/voiceService';
+import { greetingUtterance } from '../../src/config/voicePhrases';
 import type { VoiceType } from '../../src/config/voiceConfig';
 import type { GoalType } from '../../src/data/trainingPlans';
 import { DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
@@ -31,7 +32,7 @@ export default function VoiceScreen() {
   // Korte voorbeeldzin zodat de gebruiker de stem direct hoort
   const previewVoice = (type: VoiceType) => {
     setVoiceType(type);
-    voiceService.speak('Hoi! Ik ben je hardloopcoach. Samen gaan we trainen.', type);
+    voiceService.speakPhrases(greetingUtterance(), type);
   };
 
   const handleStart = () => {

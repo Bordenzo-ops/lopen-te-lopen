@@ -40,6 +40,7 @@
 import { useCallback, useRef } from 'react';
 import * as voiceService from '../services/voiceService';
 import type { VoiceType } from '../config/voiceConfig';
+import { hrUtterance } from '../config/voicePhrases';
 import type { HeartRateZone } from '../data/trainingPlans';
 
 // Geen coaching in de eerste 3 minuten: de hartslag is dan nog niet
@@ -93,8 +94,11 @@ export function useHeartRateCoaching(
   // keer een korte bevestiging te geven.
   const awaitingReturnConfirmationRef = useRef(false);
 
-  const speak = useCallback((text: string) => {
-    voiceService.speak(text, voiceType);
+  // Spreekt een hartslagcoaching-melding uit via de catalogus (zie
+  // src/config/voicePhrases.ts) — 'high'/'low'/'ok' matchen de drie vaste
+  // teksten hieronder.
+  const speak = useCallback((kind: 'high' | 'low' | 'ok') => {
+    voiceService.speakPhrases(hrUtterance(kind), voiceType);
   }, [voiceType]);
 
   /** Zet alle interne toestand terug, bijvoorbeeld bij een nieuwe sessie. */
@@ -128,7 +132,7 @@ export function useHeartRateCoaching(
     // ── Terug in de doelzone: eventueel de bevestiging geven, episode sluiten
     if (direction === null) {
       if (awaitingReturnConfirmationRef.current && cooldownOk()) {
-        speak('Mooi zo, precies goed.');
+        speak('ok');
         lastSpokenAtRef.current = elapsedSeconds;
         awaitingReturnConfirmationRef.current = false;
       }
@@ -156,7 +160,7 @@ export function useHeartRateCoaching(
     if (direction === 'high') {
       if (highCountRef.current >= MAX_PER_TYPE) return;
       if (!cooldownOk()) return;
-      speak('Je hartslag is wat hoog voor deze training. Doe een stapje terug.');
+      speak('high');
       lastSpokenAtRef.current = elapsedSeconds;
       highCountRef.current += 1;
       notifiedForEpisodeRef.current = true;
@@ -169,7 +173,7 @@ export function useHeartRateCoaching(
     if (targetIdx < ZONE_ORDER.indexOf('Z3')) return;
     if (lowCountRef.current >= MAX_PER_TYPE) return;
     if (!cooldownOk()) return;
-    speak('Je hebt nog ruimte. Je mag iets versnellen.');
+    speak('low');
     lastSpokenAtRef.current = elapsedSeconds;
     lowCountRef.current += 1;
     notifiedForEpisodeRef.current = true;

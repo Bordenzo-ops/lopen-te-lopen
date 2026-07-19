@@ -10,6 +10,7 @@ import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
 import { zoneInfo, DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
 import * as voiceService from '../../src/services/voiceService';
+import { previewUtterance } from '../../src/config/voicePhrases';
 import type { VoiceType } from '../../src/config/voiceConfig';
 import { router } from 'expo-router';
 import { Minus, Plus } from 'lucide-react-native';
@@ -527,10 +528,7 @@ export default function SettingsScreen() {
                             key={type}
                             onPress={() => {
                               updateProfile({ voiceType: type });
-                              voiceService.speak(
-                                'Hoi! Ik ben je hardloopcoach. Zo klink ik tijdens het lopen.',
-                                type,
-                              );
+                              voiceService.speakPhrases(previewUtterance(), type);
                             }}
                             style={[styles.voiceToggleBtn, isActive && styles.voiceToggleBtnActive]}
                             activeOpacity={0.8}
