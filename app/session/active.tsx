@@ -20,6 +20,8 @@ import { useVoiceGuidance } from '../../src/hooks/useVoiceGuidance';
 import { useRoutePlanner } from '../../src/hooks/useRoutePlanner';
 import { useRouteCoaching } from '../../src/hooks/useRouteCoaching';
 import { useHeartRateCoaching } from '../../src/hooks/useHeartRateCoaching';
+import * as voiceService from '../../src/services/voiceService';
+import { sessionIntroUtterance, raceFinishUtterance } from '../../src/config/voicePhrases';
 import { RoutePreviewSheet } from '../../src/components/ui/RoutePreviewSheet';
 import { SessionTypeSheet } from '../../src/components/ui/SessionTypeSheet';
 import { Button } from '../../src/components/ui/Button';
@@ -199,6 +201,9 @@ export default function ActiveSessionScreen() {
   const isAutoPausedRef    = useRef(false);
   const manuallyPausedRef  = useRef(false);
   const countdownActiveRef = useRef(false);
+  // Gesproken sessie-intro (fase E): moet precies één keer per sessie klinken,
+  // zie de countdown-effect hieronder waar dit bewaakt wordt.
+  const introSpokenRef    = useRef(false);
   // Schermvergrendeling: voorkomt dat een veeg of broekzak de run onderbreekt.
   // De ref houdt de actuele waarde vast voor de hardware-terugknop-handler.
   const [isLocked, setIsLocked]             = useState(false);
@@ -332,6 +337,29 @@ export default function ActiveSessionScreen() {
       sessionStartTimeRef.current = now;
       setIsRunning(true);
       isRunningRef.current = true;
+
+      // Gesproken sessie-intro (fase E, zie voicePhrases.sessionIntroUtterance):
+      // precies één keer per sessie, op het moment dat er daadwerkelijk gelopen
+      // wordt. Dit is bewust de plek — en niet een aparte useEffect op
+      // `isRunning` — omdat dit de ENIGE tak is waar isRunning van false naar
+      // true gaat ná de countdown; latere isRunning-wissels (handmatige
+      // pauze/hervatten, auto-pauze) lopen nooit via deze tak, dus
+      // introSpokenRef.current is voldoende om "precies één keer" te
+      // garanderen zonder een extra "was dit de allereerste keer running"
+      // -check. Alleen met spraak aan en een bekend, loopbaar sessietype
+      // (geen 'rest' — daar loop je niet naartoe — en geen sessie zonder
+      // type, de toekomstige "vrije run" uit het ontwerpdoc).
+      if (
+        voiceEnabled && !introSpokenRef.current && session &&
+        (session.type === 'easy' || session.type === 'tempo' ||
+         session.type === 'long' || session.type === 'cross')
+      ) {
+        introSpokenRef.current = true;
+        void voiceService.speakPhrases(
+          sessionIntroUtterance(session.type, session.distanceKm, session.zone),
+          voiceType,
+        );
+      }
       return;
     }
 
@@ -729,7 +757,32 @@ export default function ActiveSessionScreen() {
               ? Math.round(hrSamples.reduce((sum, bpm) => sum + bpm, 0) / hrSamples.length)
               : undefined;
             const maxHeartRateBpm = hrMaxRef.current > 0 ? hrMaxRef.current : undefined;
-            onFinish(finalDist, elapsed);
+
+            // Race-felicitatie (fase E, zie voicePhrases.raceFinishUtterance):
+            // vervangt de standaard "Sessie voltooid!"-melding (onFinish)
+            // wanneer dit de RACE-sessie van de laatste week van een actief
+            // wedstrijdschema is. Detectie via dezelfde description die
+            // buildRacePlan.injectRaceName op precies díé ene sessie zet
+            // ("{racenaam}: RACE DAG!"), plus de weeknummer als extra
+            // zekerheid. Bewust VERVANGEN in plaats van na elkaar spreken:
+            // speakPhrases/onFinish beginnen altijd met stop() op de vorige
+            // uitspraak (zie voiceService.ts), dus een tweede melding vlak na
+            // "Sessie voltooid!" zou die gewoon afkappen — door elkaar heen
+            // praten dus. Eén heldere felicitatie is hier het betere moment.
+            if (
+              session && schemaMode === 'race' && racePlan &&
+              weekNum === racePlan.totalWeeks &&
+              session.description === `${racePlan.race.name}: RACE DAG!`
+            ) {
+              if (voiceEnabled) {
+                voiceService.speakPhrases(
+                  raceFinishUtterance(racePlan.race.id, racePlan.race.name),
+                  voiceType,
+                );
+              }
+            } else {
+              onFinish(finalDist, elapsed);
+            }
             completeSession(
               {
                 actualDistanceKm: finalDist,

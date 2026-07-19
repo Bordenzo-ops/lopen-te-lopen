@@ -10,8 +10,9 @@
  * `fallbackText` af via de telefoonstem (expo-speech); zie `speakPhrases`
  * in `src/services/voiceService.ts`.
  *
- * `allPhrases()` enumereert ALLE clips die het generatiescript straks met
- * ElevenLabs moet aanmaken (±560 stuks). De compositiefuncties hieronder
+ * `allPhrases()` enumereert ALLE clips die het generatiescript met
+ * ElevenLabs moet aanmaken (729 stuks sinds fase E, zie de "Uitbreiding"-
+ * sectie onderaan het ontwerpdoc). De compositiefuncties hieronder
  * (`kmSplitUtterance`, `finishUtterance`, enz.) bepalen welke clip-ids een
  * concrete boodschap tijdens het lopen gebruikt, plús de natuurlijke
  * volzin als vangnet.
@@ -21,6 +22,8 @@
  * eindig terwijl de gesproken boodschap toch natuurlijk klinkt. Zie de
  * toelichting bij elke groep hieronder.
  */
+
+import { getAllRaces } from '../data/rotterdamRaces';
 
 // ── Hulpfuncties voor afronding/klemmen ─────────────────────────────────────
 
@@ -77,6 +80,11 @@ const PACE_MIN_MAX = 15;
 const PACE_SEC_STEP = 5;
 
 // ── 3. Aanmoediging per km-split — bestaande KM_MESSAGES (useVoiceGuidance) ─
+// LET OP: index 0-5 zijn de OORSPRONKELIJKE zes teksten en blijven letterlijk
+// staan — hun clips zijn al gegenereerd. Index 6-23 zijn de fase E-uitbreiding
+// (18 nieuwe teksten, zelfde toon/lengte). De bestaande roulatie
+// `(completedKm - 1) % ENC_MESSAGES.length` in kmSplitUtterance hieronder
+// werkt ongewijzigd door met de langere lijst.
 const ENC_MESSAGES = [
   'Goed bezig, houd dit tempo aan.',
   'Super! Blijf gelijkmatig lopen.',
@@ -84,6 +92,24 @@ const ENC_MESSAGES = [
   'Fantastisch! Je bent sterk.',
   'Geweldig! Bijna bij het doel.',
   'Ongelooflijk! Je bent een machine.',
+  'Sterk gedaan, blijf dit tempo vasthouden.',
+  'Knap! Je loopt heel gelijkmatig.',
+  'Wat een kracht, hou dit vast.',
+  'Machtig! Je bent heerlijk bezig.',
+  'Blijf zo doorgaan, het gaat goed.',
+  'Topper! Dit tempo past bij je.',
+  'Sterk bezig, hou deze lijn vast.',
+  'Klasse! Je wordt steeds sterker.',
+  'Volhouden, je bent bijna klaar.',
+  'Indrukwekkend! Blijf zo lekker lopen.',
+  'Je bent vandaag in topvorm.',
+  'Prima tempo, hou dit erin.',
+  'Wauw! Dit gaat je lukken.',
+  'Sterke pas, blijf zo lopen.',
+  'Chapeau! Je doet het fantastisch.',
+  'Blijf ademen, blijf lopen, goed bezig.',
+  'Kanjer! Nog even volhouden.',
+  'Mooi ritme, ga zo verder.',
 ];
 
 // ── 4/5. Resterend / afgelegd — stappen van 0,5 km, 0,5..42 km ──────────────
@@ -108,11 +134,30 @@ const ZONE_DESCRIPTIONS: Record<string, string> = {
 };
 const ZONE_IDS = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5'] as const;
 
-// ── 8. Hartslagcoaching — bestaande drie zinnen (useHeartRateCoaching) ─────
-const HR_TEXTS: Record<'high' | 'low' | 'ok', string> = {
-  high: 'Je hartslag is wat hoog voor deze training. Doe een stapje terug.',
-  low:  'Je hebt nog ruimte. Je mag iets versnellen.',
-  ok:   'Mooi zo, precies goed.',
+// ── 8. Hartslagcoaching — drie varianten per type (useHeartRateCoaching) ───
+// Variant 0 van elk type is de OORSPRONKELIJKE tekst en blijft letterlijk
+// staan (clip al gegenereerd als hr_high/hr_low/hr_ok — wordt bij de
+// hernummering naar hr_{type}_0 opnieuw aangemaakt, zie generatiescript).
+// Varianten 1/2 zijn de fase E-uitbreiding: zelfde strekking, andere
+// woorden, zodat een gebruiker die vaker dezelfde coaching-melding hoort
+// niet steeds identieke zinnen krijgt. useHeartRateCoaching.ts rouleert
+// hierdoor per type met een eigen teller.
+const HR_TEXTS: Record<'high' | 'low' | 'ok', [string, string, string]> = {
+  high: [
+    'Je hartslag is wat hoog voor deze training. Doe een stapje terug.',
+    'Je zit boven je doelzone. Rustig aan, bouw het tempo af.',
+    'Even gas terugnemen, je hartslag loopt op. Zoek je ritme weer.',
+  ],
+  low: [
+    'Je hebt nog ruimte. Je mag iets versnellen.',
+    'Je hartslag is nog laag. Je kunt best wat sneller.',
+    'Er zit meer in. Voel je vrij om te versnellen.',
+  ],
+  ok: [
+    'Mooi zo, precies goed.',
+    'Prima tempo, dit is precies je zone.',
+    'Goed zo, je zit weer helemaal in het juiste ritme.',
+  ],
 };
 
 // ── 9. Mijlpalen — bestaande teksten (useRouteCoaching + useVoiceGuidance) ──
@@ -177,13 +222,46 @@ const DIST_M_MIN = 50;
 const DIST_M_MAX = 150;
 const DIST_M_STEP = 10;
 
-// ── 12. Vast — finish/well_done/greeting/preview ────────────────────────────
+// ── 12. Vast — finish/well_done/greeting/preview/have_fun ───────────────────
 const FIXED_TEXTS: Record<string, string> = {
   finish:    'Sessie voltooid!',
   well_done: 'Geweldig gedaan!',
   greeting:  'Hoi! Ik ben je hardloopcoach. Samen gaan we trainen.',
   preview:   'Hoi! Ik ben je hardloopcoach. Zo klink ik tijdens het lopen.',
+  have_fun:  'Veel plezier!',
 };
+
+// ── 13. Sessie-intro — gesproken bij de start van een geplande sessie ──────
+// Eén clip per trainingstype (rest-dagen worden nooit "gelopen" en krijgen
+// dus geen intro, zie de aanroep in app/session/active.tsx).
+const INTRO_TEXTS: Record<'easy' | 'tempo' | 'long' | 'cross', string> = {
+  easy:  'Vandaag: een rustige duurloop.',
+  tempo: 'Vandaag: een tempotraining.',
+  long:  'Vandaag: een lange duurloop.',
+  cross: 'Vandaag: een crosstraining.',
+};
+
+// ── 14. Doel — "Het doel is ongeveer 8,5 kilometer." ────────────────────────
+// Zelfde halve-kilometersystematiek als rem_/dist_ hierboven (KM_RANGE_MIN..
+// KM_RANGE_MAX, stappen van 0,5 km) — vergt dus geen eigen grenzen/helpers.
+
+// ── 15. Race-felicitaties — "Gefeliciteerd! Je hebt {race} uitgelopen!" ────
+// Eén clip per wedstrijd uit rotterdamRaces.ts. getAllRaces() geeft de
+// daadwerkelijk kiesbare "bladwedstrijden" terug (bij een evenement met
+// subRaces tellen alleen die subRaces mee, niet de groepsrace zelf — precies
+// wat een gebruiker in de racekiezer selecteert, zie buildRacePlan.ts). Begint
+// de naam zelf al met een lidwoord ("De ..."/"Het ..."), dan geen extra "de"
+// ervoor (zie raceNamePhrase).
+const RACE_LIST = getAllRaces();
+
+/**
+ * Voegt "de" toe vóór een wedstrijdnaam, tenzij die zelf al met een lidwoord
+ * begint (case-insensitief op "de"/"het", zodat "De Gouden Loop" niet
+ * "de De Gouden Loop" wordt).
+ */
+function raceNamePhrase(raceName: string): string {
+  return /^(de|het)\s/i.test(raceName) ? raceName : `de ${raceName}`;
+}
 
 // ── Catalogus-enumeratie ─────────────────────────────────────────────────────
 
@@ -251,9 +329,11 @@ export function allPhrases(): CatalogPhrase[] {
     phrases.push({ id: `zone_${zx}`, text: `Zone ${i + 1}. ${ZONE_DESCRIPTIONS[zx]}` });
   });
 
-  // 8. Hartslagcoaching
+  // 8. Hartslagcoaching — drie varianten per type
   (Object.keys(HR_TEXTS) as Array<keyof typeof HR_TEXTS>).forEach(key => {
-    phrases.push({ id: `hr_${key}`, text: HR_TEXTS[key] });
+    HR_TEXTS[key].forEach((text, i) => {
+      phrases.push({ id: `hr_${key}_${i}`, text });
+    });
   });
 
   // 9. Mijlpalen
@@ -275,6 +355,27 @@ export function allPhrases(): CatalogPhrase[] {
   // 12. Vast
   Object.entries(FIXED_TEXTS).forEach(([id, text]) => {
     phrases.push({ id, text });
+  });
+
+  // 13. Sessie-intro
+  (Object.keys(INTRO_TEXTS) as Array<keyof typeof INTRO_TEXTS>).forEach(type => {
+    phrases.push({ id: `intro_${type}`, text: INTRO_TEXTS[type] });
+  });
+
+  // 14. Doel
+  for (let km = KM_RANGE_MIN; km <= KM_RANGE_MAX + 1e-9; km += 0.5) {
+    phrases.push({
+      id: `goal_${halfStepSuffix(km)}`,
+      text: `Het doel is ongeveer ${formatHalfKm(km)} kilometer.`,
+    });
+  }
+
+  // 15. Race-felicitaties
+  RACE_LIST.forEach(race => {
+    phrases.push({
+      id: `race_${race.id}`,
+      text: `Gefeliciteerd! Je hebt ${raceNamePhrase(race.name)} uitgelopen!`,
+    });
   });
 
   return phrases;
@@ -382,9 +483,16 @@ export function zoneUtterance(zone: string): PhraseUtterance {
   return { ids: [`zone_${zone}`], fallbackText };
 }
 
-/** Hartslagcoaching: één van de drie vaste meldingen. */
-export function hrUtterance(kind: 'high' | 'low' | 'ok'): PhraseUtterance {
-  return { ids: [`hr_${kind}`], fallbackText: HR_TEXTS[kind] };
+/**
+ * Hartslagcoaching: één van de drie types, met een variant (0/1/2) zodat
+ * herhaalde meldingen van hetzelfde type niet steeds identiek klinken. De
+ * aanroeper (useHeartRateCoaching) rouleert de variant per type. Een
+ * ongeldige/ontbrekende variant klemt terug naar 0..2 (modulo), zodat deze
+ * functie nooit een niet-bestaande clip-id kan opleveren.
+ */
+export function hrUtterance(kind: 'high' | 'low' | 'ok', variant: number = 0): PhraseUtterance {
+  const idx = ((variant % 3) + 3) % 3;
+  return { ids: [`hr_${kind}_${idx}`], fallbackText: HR_TEXTS[kind][idx] };
 }
 
 /**
@@ -447,4 +555,52 @@ export function greetingUtterance(): PhraseUtterance {
 /** Stem-preview in de instellingen. */
 export function previewUtterance(): PhraseUtterance {
   return { ids: ['preview'], fallbackText: FIXED_TEXTS.preview };
+}
+
+/**
+ * Gesproken sessie-intro bij de start van een geplande sessie (fase E, zie
+ * app/session/active.tsx): "Vandaag: een tempotraining. Het doel is ongeveer
+ * 8,5 kilometer. Zone 3. Tempozone. Uitdagend maar houdbaar. Veel plezier!"
+ *
+ * `zone` is optioneel en alleen gebruikt als hij een bekende ZONE_IDS-waarde
+ * is — een onbekende/ontbrekende zone laat de zone-clip gewoon weg (net als
+ * de rest van deze catalogus: nooit een niet-bestaande clip-id opleveren).
+ * De fallbackText gebruikt de EXACTE sessieafstand (niet afgerond, in
+ * tegenstelling tot de clip-versie via goal_X) zodat de telefoonstem-fallback
+ * dezelfde precisie heeft als het scherm.
+ */
+export function sessionIntroUtterance(
+  type: 'easy' | 'tempo' | 'long' | 'cross',
+  distanceKm: number,
+  zone?: string,
+): PhraseUtterance {
+  const goalId = `goal_${halfStepSuffix(roundHalfClamped(distanceKm, KM_RANGE_MIN, KM_RANGE_MAX))}`;
+  const ids = [`intro_${type}`, goalId];
+
+  const hasZone = !!zone && zone in ZONE_DESCRIPTIONS;
+  if (hasZone) ids.push(`zone_${zone}`);
+  ids.push('have_fun');
+
+  const zoneSentence = hasZone ? ` ${zoneUtterance(zone as string).fallbackText}` : '';
+  return {
+    ids,
+    // Nederlandse notatie met komma (bv. "7,5"), anders leest de telefoonstem
+    // de punt voor als "punt".
+    fallbackText: `${INTRO_TEXTS[type]} Het doel is ongeveer ${String(distanceKm).replace('.', ',')} kilometer.${zoneSentence} Veel plezier!`,
+  };
+}
+
+/**
+ * Race-felicitatie bij het uitlopen van de RACE-sessie van de laatste week
+ * van een wedstrijdschema (fase E, zie app/session/active.tsx). Onbekende
+ * `raceId` (race niet gevonden in rotterdamRaces.ts, bijvoorbeeld verwijderd
+ * uit de racelijst na het bouwen van het schema) → `ids: []`, zodat er nooit
+ * naar een niet-bestaande clip verwezen wordt; de fallbackText blijft wel
+ * gewoon de volledige zin, met de meegegeven `raceName` (die zit al in het
+ * opgeslagen racePlan, dus is altijd bekend ongeacht de catalogus).
+ */
+export function raceFinishUtterance(raceId: string, raceName: string): PhraseUtterance {
+  const fallbackText = `Gefeliciteerd! Je hebt ${raceNamePhrase(raceName)} uitgelopen!`;
+  const known = RACE_LIST.some(race => race.id === raceId);
+  return { ids: known ? [`race_${raceId}`] : [], fallbackText };
 }

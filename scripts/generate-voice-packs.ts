@@ -139,7 +139,10 @@ function groupOf(id: string): string {
   if (/^hr_/.test(id)) return 'Hartslagcoaching';
   if (id === 'halfway' || /^mile_\d+$/.test(id)) return 'Mijlpalen';
   if (/^turn_/.test(id)) return 'Navigatie';
-  return 'Vast';
+  if (/^intro_/.test(id)) return 'Intro';
+  if (/^goal_/.test(id)) return 'Doel';
+  if (/^race_/.test(id)) return 'Race-felicitaties';
+  return 'Vast'; // o.a. finish/well_done/greeting/preview/have_fun
 }
 
 function printDryRun(): void {

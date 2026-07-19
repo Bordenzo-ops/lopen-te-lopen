@@ -27,6 +27,11 @@
  *    terugkeer naar de doelzone of een wissel van richting.
  *  - Na een "te hoog"-melding, zodra de hartslag terug in de doelzone is:
  *    één korte bevestiging ("Mooi zo, precies goed."), ook met cooldown.
+ *  - Elk type (te hoog/te laag/bevestiging) heeft drie tekstvarianten in de
+ *    catalogus (hr_{high,low,ok}_0..2, zie voicePhrases.ts). Deze hook
+ *    rouleert per type met een eigen teller: de eerste melding van een type
+ *    is variant 0, de tweede variant 1, enz. (modulo 3) — zo hoort iemand die
+ *    vaker dezelfde soort melding krijgt niet steeds exact dezelfde zin.
  *
  * Zonder maxHr, zonder enabled, zonder doelzone of zonder (geldige) metingen
  * doet de hook niets.
@@ -93,12 +98,22 @@ export function useHeartRateCoaching(
   // Na een "te hoog"-melding wachten we op terugkeer naar de doelzone om één
   // keer een korte bevestiging te geven.
   const awaitingReturnConfirmationRef = useRef(false);
+  // Variant-tellers voor de roulatie van hr_{type}_0..2 (zie voicePhrases.ts
+  // en de toelichting bovenaan dit bestand). Eén teller per type: een wissel
+  // naar het andere type beïnvloedt de teller van het eerste type niet.
+  const highVariantRef = useRef(0);
+  const lowVariantRef  = useRef(0);
+  const okVariantRef   = useRef(0);
 
   // Spreekt een hartslagcoaching-melding uit via de catalogus (zie
-  // src/config/voicePhrases.ts) — 'high'/'low'/'ok' matchen de drie vaste
-  // teksten hieronder.
+  // src/config/voicePhrases.ts) — 'high'/'low'/'ok' matchen de drie types,
+  // elk met drie tekstvarianten. Rouleert per type (modulo 3) via de
+  // bijbehorende ref hierboven.
   const speak = useCallback((kind: 'high' | 'low' | 'ok') => {
-    voiceService.speakPhrases(hrUtterance(kind), voiceType);
+    const variantRef = kind === 'high' ? highVariantRef : kind === 'low' ? lowVariantRef : okVariantRef;
+    const variant = variantRef.current % 3;
+    variantRef.current += 1;
+    voiceService.speakPhrases(hrUtterance(kind, variant), voiceType);
   }, [voiceType]);
 
   /** Zet alle interne toestand terug, bijvoorbeeld bij een nieuwe sessie. */
@@ -110,6 +125,9 @@ export function useHeartRateCoaching(
     highCountRef.current = 0;
     lowCountRef.current = 0;
     awaitingReturnConfirmationRef.current = false;
+    highVariantRef.current = 0;
+    lowVariantRef.current = 0;
+    okVariantRef.current = 0;
   }, []);
 
   /**
