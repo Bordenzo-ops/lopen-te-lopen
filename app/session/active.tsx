@@ -19,6 +19,7 @@ import { ZoneBadge } from '../../src/components/ui/ZoneBadge';
 import { useVoiceGuidance } from '../../src/hooks/useVoiceGuidance';
 import { useRoutePlanner } from '../../src/hooks/useRoutePlanner';
 import { useRouteCoaching } from '../../src/hooks/useRouteCoaching';
+import { useHeartRateCoaching } from '../../src/hooks/useHeartRateCoaching';
 import { RoutePreviewSheet } from '../../src/components/ui/RoutePreviewSheet';
 import { SessionTypeSheet } from '../../src/components/ui/SessionTypeSheet';
 import { Button } from '../../src/components/ui/Button';
@@ -280,6 +281,23 @@ export default function ActiveSessionScreen() {
     activePlannedRoute ?? undefined,
     voiceType,
   );
+  // Max. hartslag voor de live hartslagzone (fase A) en -coaching (fase B):
+  // profiel.maxHeartRate, met 220-leeftijd als nooddoorval mocht dat veld
+  // onbekend zijn. Zonder beide blijft alleen de bpm zichtbaar/gemeten,
+  // zonder zone-indicatie of coaching. Vóór de "!profile"-guard berekend
+  // (rules of hooks): de hook hieronder moet altijd aangeroepen worden.
+  const maxHrForZones = profile?.maxHeartRate || (profile?.age ? 220 - profile.age : null);
+  const { onHeartRateUpdate: onHeartRateCoachingUpdate } = useHeartRateCoaching(
+    voiceEnabled,
+    session?.zone,
+    maxHrForZones,
+    voiceType,
+  );
+  // Via een ref doorgegeven aan het BLE-verbindingseffect hieronder: de
+  // callback wisselt van identiteit als bijv. de spraak aan/uit gaat, en dat
+  // mag de bluetooth-verbinding niet laten her-opzetten middenin een run.
+  const onHeartRateCoachingUpdateRef = useRef(onHeartRateCoachingUpdate);
+  onHeartRateCoachingUpdateRef.current = onHeartRateCoachingUpdate;
 
   // ── Init sessie ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -535,6 +553,14 @@ export default function ActiveSessionScreen() {
         setHeartRate(bpm);
         hrSamplesRef.current.push(bpm);
         if (bpm > hrMaxRef.current) hrMaxRef.current = bpm;
+        // Hartslagcoaching (fase B): alleen als de sessie daadwerkelijk loopt.
+        // isRunningRef is ook false bij auto-pauze en tijdens de countdown,
+        // dus de coach blijft stil zolang de loper stilstaat of nog moet
+        // starten. De meter zelf blijft gewoon meten (voor het gemiddelde),
+        // alleen de coaching-melding wordt overgeslagen.
+        if (isRunningRef.current) {
+          onHeartRateCoachingUpdateRef.current(bpm, elapsedRef.current);
+        }
       },
       () => {
         // Geen signaal (nog) niet verbonden, of de herverbindingspogingen
@@ -664,10 +690,6 @@ export default function ActiveSessionScreen() {
   const zoneColor = session ? zoneInfo[session.zone].color : colors.brandPrimary;
   // Persoonlijk doeltempo voor deze sessie (premium + ingestelde doeltijd).
   const targetTrainingPace = session ? paceForType(session.type) : null;
-  // Max. hartslag voor de live hartslagzone (fase A): profiel.maxHeartRate,
-  // met 220-leeftijd als nooddoorval mocht dat veld onbekend zijn. Zonder
-  // beide blijft alleen de bpm zichtbaar, zonder zone-indicatie.
-  const maxHrForZones = profile.maxHeartRate || (profile.age ? 220 - profile.age : null);
 
   const formatTime = (s: number) => {
     const h   = Math.floor(s / 3600);

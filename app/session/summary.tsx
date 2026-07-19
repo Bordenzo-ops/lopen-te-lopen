@@ -282,6 +282,22 @@ export default function SummaryScreen() {
           )}
         </View>
 
+        {/* Hartslag (fase B): alleen tonen als deze run daadwerkelijk met een
+            gekoppelde BLE-hartslagmeter gelopen is (avgHeartRate/maxHeartRateBpm
+            worden alleen gezet als er metingen waren, zie completeSession in
+            app/session/active.tsx). Bewust een rustige tekstregel, geen aparte
+            statcel: dit is niet voor elke run relevant. */}
+        {lastSession && (lastSession.avgHeartRate != null || lastSession.maxHeartRateBpm != null) && (
+          <View style={styles.heartRateRow}>
+            <Text style={styles.heartRateText}>
+              Hartslag:
+              {lastSession.avgHeartRate != null ? ` gem. ${lastSession.avgHeartRate}` : ''}
+              {lastSession.avgHeartRate != null && lastSession.maxHeartRateBpm != null ? ' ·' : ''}
+              {lastSession.maxHeartRateBpm != null ? ` max ${lastSession.maxHeartRateBpm}` : ''}
+            </Text>
+          </View>
+        )}
+
         {/* Km-splits, in Strava-stijl: per km de tijd met een balkje relatief
             aan de langzaamste km, en de snelste km uitgelicht */}
         {splits.length > 0 && (
@@ -497,6 +513,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   statValue: {
     fontFamily: typography.fontFamily.sansBold, fontSize: typography.fontSize.base, color: colors.textPrimary,
+  },
+  heartRateRow: { alignItems: 'center' },
+  heartRateText: {
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
   },
   splitsCard: {
     backgroundColor: colors.bgCard, borderRadius: radius.xl,

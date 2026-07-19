@@ -174,6 +174,12 @@ export default function LogbookScreen() {
                       <Text style={styles.runRowStat}>{formatDuration(run.durationSeconds)}</Text>
                       <Text style={styles.runRowDot}>·</Text>
                       <Text style={styles.runRowStat}>{formatPacePerKm(run.avgPaceSecPerKm)}</Text>
+                      {run.avgHeartRate != null && (
+                        <>
+                          <Text style={styles.runRowDot}>·</Text>
+                          <Text style={styles.runRowStat}>{run.avgHeartRate} bpm</Text>
+                        </>
+                      )}
                     </View>
                     {run.source !== 'app' && (
                       <Text style={styles.runRowSource}>via {sourceLabel[run.source]}</Text>
