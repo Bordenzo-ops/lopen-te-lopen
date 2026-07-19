@@ -7,10 +7,18 @@
  * `_workspace/notities/Stempakketten-ontwerp.md`) loopt alle coachingtekst
  * via `speakPhrases(utterance, voice)`: de aanroeper geeft een rij
  * catalogus-clip-ids (`src/config/voicePhrases.ts`) plus een natuurlijke
- * volzin als vangnet mee. In fase A/B bestaan de clips nog niet, dus
- * spreekt de app altijd de vangnettekst uit via de ingebouwde telefoonstem
- * (expo-speech); fase C voegt hierboven het afspelen van de echte clips
- * toe (op het gemarkeerde punt in `speakPhrases` hieronder).
+ * volzin als vangnet mee.
+ *
+ * Fase C (deze versie): premium + een compleet lokaal gedownload stempakket
+ * (`voicePackService`) voor ALLE ids in de utterance → de clips worden
+ * sequentieel als losse mp3's afgespeeld (expo-audio). Ontbreekt premium, het
+ * pakket, of ook maar één clip-id, dan wordt er niets afgespeeld en spreekt
+ * de ingebouwde telefoonstem (expo-speech) de natuurlijke vangnettekst uit —
+ * functioneel identiek aan het gedrag van fase A/B. Gaat er tijdens het
+ * afspelen van de clips iets mis (fout of timeout), dan breekt de wachtrij af
+ * en spreekt de fallback ALLEEN als er nog geen enkele clip geklonken heeft
+ * (zie `tryPlayPackClips` hieronder) — een half afgespeelde boodschap wordt
+ * nooit alsnog (deels dubbel) via de telefoonstem herhaald.
  *
  * Het oude runtime-pad naar ElevenLabs (premium-check → Supabase edge
  * function → mp3 downloaden → afspelen) is hier verwijderd: dat pad werkte
@@ -20,20 +28,159 @@
  * `speak(text, voice)` blijft bestaan voor vrije tekst (bv. toekomstige
  * losse meldingen) en doet altijd de telefoonstem.
  *
- * Vereist (voor fase C, nu al geïnstalleerd t.b.v. audiosessiebeheer):
- * npx expo install expo-audio expo-file-system
+ * Vereist: npx expo install expo-audio expo-file-system
  */
 
 import * as Speech from 'expo-speech';
-// @ts-ignore: wordt geinstalleerd met "npx expo install expo-audio" — createAudioPlayer
-// wordt pas in fase C gebruikt (afspelen van de gedownloade clips), maar staat hier al
-// klaar zodat die fase geen importwijziging meer nodig heeft.
+// @ts-ignore: wordt geinstalleerd met "npx expo install expo-audio"
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { VoiceType } from '../config/voiceConfig';
 import type { PhraseUtterance } from '../config/voicePhrases';
+import { useAppStore } from '../store/appStore';
+import { hasPremiumAccess } from '../config/premiumConfig';
+import { isPackAvailable, getLocalClipUri } from './voicePackService';
 
 let currentPlayer: any = null;
 let audioModeReady = false;
+
+// ── Afspeelwachtrij voor stempakket-clips (fase C) ──────────────────────────
+//
+// `activeToken` is het generatie-token dat elke stop()-aanroep (dus ook elke
+// nieuwe speak()/speakPhrases()-aanroep, die altijd met stop() begint)
+// verhoogt. Een lopende wachtrij legt zijn eigen token vast bij de start en
+// controleert dat vóór/na elke asynchrone stap: wijkt het inmiddels af, dan
+// is er ondertussen een nieuwere aanroep of een expliciete stop() geweest en
+// breekt de wachtrij zichzelf onmiddellijk af (speelt niets meer af, spreekt
+// ook geen fallback meer uit — dat zou de nieuwere aanroep in de weg zitten).
+let activeToken = 0;
+
+/** Onderbreekt de op dit moment lopende clip meteen (aangeroepen door stop()). */
+let currentClipAbort: (() => void) | null = null;
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Speelt één clip-uri af en wacht op het einde ervan via het
+ * `playbackStatusUpdate`-event (`status.didJustFinish`, geverifieerd in
+ * node_modules/expo-audio/build/AudioModule.types.d.ts — AudioPlayer is een
+ * SharedObject<AudioEvents> met `addListener('playbackStatusUpdate', cb)`,
+ * cb krijgt een `AudioStatus` met o.a. `didJustFinish: boolean`).
+ *
+ * Geeft `true` terug bij een normaal afgespeelde clip, `false` bij een fout,
+ * een afgebroken wachtrij (nieuwere stop()-aanroep) of het 10s-vangnet.
+ */
+function playClip(uri: string, myToken: number): Promise<boolean> {
+  return new Promise<boolean>(resolve => {
+    let settled = false;
+    let player: any = null;
+    let subscription: { remove: () => void } | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    function finish(ok: boolean) {
+      if (settled) return;
+      settled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+      try {
+        subscription?.remove();
+      } catch {
+        // Subscription was al opgeruimd
+      }
+      if (currentClipAbort === abort) currentClipAbort = null;
+      // Alleen opruimen als dit nog steeds de actieve player is: stop() kan
+      // 'm ondertussen al hebben gepauzeerd/verwijderd.
+      if (currentPlayer === player) {
+        try {
+          player?.pause?.();
+          player?.remove?.();
+        } catch {
+          // Player was al opgeruimd
+        }
+        currentPlayer = null;
+      }
+      resolve(ok);
+    }
+
+    function abort() {
+      finish(false);
+    }
+
+    try {
+      player = createAudioPlayer({ uri }, { updateInterval: 100 });
+      currentPlayer = player;
+      currentClipAbort = abort;
+      subscription = player.addListener('playbackStatusUpdate', (status: { didJustFinish?: boolean }) => {
+        if (activeToken !== myToken) {
+          finish(false);
+          return;
+        }
+        if (status?.didJustFinish) finish(true);
+      });
+      // Vangnet: een clip die door een onverwachte native hik nooit
+      // "didJustFinish" meldt, mag de wachtrij niet voor altijd blokkeren.
+      timeoutId = setTimeout(() => finish(false), 10000);
+      player.play();
+    } catch {
+      finish(false);
+    }
+  });
+}
+
+/**
+ * Probeert de volledige utterance als stempakket-clips af te spelen.
+ *
+ * Voorwaarden (allemaal nodig, anders wordt er NIETS afgespeeld en mag de
+ * aanroeper de fallbackText via de telefoonstem spreken): premium-toegang,
+ * minstens één clip-id, en voor ELK id een lokale clip beschikbaar
+ * (`voicePackService.getLocalClipUri`, zelf al offline-first/stil-falend).
+ *
+ * Geeft terug of er al minstens één clip geklonken heeft. Zodra dat zo is,
+ * mag de aanroeper NOOIT meer de fallback spreken (ook niet als een latere
+ * clip in de rij mislukt) — dat zou een deels gesproken boodschap dubbelop
+ * of tegenstrijdig herhalen. Alleen als er nog niets geklonken heeft (fout op
+ * de allereerste clip, of de voorwaarden hierboven niet gehaald) mag de
+ * fallback alsnog spreken.
+ */
+async function tryPlayPackClips(utterance: PhraseUtterance, voice: VoiceType, myToken: number): Promise<boolean> {
+  let clipsPlayed = 0;
+  try {
+    let premiumOk = false;
+    try {
+      premiumOk = hasPremiumAccess(useAppStore.getState().isPremium);
+    } catch {
+      premiumOk = false;
+    }
+    if (!premiumOk) return false;
+    if (!utterance.ids || utterance.ids.length === 0) return false;
+    if (!isPackAvailable(voice)) return false;
+
+    const uris: string[] = [];
+    for (const id of utterance.ids) {
+      const uri = getLocalClipUri(voice, id);
+      if (!uri) return false; // niet ELK id heeft een clip: wachtrij niet starten
+      uris.push(uri);
+    }
+
+    await ensureAudioMode();
+
+    for (let i = 0; i < uris.length; i++) {
+      if (activeToken !== myToken) return clipsPlayed > 0;
+
+      const ok = await playClip(uris[i], myToken);
+
+      if (activeToken !== myToken) return clipsPlayed > 0;
+      if (!ok) return clipsPlayed > 0;
+
+      clipsPlayed++;
+      if (i < uris.length - 1) await delay(150);
+    }
+
+    return true;
+  } catch {
+    return clipsPlayed > 0;
+  }
+}
 
 // ── Stemkeuze voor de ingebouwde telefoonstem (vangnet) ─────────────────────
 //
@@ -323,26 +470,36 @@ export async function speak(text: string, voice: VoiceType = 'female'): Promise<
  * Spreekt een catalogusboodschap uit (zie src/config/voicePhrases.ts):
  * een rij clip-ids plus een natuurlijke volzin als vangnet.
  *
- * Fase A/B: de clips bestaan nog niet, dus wordt altijd de vangnettekst
- * via de telefoonstem gesproken — functioneel identiek aan het bestaande
- * gedrag. Fase C voegt hierboven, vóór de fallback, het pad toe dat eerst
- * controleert of het stempakket voor `voice` compleet op schijf staat en zo
- * ja de clips in `utterance.ids` sequentieel afspeelt (expo-audio); pas als
- * dat niet lukt (geen pakket, ontbrekende clip, afspeelfout) valt het terug
- * op onderstaande fallbackSpeak-aanroep.
+ * Premium + een compleet lokaal stempakket voor ALLE `utterance.ids` → de
+ * clips worden sequentieel afgespeeld (`tryPlayPackClips`, zie boven). Lukt
+ * dat niet (geen premium, geen pakket, ontbrekende clip) of gaat er
+ * onderweg iets mis zonder dat er al iets geklonken heeft, dan spreekt de
+ * telefoonstem de fallbackText — functioneel identiek aan het gedrag van
+ * fase A/B (waarin dit altijd het enige pad was).
  */
 export async function speakPhrases(utterance: PhraseUtterance, voice: VoiceType = 'female'): Promise<void> {
   stop();
+  const myToken = activeToken;
 
-  // ── FASE C: hier komt het clip-afspeelpad (voicePackService + expo-audio) ──
-  // Zolang dat er niet is, spreekt de telefoonstem altijd de fallbackText.
+  const playedSomething = await tryPlayPackClips(utterance, voice, myToken);
+  if (playedSomething) return;
+
+  // Ondertussen alweer afgebroken door een nieuwere aanroep? Dan is het niet
+  // aan deze (verouderde) aanroep om alsnog de fallback te laten klinken.
+  if (activeToken !== myToken) return;
 
   await fallbackSpeak(utterance.fallbackText, voice);
 }
 
-/** Stopt alle lopende spraak (clip-afspelen (fase C) en telefoonstem) */
+/** Stopt alle lopende spraak: de stempakket-wachtrij (fase C) en de telefoonstem. */
 export function stop(): void {
+  activeToken++; // maakt elke lopende wachtrij (then-keten) ongeldig
   Speech.stop();
+  try {
+    currentClipAbort?.();
+  } catch {
+    // Al opgeruimd
+  }
   try {
     currentPlayer?.pause?.();
     currentPlayer?.remove?.();
@@ -350,4 +507,5 @@ export function stop(): void {
     // Player was al opgeruimd
   }
   currentPlayer = null;
+  currentClipAbort = null;
 }

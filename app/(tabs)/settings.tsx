@@ -12,6 +12,8 @@ import { zoneInfo, DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
 import * as voiceService from '../../src/services/voiceService';
 import { previewUtterance } from '../../src/config/voicePhrases';
 import type { VoiceType } from '../../src/config/voiceConfig';
+import { ELEVENLABS } from '../../src/config/voiceConfig';
+import { downloadPack, deletePack, getPackInfo, getRemotePackSizeLabel } from '../../src/services/voicePackService';
 import { router } from 'expo-router';
 import { Minus, Plus } from 'lucide-react-native';
 import { usePremium } from '../../src/hooks/usePremium';
@@ -202,6 +204,17 @@ export default function SettingsScreen() {
   const reminderHour        = useAppStore(s => s.reminderHour);
   const setReminderHour     = useAppStore(s => s.setReminderHour);
   const [remindersBusy, setRemindersBusy] = useState(false);
+  const activeVoiceType: VoiceType = profile?.voiceType ?? 'female';
+  const [voicePackBusy, setVoicePackBusy] = useState(false);
+  const [voicePackProgressPct, setVoicePackProgressPct] = useState<number | null>(null);
+  const [voicePackError, setVoicePackError] = useState<string | null>(null);
+  // Alleen om na download/verwijdering opnieuw te renderen: voicePackService
+  // houdt zijn eigen (niet-reactieve) in-memory caches bij.
+  const [voicePackVersion, setVoicePackVersion] = useState(0);
+  const voicePackInfo = useMemo(
+    () => getPackInfo(activeVoiceType),
+    [activeVoiceType, voicePackVersion],
+  );
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   if (!profile) return null;
@@ -348,6 +361,44 @@ export default function SettingsScreen() {
     if (remindersEnabled) {
       await scheduleTrainingReminders(profile?.trainingDays ?? DEFAULT_TRAINING_DAYS, hour);
     }
+  }
+
+  async function handleDownloadVoicePack() {
+    setVoicePackError(null);
+    setVoicePackBusy(true);
+    setVoicePackProgressPct(0);
+    try {
+      const result = await downloadPack(activeVoiceType, (done, total) => {
+        setVoicePackProgressPct(total > 0 ? Math.round((done / total) * 100) : 0);
+      });
+      if (!result.ok) {
+        setVoicePackError(result.error ?? 'Downloaden mislukt. Probeer het later opnieuw.');
+      } else {
+        setVoicePackVersion(v => v + 1);
+      }
+    } finally {
+      setVoicePackBusy(false);
+      setVoicePackProgressPct(null);
+    }
+  }
+
+  function handleDeleteVoicePack() {
+    Alert.alert(
+      'Stempakket verwijderen',
+      'Weet je zeker dat je het gedownloade stempakket wilt verwijderen? Je hoort dan weer de telefoonstem, tot je opnieuw downloadt.',
+      [
+        { text: 'Annuleren', style: 'cancel' },
+        {
+          text: 'Verwijderen',
+          style: 'destructive',
+          onPress: () => {
+            deletePack(activeVoiceType);
+            setVoicePackError(null);
+            setVoicePackVersion(v => v + 1);
+          },
+        },
+      ],
+    );
   }
 
   function saveName(name: string) {
@@ -543,6 +594,49 @@ export default function SettingsScreen() {
                         );
                       })}
                     </View>
+                  </View>
+                  <Divider />
+                  <View style={styles.voicePackSection}>
+                    <Text style={styles.switchSub} accessibilityLabel="Status van de coachstem">
+                      {!hasAccess
+                        ? 'Premium vereist voor de coachstem'
+                        : voicePackInfo.downloaded
+                          ? `Coachstem: gedownload ✓ (${ELEVENLABS.voices[activeVoiceType]?.name ?? 'coachstem'}, ${getRemotePackSizeLabel()})`
+                          : 'Telefoonstem — stempakket nog niet gedownload'}
+                    </Text>
+                    {hasAccess && (
+                      voicePackInfo.downloaded ? (
+                        <TouchableOpacity
+                          onPress={handleDeleteVoicePack}
+                          style={styles.voicePackDeleteLink}
+                          activeOpacity={0.7}
+                          accessibilityRole="button"
+                          accessibilityLabel="Stempakket verwijderen"
+                        >
+                          <Text style={styles.voicePackDeleteText}>Verwijderen</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <>
+                          <TouchableOpacity
+                            onPress={handleDownloadVoicePack}
+                            style={styles.voicePackDownloadBtn}
+                            activeOpacity={0.85}
+                            disabled={voicePackBusy}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Download coachstem ${ELEVENLABS.voices[activeVoiceType]?.name ?? ''}`}
+                          >
+                            <Text style={styles.voicePackDownloadBtnText}>
+                              {voicePackBusy
+                                ? `Downloaden... ${voicePackProgressPct ?? 0}%`
+                                : `Download coachstem (${getRemotePackSizeLabel()})`}
+                            </Text>
+                          </TouchableOpacity>
+                          {voicePackError && (
+                            <Text style={styles.voicePackErrorText}>{voicePackError}</Text>
+                          )}
+                        </>
+                      )
+                    )}
                   </View>
                 </>
               )}
@@ -910,6 +1004,25 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.textSecondary,
   },
   voiceToggleLabelActive: { color: '#fff' },
+  voicePackSection: {
+    paddingHorizontal: spacing[2], paddingVertical: spacing[1.5], gap: spacing[1],
+  },
+  voicePackDownloadBtn: {
+    minHeight: 44, borderRadius: radius.md, backgroundColor: colors.brandPrimary,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[1.5],
+  },
+  voicePackDownloadBtnText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm, color: '#fff',
+  },
+  voicePackDeleteLink: {
+    minHeight: 44, justifyContent: 'center', alignItems: 'flex-start',
+  },
+  voicePackDeleteText: {
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.sm, color: colors.error,
+  },
+  voicePackErrorText: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs, color: colors.error,
+  },
   premiumVoiceNote: {
     flexDirection: 'row', alignItems: 'center', gap: spacing[1],
     backgroundColor: colors.bgCard, borderRadius: radius.xl,
