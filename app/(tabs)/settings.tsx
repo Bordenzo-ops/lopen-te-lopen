@@ -12,7 +12,7 @@ import { zoneInfo, DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
 import * as voiceService from '../../src/services/voiceService';
 import { previewUtterance } from '../../src/config/voicePhrases';
 import type { VoiceType } from '../../src/config/voiceConfig';
-import { ELEVENLABS } from '../../src/config/voiceConfig';
+import { VOICES, voiceDefinition } from '../../src/config/voiceConfig';
 import { downloadPack, deletePack, getPackInfo, getRemotePackSizeLabel } from '../../src/services/voicePackService';
 import { router } from 'expo-router';
 import { Minus, Plus } from 'lucide-react-native';
@@ -569,27 +569,33 @@ export default function SettingsScreen() {
               {profile.voiceGuidance && (
                 <>
                   <Divider />
-                  <View style={styles.row}>
+                  <View style={styles.voiceListSection}>
                     <Text style={styles.rowLabel}>Stem</Text>
-                    <View style={styles.voiceToggle}>
-                      {(['female', 'male'] as VoiceType[]).map(type => {
-                        const isActive = (profile.voiceType ?? 'female') === type;
+                    <View style={styles.voiceList}>
+                      {/* Alleen geactiveerde stemmen tonen: een lege elevenVoiceId betekent
+                          dat het stempakket nog niet bestaat (zie voiceConfig.ts). */}
+                      {VOICES.filter(v => v.elevenVoiceId).map(voiceDef => {
+                        const isActive = (profile.voiceType ?? 'female') === voiceDef.key;
                         return (
                           <TouchableOpacity
-                            key={type}
+                            key={voiceDef.key}
                             onPress={() => {
-                              updateProfile({ voiceType: type });
-                              voiceService.speakPhrases(previewUtterance(), type);
+                              updateProfile({ voiceType: voiceDef.key });
+                              voiceService.speakPhrases(previewUtterance(), voiceDef.key);
                             }}
-                            style={[styles.voiceToggleBtn, isActive && styles.voiceToggleBtnActive]}
+                            style={[styles.voiceListItem, isActive && styles.voiceListItemActive]}
                             activeOpacity={0.8}
                             accessibilityRole="radio"
-                            accessibilityLabel={type === 'female' ? 'Vrouwenstem' : 'Mannenstem'}
+                            accessibilityLabel={`${voiceDef.name}, ${voiceDef.accentLabel}`}
                             accessibilityState={{ selected: isActive }}
                           >
-                            <Text style={[styles.voiceToggleLabel, isActive && styles.voiceToggleLabelActive]}>
-                              {type === 'female' ? 'Vrouw' : 'Man'}
-                            </Text>
+                            <View>
+                              <Text style={[styles.voiceListName, isActive && styles.voiceListNameActive]}>
+                                {voiceDef.name}
+                              </Text>
+                              <Text style={styles.voiceListAccent}>{voiceDef.accentLabel}</Text>
+                            </View>
+                            {isActive && <Check size={18} color={colors.brandPrimary} strokeWidth={2.5} />}
                           </TouchableOpacity>
                         );
                       })}
@@ -601,7 +607,7 @@ export default function SettingsScreen() {
                       {!hasAccess
                         ? 'Premium vereist voor de coachstem'
                         : voicePackInfo.downloaded
-                          ? `Coachstem: gedownload ✓ (${ELEVENLABS.voices[activeVoiceType]?.name ?? 'coachstem'}, ${getRemotePackSizeLabel()})`
+                          ? `Coachstem: gedownload ✓ (${voiceDefinition(activeVoiceType).name}, ${getRemotePackSizeLabel()})`
                           : 'Telefoonstem — stempakket nog niet gedownload'}
                     </Text>
                     {hasAccess && (
@@ -623,7 +629,7 @@ export default function SettingsScreen() {
                             activeOpacity={0.85}
                             disabled={voicePackBusy}
                             accessibilityRole="button"
-                            accessibilityLabel={`Download coachstem ${ELEVENLABS.voices[activeVoiceType]?.name ?? ''}`}
+                            accessibilityLabel={`Download coachstem ${voiceDefinition(activeVoiceType).name}`}
                           >
                             <Text style={styles.voicePackDownloadBtnText}>
                               {voicePackBusy
@@ -989,21 +995,26 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   switchSub: {
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs, color: colors.textSecondary, marginTop: 2,
   },
-  voiceToggle: {
-    flexDirection: 'row', backgroundColor: colors.bgSurface,
+  voiceListSection: {
+    paddingHorizontal: spacing[2], paddingVertical: spacing[1.5], gap: spacing[1],
+  },
+  voiceList: { gap: spacing[1] },
+  voiceListItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    minHeight: 44, paddingHorizontal: spacing[1.5], paddingVertical: spacing[1],
     borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSubtle,
-    padding: 3, gap: 3,
+    backgroundColor: colors.bgSurface,
   },
-  voiceToggleBtn: {
-    paddingHorizontal: spacing[2], minHeight: 38,
-    alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm,
+  voiceListItemActive: { borderColor: colors.brandPrimary, backgroundColor: colors.brandPrimary + '11' },
+  voiceListName: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base,
+    color: colors.textPrimary,
   },
-  voiceToggleBtnActive: { backgroundColor: colors.brandPrimary },
-  voiceToggleLabel: {
-    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
-    color: colors.textSecondary,
+  voiceListNameActive: { color: colors.brandLight },
+  voiceListAccent: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
+    color: colors.textSecondary, marginTop: 1,
   },
-  voiceToggleLabelActive: { color: '#fff' },
   voicePackSection: {
     paddingHorizontal: spacing[2], paddingVertical: spacing[1.5], gap: spacing[1],
   },

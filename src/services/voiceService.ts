@@ -35,6 +35,7 @@ import * as Speech from 'expo-speech';
 // @ts-ignore: wordt geinstalleerd met "npx expo install expo-audio"
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { VoiceType } from '../config/voiceConfig';
+import { voiceDefinition } from '../config/voiceConfig';
 import type { PhraseUtterance } from '../config/voicePhrases';
 import { useAppStore } from '../store/appStore';
 import { hasPremiumAccess } from '../config/premiumConfig';
@@ -402,7 +403,15 @@ function getFallbackVoiceChoices(): Promise<FallbackVoiceChoices | null> {
   return voiceChoicesPromise;
 }
 
-/** Ingebouwde telefoonstem als vangnet, met een benadering van de man/vrouw-keuze */
+/**
+ * Ingebouwde telefoonstem als vangnet, met een benadering van de man/vrouw-keuze.
+ *
+ * De fallback kent alleen 'female'/'male' (er bestaat geen "Vlaamse"
+ * systeemstem om op te sturen) — een Vlaamse stem (`flemish_female`/
+ * `flemish_male`) zonder gedownload stempakket klinkt hier dus gewoon als de
+ * bijbehorende gewone nl-NL-telefoonstem. Bewuste keuze: het accentverschil
+ * gaat dan verloren, maar de app blijft altijd hoorbaar spreken.
+ */
 async function fallbackSpeak(text: string, voice: VoiceType): Promise<void> {
   Speech.stop();
 
@@ -416,7 +425,7 @@ async function fallbackSpeak(text: string, voice: VoiceType): Promise<void> {
   let options: Speech.SpeechOptions = { language: 'nl-NL', pitch: 1.0, rate: 0.95 };
   try {
     const choices = await getFallbackVoiceChoices();
-    const choice = choices?.[voice];
+    const choice = choices?.[voiceDefinition(voice).gender];
     if (choice) {
       options = {
         language: 'nl-NL',

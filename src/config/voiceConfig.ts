@@ -10,23 +10,83 @@
  * zetten naar mp3's voor het stempakket. Tijdens het lopen spreekt de app
  * altijd óf een gedownload stempakket-clip (fase C) óf de ingebouwde
  * telefoonstem (expo-speech) — zie `src/services/voiceService.ts`.
+ *
+ * STEMMENLIJST: de sleutels hieronder ('female', 'male', ...) zijn ook de
+ * padnamen in Supabase Storage (`voice-packs/{sleutel}/...`) — ze mogen dus
+ * NOOIT hernoemd worden zolang er al gepubliceerde stempakketten onder die
+ * naam bestaan. 'female' en 'male' zijn en blijven Roos en Adam (Nederlands);
+ * nieuwe stemmen krijgen een nieuwe, eigen sleutel (bv. 'flemish_female').
+ *
+ * Een stem met een LEGE elevenVoiceId is nog niet geactiveerd: de UI
+ * (instellingen + onboarding) verbergt hem en het generatiescript slaat hem
+ * over. De ID invullen + het script draaien en uploaden is dus de enige
+ * schakelaar om een nieuwe stem live te zetten.
  */
 
-export type VoiceType = 'female' | 'male';
+export type VoiceType = 'female' | 'male' | 'flemish_female' | 'flemish_male';
+
+export interface VoiceDefinition {
+  /** Identifier — tevens de padnaam in Supabase Storage (voice-packs/{key}/...). */
+  key: VoiceType;
+  /** Naam zoals getoond in de UI (bv. "Roos"). */
+  name: string;
+  /** Korte UI-sublabel, bv. 'Nederlands' of 'Vlaams'. */
+  accentLabel: string;
+  /** Voor de telefoonstem-fallback (man/vrouw-benadering, zie voiceService.ts). */
+  gender: 'female' | 'male';
+  /** ElevenLabs voice-id. Alleen gebruikt door scripts/generate-voice-packs.ts. */
+  elevenVoiceId: string;
+}
+
+export const VOICES: VoiceDefinition[] = [
+  {
+    key: 'female',
+    name: 'Roos',
+    accentLabel: 'Nederlands',
+    gender: 'female',
+    elevenVoiceId: '7qdUFMklKPaaAVMsBTBt',
+  },
+  {
+    key: 'male',
+    name: 'Adam',
+    accentLabel: 'Nederlands',
+    gender: 'male',
+    elevenVoiceId: 'pNInz6obpgDQGcFmaJgB',
+  },
+  {
+    key: 'flemish_female',
+    // Tijdelijke naam — Lars past deze aan zodra de definitieve stem uit de
+    // ElevenLabs Voice Library gekozen is.
+    name: 'Vlaamse vrouw',
+    accentLabel: 'Vlaams',
+    gender: 'female',
+    // PLAK HIER de voice-ID uit ElevenLabs (My Voices)
+    elevenVoiceId: '',
+  },
+  {
+    key: 'flemish_male',
+    // Tijdelijke naam — Lars past deze aan zodra de definitieve stem uit de
+    // ElevenLabs Voice Library gekozen is.
+    name: 'Vlaamse man',
+    accentLabel: 'Vlaams',
+    gender: 'male',
+    // PLAK HIER de voice-ID uit ElevenLabs (My Voices)
+    elevenVoiceId: '',
+  },
+];
+
+/**
+ * Zoekt de stemdefinitie bij een sleutel. Defensief: een onbekende/verouderde
+ * persisted waarde (bv. een corrupte store) valt veilig terug op de eerste
+ * stem in de lijst in plaats van te crashen.
+ */
+export function voiceDefinition(key: VoiceType): VoiceDefinition {
+  return VOICES.find(v => v.key === key) ?? VOICES[0];
+}
 
 export const ELEVENLABS = {
   /** Meertalig model met goede ondersteuning voor Nederlands */
   modelId: 'eleven_multilingual_v2',
-
-  /**
-   * Stemkeuzes. Roos is een native Nederlandse stem uit de Voice Library
-   * (fris, warm en vrolijk). Andere stem? Zoek er een in de Voice Library
-   * op elevenlabs.io, voeg hem toe aan My Voices en vervang hieronder het id.
-   */
-  voices: {
-    female: { id: '7qdUFMklKPaaAVMsBTBt', name: 'Roos' },
-    male:   { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam' },
-  } as Record<VoiceType, { id: string; name: string }>,
 
   /**
    * Steminstellingen:

@@ -2,14 +2,14 @@ import React, { useState, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Volume2, EyeOff, User, UserRound } from 'lucide-react-native';
+import { ChevronLeft, Volume2, EyeOff, Check } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { Button } from '../../src/components/ui/Button';
 import { useAppStore } from '../../src/store/appStore';
 import * as voiceService from '../../src/services/voiceService';
 import { greetingUtterance } from '../../src/config/voicePhrases';
-import type { VoiceType } from '../../src/config/voiceConfig';
+import { VOICES, type VoiceType } from '../../src/config/voiceConfig';
 import type { GoalType } from '../../src/data/trainingPlans';
 import { DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
 import { ROTTERDAM_RACES } from '../../src/data/rotterdamRaces';
@@ -151,37 +151,31 @@ export default function VoiceScreen() {
         {voiceGuidance && (
           <View style={styles.voicePicker}>
             <Text style={styles.voicePickerLabel}>Welke stem wil je horen?</Text>
-            <View style={styles.voicePickerRow}>
-              <TouchableOpacity
-                onPress={() => previewVoice('female')}
-                activeOpacity={0.8}
-                style={[styles.voiceBtn, voiceType === 'female' && styles.voiceBtnSelected]}
-                accessibilityRole="radio"
-                accessibilityLabel="Vrouwenstem"
-                accessibilityState={{ selected: voiceType === 'female' }}
-              >
-                <View style={[styles.voiceBtnIcon, { backgroundColor: colors.brandLight + '22' }]}>
-                  <UserRound size={18} color={colors.brandLight} strokeWidth={2} />
-                </View>
-                <Text style={[styles.voiceBtnLabel, voiceType === 'female' && styles.voiceBtnLabelSelected]}>
-                  Vrouwenstem
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => previewVoice('male')}
-                activeOpacity={0.8}
-                style={[styles.voiceBtn, voiceType === 'male' && styles.voiceBtnSelected]}
-                accessibilityRole="radio"
-                accessibilityLabel="Mannenstem"
-                accessibilityState={{ selected: voiceType === 'male' }}
-              >
-                <View style={[styles.voiceBtnIcon, { backgroundColor: colors.info + '22' }]}>
-                  <User size={18} color={colors.info} strokeWidth={2} />
-                </View>
-                <Text style={[styles.voiceBtnLabel, voiceType === 'male' && styles.voiceBtnLabelSelected]}>
-                  Mannenstem
-                </Text>
-              </TouchableOpacity>
+            <View style={styles.voiceList}>
+              {/* Alleen geactiveerde stemmen tonen: een lege elevenVoiceId betekent
+                  dat het stempakket nog niet bestaat (zie voiceConfig.ts). */}
+              {VOICES.filter(v => v.elevenVoiceId).map(voiceDef => {
+                const isActive = voiceType === voiceDef.key;
+                return (
+                  <TouchableOpacity
+                    key={voiceDef.key}
+                    onPress={() => previewVoice(voiceDef.key)}
+                    activeOpacity={0.8}
+                    style={[styles.voiceListItem, isActive && styles.voiceListItemSelected]}
+                    accessibilityRole="radio"
+                    accessibilityLabel={`${voiceDef.name}, ${voiceDef.accentLabel}`}
+                    accessibilityState={{ selected: isActive }}
+                  >
+                    <View>
+                      <Text style={[styles.voiceListName, isActive && styles.voiceListNameSelected]}>
+                        {voiceDef.name}
+                      </Text>
+                      <Text style={styles.voiceListAccent}>{voiceDef.accentLabel}</Text>
+                    </View>
+                    {isActive && <Check size={18} color={colors.brandPrimary} strokeWidth={2.5} />}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
             <Text style={styles.voicePickerHint}>Tik op een stem om die te beluisteren.</Text>
             {!hasAccess && (
@@ -267,23 +261,23 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base,
     color: colors.textPrimary,
   },
-  voicePickerRow: { flexDirection: 'row', gap: spacing[1.5] },
-  voiceBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: spacing[1], minHeight: 52,
+  voiceList: { gap: spacing[1] },
+  voiceListItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    minHeight: 52, paddingHorizontal: spacing[1.5],
     backgroundColor: colors.bgCard, borderRadius: radius.lg,
     borderWidth: 1.5, borderColor: colors.borderSubtle,
   },
-  voiceBtnSelected: { borderColor: colors.brandPrimary, backgroundColor: colors.brandPrimary + '11' },
-  voiceBtnIcon: {
-    width: 30, height: 30, borderRadius: 15,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  voiceBtnLabel: {
+  voiceListItemSelected: { borderColor: colors.brandPrimary, backgroundColor: colors.brandPrimary + '11' },
+  voiceListName: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
     color: colors.textSecondary,
   },
-  voiceBtnLabelSelected: { color: colors.brandLight },
+  voiceListNameSelected: { color: colors.brandLight },
+  voiceListAccent: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
+    color: colors.textTertiary, marginTop: 1,
+  },
   voicePickerHint: {
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
     color: colors.textTertiary,

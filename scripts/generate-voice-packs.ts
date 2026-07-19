@@ -14,9 +14,11 @@
  *   Genereren, beide stemmen (standaardoutput: _workspace/voice-packs-output):
  *     ELEVENLABS_API_KEY=sk_... npx tsx scripts/generate-voice-packs.ts
  *
- *   Genereren voor één stem:
+ *   Genereren voor één stem (elke sleutel uit VOICES in voiceConfig.ts):
  *     ELEVENLABS_API_KEY=sk_... npx tsx scripts/generate-voice-packs.ts --voice female
  *     ELEVENLABS_API_KEY=sk_... npx tsx scripts/generate-voice-packs.ts --voice male
+ *     ELEVENLABS_API_KEY=sk_... npx tsx scripts/generate-voice-packs.ts --voice flemish_female
+ *     ELEVENLABS_API_KEY=sk_... npx tsx scripts/generate-voice-packs.ts --voice flemish_male
  *
  *   Genereren + direct uploaden naar Supabase Storage:
  *     ELEVENLABS_API_KEY=sk_... SUPABASE_SERVICE_ROLE_KEY=... \
@@ -56,7 +58,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { allPhrases, type CatalogPhrase } from '../src/config/voicePhrases';
-import { ELEVENLABS, type VoiceType } from '../src/config/voiceConfig';
+import { ELEVENLABS, VOICES, voiceDefinition, type VoiceType } from '../src/config/voiceConfig';
 
 // ── Constantes ───────────────────────────────────────────────────────────────
 
@@ -88,10 +90,11 @@ function parseArgs(argv: string[]): CliOptions {
     switch (arg) {
       case '--voice': {
         const value = argv[++i];
-        if (value === 'female' || value === 'male' || value === 'all') {
-          options.voice = value;
+        const validKeys = VOICES.map(v => v.key);
+        if (value === 'all' || (validKeys as string[]).includes(value ?? '')) {
+          options.voice = value as VoiceType | 'all';
         } else {
-          console.error(`Onbekende --voice waarde: "${value}". Gebruik female, male of all.`);
+          console.error(`Onbekende --voice waarde: "${value}". Gebruik ${validKeys.join(', ')} of all.`);
           process.exit(1);
         }
         break;
@@ -240,17 +243,24 @@ async function processVoice(
   outDir: string,
   failures: FailedClip[],
 ): Promise<void> {
-  const voiceInfo = ELEVENLABS.voices[voice];
+  const voiceInfo = voiceDefinition(voice);
   const voiceDir = path.join(outDir, voice);
   fs.mkdirSync(voiceDir, { recursive: true });
 
   const phrases = allPhrases();
   console.log(`\n=== Stem: ${voiceInfo.name} (${voice}) — ${phrases.length} clips ===`);
 
+  if (!voiceInfo.elevenVoiceId) {
+    console.warn(
+      `  Stem "${voice}" overgeslagen: voice-ID nog niet ingevuld in voiceConfig.ts — overgeslagen.`,
+    );
+    return;
+  }
+
   // Gewenste staat: phraseId -> { bestandsnaam, tekst }
   const desired = new Map<string, { filename: string; text: string }>();
   for (const phrase of phrases) {
-    const hash = computeHash(phrase.text, voiceInfo.id);
+    const hash = computeHash(phrase.text, voiceInfo.elevenVoiceId);
     desired.set(phrase.id, { filename: `${phrase.id}-${hash}.mp3`, text: phrase.text });
   }
 
@@ -285,7 +295,7 @@ async function processVoice(
     }
 
     try {
-      const audio = await fetchClip(voiceInfo.id, phrase.text);
+      const audio = await fetchClip(voiceInfo.elevenVoiceId, phrase.text);
       fs.writeFileSync(filePath, Buffer.from(audio));
       generated++;
       console.log(`  [${voice}] ${phrase.id} gegenereerd (${wanted.filename})`);
@@ -453,7 +463,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  const voicesToProcess: VoiceType[] = options.voice === 'all' ? ['female', 'male'] : [options.voice];
+  const voicesToProcess: VoiceType[] =
+    options.voice === 'all' ? VOICES.map(v => v.key) : [options.voice];
   const failures: FailedClip[] = [];
 
   if (!process.env.ELEVENLABS_API_KEY) {

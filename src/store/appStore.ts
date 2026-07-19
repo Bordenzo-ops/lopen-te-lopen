@@ -8,6 +8,7 @@ import { resolveActivePlan } from '../data/activePlan';
 import { ensureAnonymousSession } from '../services/authService';
 import { syncAll } from '../services/syncService';
 import { isPremiumActive as fetchPremiumActive } from '../services/purchaseService';
+import type { VoiceType } from '../config/voiceConfig';
 
 // ── Hulpfuncties voor het vrije schema ────────
 /**
@@ -67,8 +68,12 @@ export interface UserProfile {
   maxHeartRate: number;    // berekend: 220 - leeftijd
   age: number;
   voiceGuidance: boolean;  // gesproken begeleiding aan/uit
-  /** Stemkeuze voor de coaching (default 'female') */
-  voiceType?: 'female' | 'male';
+  /**
+   * Stemkeuze voor de coaching (default 'female'). Type is verbreed naar de
+   * volledige stemmenlijst (VoiceType, zie voiceConfig.ts) — bestaande
+   * gepersisteerde waarden 'female'/'male' blijven zonder migratie geldig.
+   */
+  voiceType?: VoiceType;
   /** Routeplanner standaard aan bij sessiestart (default false) */
   routePlannerEnabled?: boolean;
   /**
