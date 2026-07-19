@@ -55,23 +55,17 @@ export const VOICES: VoiceDefinition[] = [
   },
   {
     key: 'flemish_female',
-    // Tijdelijke naam — Lars past deze aan zodra de definitieve stem uit de
-    // ElevenLabs Voice Library gekozen is.
-    name: 'Vlaamse vrouw',
+    name: 'Elke',
     accentLabel: 'Vlaams',
     gender: 'female',
-    // PLAK HIER de voice-ID uit ElevenLabs (My Voices)
-    elevenVoiceId: '',
+    elevenVoiceId: '7hSjFLTqJTvdLPxYg8Mj',
   },
   {
     key: 'flemish_male',
-    // Tijdelijke naam — Lars past deze aan zodra de definitieve stem uit de
-    // ElevenLabs Voice Library gekozen is.
-    name: 'Vlaamse man',
+    name: 'Steven',
     accentLabel: 'Vlaams',
     gender: 'male',
-    // PLAK HIER de voice-ID uit ElevenLabs (My Voices)
-    elevenVoiceId: '',
+    elevenVoiceId: 'W3tynvkIV6vLqFqVMaqT',
   },
 ];
 
