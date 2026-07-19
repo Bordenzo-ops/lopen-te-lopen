@@ -5,7 +5,7 @@
  * `_workspace/notities/Stempakketten-ontwerp.md`) is ElevenLabs GEEN
  * runtime-afhankelijkheid meer van de app. Deze configuratie (voice-ids en
  * voiceSettings) wordt uitsluitend nog gebruikt door het build-tijd-
- * generatiescript (fase B, `_workspace/scripts/generate-voice-packs.ts`)
+ * generatiescript (fase B, `scripts/generate-voice-packs.ts`)
  * om éénmalig alle clips uit de zinnencatalogus (`voicePhrases.ts`) om te
  * zetten naar mp3's voor het stempakket. Tijdens het lopen spreekt de app
  * altijd óf een gedownload stempakket-clip (fase C) óf de ingebouwde
