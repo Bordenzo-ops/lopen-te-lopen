@@ -290,6 +290,57 @@ export async function downloadPack(
   }
 }
 
+/**
+ * Controleert (netwerk, best-effort) of er op de server een nieuwere versie
+ * van het stempakket staat dan wat lokaal gedownload is — bijvoorbeeld omdat
+ * er nieuwe coachingzinnen aan de catalogus zijn toegevoegd. Vergelijkt de
+ * `files`-map van het externe manifest met de lokale (bestandsnamen bevatten
+ * een content-hash, dus elk verschil betekent echt andere/nieuwe audio).
+ *
+ * Alleen zinvol als er lokaal al een compleet pakket staat; in alle andere
+ * gevallen (geen pakket, geen netwerk, fout) geeft dit `false` terug — de
+ * aanroeper toont dan gewoon geen bijwerkknop. `downloadPack` is al
+ * incrementeel, dus bijwerken = simpelweg opnieuw downloadPack aanroepen.
+ */
+export async function isPackUpdateAvailable(voice: VoiceType): Promise<boolean> {
+  try {
+    if (!isPackAvailable(voice)) return false;
+    const local = readLocalManifest(voice);
+    if (!local) return false;
+
+    const supabaseUrl = sanitizeEnvValue(process.env.EXPO_PUBLIC_SUPABASE_URL);
+    if (!isHttpsUrl(supabaseUrl)) return false;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    let response: Response;
+    try {
+      response = await fetch(
+        `${supabaseUrl}/storage/v1/object/public/voice-packs/${voice}/manifest.json`,
+        { signal: controller.signal },
+      );
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    if (!response.ok) return false;
+
+    const remote = await response.json();
+    if (!isValidManifestShape(remote)) return false;
+
+    const localFiles = local.files;
+    const remoteFiles = remote.files;
+    const localKeys = Object.keys(localFiles);
+    const remoteKeys = Object.keys(remoteFiles);
+    if (localKeys.length !== remoteKeys.length) return true;
+    for (const key of remoteKeys) {
+      if (localFiles[key] !== remoteFiles[key]) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 /** Verwijdert het volledige lokale stempakket voor `voice`. Faalt altijd stil. */
 export function deletePack(voice: VoiceType): void {
   try {

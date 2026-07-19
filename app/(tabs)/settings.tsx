@@ -13,7 +13,7 @@ import * as voiceService from '../../src/services/voiceService';
 import { previewUtterance } from '../../src/config/voicePhrases';
 import type { VoiceType } from '../../src/config/voiceConfig';
 import { VOICES, voiceDefinition } from '../../src/config/voiceConfig';
-import { downloadPack, deletePack, getPackInfo, getRemotePackSizeLabel } from '../../src/services/voicePackService';
+import { downloadPack, deletePack, getPackInfo, getRemotePackSizeLabel, isPackUpdateAvailable } from '../../src/services/voicePackService';
 import { router } from 'expo-router';
 import { Minus, Plus } from 'lucide-react-native';
 import { usePremium } from '../../src/hooks/usePremium';
@@ -215,6 +215,21 @@ export default function SettingsScreen() {
     () => getPackInfo(activeVoiceType),
     [activeVoiceType, voicePackVersion],
   );
+  // Stille achtergrondcheck of er nieuwe coachingzinnen op de server staan
+  // (bv. na een catalogus-uitbreiding). Best-effort: offline of bij een fout
+  // blijft de knop gewoon weg. downloadPack is incrementeel, dus bijwerken
+  // haalt alleen de ontbrekende clips op.
+  const [voicePackUpdateAvailable, setVoicePackUpdateAvailable] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    setVoicePackUpdateAvailable(false);
+    if (voicePackInfo.downloaded) {
+      isPackUpdateAvailable(activeVoiceType).then(update => {
+        if (!cancelled) setVoicePackUpdateAvailable(update);
+      });
+    }
+    return () => { cancelled = true; };
+  }, [activeVoiceType, voicePackVersion, voicePackInfo.downloaded]);
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   if (!profile) return null;
@@ -612,15 +627,36 @@ export default function SettingsScreen() {
                     </Text>
                     {hasAccess && (
                       voicePackInfo.downloaded ? (
-                        <TouchableOpacity
-                          onPress={handleDeleteVoicePack}
-                          style={styles.voicePackDeleteLink}
-                          activeOpacity={0.7}
-                          accessibilityRole="button"
-                          accessibilityLabel="Stempakket verwijderen"
-                        >
-                          <Text style={styles.voicePackDeleteText}>Verwijderen</Text>
-                        </TouchableOpacity>
+                        <>
+                          {voicePackUpdateAvailable && (
+                            <TouchableOpacity
+                              onPress={handleDownloadVoicePack}
+                              style={styles.voicePackDownloadBtn}
+                              activeOpacity={0.85}
+                              disabled={voicePackBusy}
+                              accessibilityRole="button"
+                              accessibilityLabel="Nieuwe coachingzinnen downloaden"
+                            >
+                              <Text style={styles.voicePackDownloadBtnText}>
+                                {voicePackBusy
+                                  ? `Bijwerken... ${voicePackProgressPct ?? 0}%`
+                                  : 'Nieuwe zinnen beschikbaar — bijwerken'}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                          {voicePackError && (
+                            <Text style={styles.voicePackErrorText}>{voicePackError}</Text>
+                          )}
+                          <TouchableOpacity
+                            onPress={handleDeleteVoicePack}
+                            style={styles.voicePackDeleteLink}
+                            activeOpacity={0.7}
+                            accessibilityRole="button"
+                            accessibilityLabel="Stempakket verwijderen"
+                          >
+                            <Text style={styles.voicePackDeleteText}>Verwijderen</Text>
+                          </TouchableOpacity>
+                        </>
                       ) : (
                         <>
                           <TouchableOpacity
