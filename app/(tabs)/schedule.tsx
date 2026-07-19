@@ -433,7 +433,7 @@ export default function ScheduleScreen() {
                     );
                   })}
 
-                  {isCustom && editMode && (
+                  {isCustom && (
                     <TouchableOpacity
                       onPress={() => setEditorState({ weekNumber: week.weekNumber, session: null })}
                       style={styles.addSessionRow}

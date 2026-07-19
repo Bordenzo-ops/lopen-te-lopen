@@ -348,6 +348,11 @@ export default function DashboardScreen() {
             <Text style={styles.weekCompleteSub}>
               Voeg sessies toe via het Schema-tabblad om aan de slag te gaan.
             </Text>
+            <Button
+              label="Training toevoegen"
+              onPress={() => router.push('/(tabs)/schedule')}
+              size="sm"
+            />
           </FadeSlideIn>
         ) : (
           <FadeSlideIn style={styles.weekCompleteCard}>
@@ -392,6 +397,18 @@ export default function DashboardScreen() {
                 );
               })}
             </View>
+            {isCustom && week.sessions.length > 0 && (
+              <TouchableOpacity
+                onPress={() => router.push('/(tabs)/schedule')}
+                style={styles.addOwnSessionBtn}
+                activeOpacity={0.7}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Eigen training toevoegen"
+              >
+                <Text style={styles.addOwnSessionText}>+ Eigen training toevoegen</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -545,6 +562,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: typography.letterSpacing.wider,
   },
   sessionList: { gap: spacing[1] },
+  addOwnSessionBtn: {
+    alignSelf: 'center',
+    paddingVertical: spacing[1],
+    paddingHorizontal: spacing[2],
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  addOwnSessionText: {
+    fontFamily: typography.fontFamily.sansMedium,
+    fontSize: typography.fontSize.sm,
+    color: colors.brandPrimary,
+  },
   weekCompleteCard: {
     backgroundColor: colors.bgCard, borderRadius: radius.xl, padding: spacing[3],
     alignItems: 'center', gap: spacing[1], borderWidth: 1.5, borderColor: colors.success + '44',
