@@ -109,6 +109,14 @@
           "NSHealthUpdateUsageDescription": "Lopen te Lopen schrijft je voltooide hardloopsessies (workout en afstand) naar Apple Health.",
           "background": false
         }
+      ],
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "neverForLocation": true,
+          "bluetoothAlwaysPermission": "Lopen te Lopen gebruikt Bluetooth om je hartslagmeter te verbinden en je hartslag live te tonen tijdens het lopen."
+        }
       ]
     ],
     "extra": {

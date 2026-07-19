@@ -94,6 +94,8 @@ export interface CompletedSession {
   durationSeconds: number;
   avgPaceSecPerKm: number;
   avgHeartRate?: number;
+  /** Hoogste tijdens de run gemeten hartslag (bpm), optioneel: alleen bij een gekoppelde BLE-hartslagmeter. */
+  maxHeartRateBpm?: number;
   route?: Array<{ lat: number; lon: number; timestamp: number }>;
   /**
    * Km-splits van deze run, optioneel voor achterwaartse compatibiliteit met
@@ -230,6 +232,18 @@ interface AppState {
    */
   healthKitEnabled: boolean;
   setHealthKitEnabled: (enabled: boolean) => void;
+
+  // Bluetooth-hartslagmeter-koppeling (offline-first, additief)
+  /**
+   * Id en naam van de gekoppelde BLE-hartslagmeter (borstband of horloge dat
+   * het standaard BLE Heart Rate-profiel uitzendt), of null als er geen
+   * koppeling is. Beide gepersisteerd zodat de koppeling een herstart en
+   * cloudsync overleeft; de eigenlijke verbinding wordt bij elke sessie
+   * opnieuw opgezet (deviceId is genoeg om opnieuw te verbinden).
+   */
+  hrMonitorDeviceId: string | null;
+  hrMonitorDeviceName: string | null;
+  setHrMonitorDevice: (deviceId: string | null, deviceName: string | null) => void;
 
   // Auto-pauze tijdens het lopen (offline-first, additief)
   /**
@@ -449,6 +463,12 @@ export const useAppStore = create<AppState>()(
       // Apple Health-koppeling (offline-first defaults)
       healthKitEnabled: false,
       setHealthKitEnabled: (enabled) => set({ healthKitEnabled: enabled }),
+
+      // Bluetooth-hartslagmeter-koppeling (offline-first defaults)
+      hrMonitorDeviceId: null,
+      hrMonitorDeviceName: null,
+      setHrMonitorDevice: (deviceId, deviceName) =>
+        set({ hrMonitorDeviceId: deviceId, hrMonitorDeviceName: deviceId ? deviceName : null }),
 
       // Auto-pauze (offline-first default: aan)
       autoPauseEnabled: true,
@@ -927,6 +947,9 @@ export const useAppStore = create<AppState>()(
         stravaUploadQueue:      state.stravaUploadQueue,
         healthConnectEnabled:   state.healthConnectEnabled,
         healthKitEnabled:       state.healthKitEnabled,
+        // BLE-hartslagmeter-koppeling: alleen het id/naam, geen live verbinding.
+        hrMonitorDeviceId:      state.hrMonitorDeviceId,
+        hrMonitorDeviceName:    state.hrMonitorDeviceName,
         autoPauseEnabled:       state.autoPauseEnabled,
         remindersEnabled:       state.remindersEnabled,
         reminderHour:           state.reminderHour,

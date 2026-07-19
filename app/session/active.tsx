@@ -13,7 +13,7 @@ import { typography, spacing, radius, shadows, type ThemeColors } from '../../sr
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
 import { zoneInfo } from '../../src/data/trainingPlans';
-import type { TrainingWeek } from '../../src/data/trainingPlans';
+import type { TrainingWeek, HeartRateZone } from '../../src/data/trainingPlans';
 import { resolveActivePlan } from '../../src/data/activePlan';
 import { ZoneBadge } from '../../src/components/ui/ZoneBadge';
 import { useVoiceGuidance } from '../../src/hooks/useVoiceGuidance';
@@ -37,6 +37,7 @@ import {
   subscribeToLocations,
 } from '../../src/services/backgroundLocationService';
 import { saveSnapshot, clearSnapshot } from '../../src/services/runRecoveryService';
+import { connectToMonitor, disconnectMonitor } from '../../src/services/bleHeartRateService';
 
 // ── Haversine afstandsberekening (meters) ────────────────────────────────────
 function haversineMeters(
@@ -66,6 +67,18 @@ function calcRollingPace(
   const secs  = (last.timestamp - first.timestamp) / 1000;
   if (distM < 5 || secs < 1) return 0;
   return secs / (distM / 1000); // sec/km
+}
+
+// ── Hartslagzone o.b.v. percentage van maxHr (BLE-hartslagmeter, fase A) ─────
+// Vaste grenzen, los van de trainingszones per sessie: Z1 <60%, Z2 60-70%,
+// Z3 70-80%, Z4 80-90%, Z5 >90% van de maximale hartslag.
+function heartRateZoneFromPct(bpm: number, maxHr: number): HeartRateZone {
+  const pct = bpm / maxHr;
+  if (pct < 0.6) return 'Z1';
+  if (pct < 0.7) return 'Z2';
+  if (pct < 0.8) return 'Z3';
+  if (pct < 0.9) return 'Z4';
+  return 'Z5';
 }
 
 // GPS-punten met een geschatte nauwkeurigheid slechter dan dit aantal meters
@@ -155,6 +168,7 @@ export default function ActiveSessionScreen() {
   const registerRoutePlan = useAppStore(s => s.registerRoutePlan);
   const routePlansThisWeek = useAppStore(selectRoutePlansThisWeek);
   const autoPauseEnabled = useAppStore(s => s.autoPauseEnabled);
+  const hrMonitorDeviceId = useAppStore(s => s.hrMonitorDeviceId);
   const { hasAccess, promptUpgrade } = usePremium();
   const { paceForType } = useRacePace();
 
@@ -192,6 +206,14 @@ export default function ActiveSessionScreen() {
   const [weakGpsSignal, setWeakGpsSignal]   = useState(false);
   // Toont "Open instellingen" als de locatietoestemming expliciet geweigerd is.
   const [permissionDenied, setPermissionDenied] = useState(false);
+  // Live hartslag van een gekoppelde BLE-hartslagmeter (fase A). Null zolang
+  // er geen signaal is: geen meter gekoppeld, nog niet verbonden, of verlies
+  // van signaal tijdens de run.
+  const [heartRate, setHeartRate] = useState<number | null>(null);
+  // Alle metingen van deze run, voor het gemiddelde bij het afronden. Een ref
+  // (geen state): dit hoeft nergens tussentijds op te renderen.
+  const hrSamplesRef = useRef<number[]>([]);
+  const hrMaxRef      = useRef(0);
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -496,6 +518,37 @@ export default function ActiveSessionScreen() {
     };
   }, []);
 
+  // ── Hartslagmeter verbinden (fase A) ──────────────────────────────────────
+  // Alleen als er een meter gekoppeld is (Instellingen). Niet-blokkerend: dit
+  // loopt los van de GPS-opstart hierboven en de rest van het scherm wacht
+  // hier niet op. Werkt zonder gekoppelde meter, zonder BLE-module en zonder
+  // Bluetooth-toestemming gewoon niet: dan blijft heartRate simpelweg null en
+  // verschijnt er geen hartslag-UI (zie de statsGrid hieronder).
+  useEffect(() => {
+    if (!hrMonitorDeviceId) return;
+    let mounted = true;
+
+    void connectToMonitor(
+      hrMonitorDeviceId,
+      (bpm) => {
+        if (!mounted) return;
+        setHeartRate(bpm);
+        hrSamplesRef.current.push(bpm);
+        if (bpm > hrMaxRef.current) hrMaxRef.current = bpm;
+      },
+      () => {
+        // Geen signaal (nog) niet verbonden, of de herverbindingspogingen
+        // van bleHeartRateService zijn uitgeput: toon "geen signaal".
+        if (mounted) setHeartRate(null);
+      },
+    );
+
+    return () => {
+      mounted = false;
+      void disconnectMonitor();
+    };
+  }, [hrMonitorDeviceId]);
+
   // ── GPS-verlies-detectie: waarschuw als er te lang geen geaccepteerd punt
   // binnenkomt tijdens een lopende (niet-gepauzeerde) sessie. Verdwijnt vanzelf
   // zodra er weer punten binnenkomen.
@@ -611,6 +664,10 @@ export default function ActiveSessionScreen() {
   const zoneColor = session ? zoneInfo[session.zone].color : colors.brandPrimary;
   // Persoonlijk doeltempo voor deze sessie (premium + ingestelde doeltijd).
   const targetTrainingPace = session ? paceForType(session.type) : null;
+  // Max. hartslag voor de live hartslagzone (fase A): profiel.maxHeartRate,
+  // met 220-leeftijd als nooddoorval mocht dat veld onbekend zijn. Zonder
+  // beide blijft alleen de bpm zichtbaar, zonder zone-indicatie.
+  const maxHrForZones = profile.maxHeartRate || (profile.age ? 220 - profile.age : null);
 
   const formatTime = (s: number) => {
     const h   = Math.floor(s / 3600);
@@ -642,14 +699,22 @@ export default function ActiveSessionScreen() {
             locationSub.current?.remove();
             void stopBackgroundTracking();
             void clearSnapshot();
+            void disconnectMonitor();
             const finalDist = parseFloat(distanceRef.current.toFixed(2));
             const avgPace   = finalDist > 0 ? Math.round(elapsed / finalDist) : 0;
+            const hrSamples = hrSamplesRef.current;
+            const avgHeartRate = hrSamples.length > 0
+              ? Math.round(hrSamples.reduce((sum, bpm) => sum + bpm, 0) / hrSamples.length)
+              : undefined;
+            const maxHeartRateBpm = hrMaxRef.current > 0 ? hrMaxRef.current : undefined;
             onFinish(finalDist, elapsed);
             completeSession(
               {
                 actualDistanceKm: finalDist,
                 durationSeconds:  elapsed,
                 avgPaceSecPerKm:  avgPace,
+                avgHeartRate,
+                maxHeartRateBpm,
                 route:            routeRef.current,
                 splits:           splits,
                 source:           'app',
@@ -689,6 +754,7 @@ export default function ActiveSessionScreen() {
             locationSub.current?.remove();
             void stopBackgroundTracking();
             void clearSnapshot();
+            void disconnectMonitor();
             stopVoice();
             cancelSession();
             router.back();
@@ -927,6 +993,35 @@ export default function ActiveSessionScreen() {
             <Text style={[styles.statValue, { color: zoneColor }]}>{sessionTypeShort[session.type] ?? session.zone}</Text>
             <Text style={styles.statUnit}>{session.zone} {zoneInfo[session.zone].label}</Text>
           </TouchableOpacity>
+
+          {/* Live hartslag, alleen zichtbaar met een gekoppelde BLE-hartslagmeter
+              (Instellingen). Zonder koppeling, permissie of native module blijft
+              deze cel gewoon weg — geen lege plek in de grid. */}
+          {hrMonitorDeviceId && (
+            <View style={[styles.statCell, styles.statCellBorderLeft]}>
+              <Text style={styles.statLabel}>Hartslag</Text>
+              {heartRate != null ? (
+                <>
+                  <Text
+                    style={[
+                      styles.statValue,
+                      maxHrForZones ? { color: zoneInfo[heartRateZoneFromPct(heartRate, maxHrForZones)].color } : null,
+                    ]}
+                  >
+                    {heartRate}
+                  </Text>
+                  <Text style={styles.statUnit}>
+                    {maxHrForZones ? `${heartRateZoneFromPct(heartRate, maxHrForZones)} bpm` : 'bpm'}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.statValue, styles.statValueMuted]}>—</Text>
+                  <Text style={styles.statUnit}>geen signaal</Text>
+                </>
+              )}
+            </View>
+          )}
         </View>
 
         {/* Live kaart, alleen als routeplanner actief is */}
@@ -1230,6 +1325,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   statCell: { flex: 1, alignItems: 'center', paddingVertical: spacing[2] },
   statLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 4 },
   statCellCenter: { borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.borderSubtle },
+  statCellBorderLeft: { borderLeftWidth: 1, borderColor: colors.borderSubtle },
   statLabel: {
     fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.xs,
     color: colors.textTertiary, textTransform: 'uppercase', letterSpacing: typography.letterSpacing.wider,
@@ -1243,6 +1339,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
     color: colors.textTertiary, marginTop: 2,
   },
+  statValueMuted: { color: colors.textTertiary },
   statTargetPace: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.xs,
     color: colors.brandLight, marginTop: 2,
