@@ -17,6 +17,7 @@ import { usePremium } from '../../src/hooks/usePremium';
 import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
 import { connectStrava, disconnectStrava, isStravaConfigured } from '../../src/services/stravaService';
 import { enableHealthConnect, isHealthConnectAvailable } from '../../src/services/healthConnectService';
+import { enableHealthKit, isHealthKitAvailable } from '../../src/services/healthKitService';
 import {
   requestNotificationPermission,
   scheduleTrainingReminders,
@@ -184,6 +185,9 @@ export default function SettingsScreen() {
   const healthConnectEnabled    = useAppStore(s => s.healthConnectEnabled);
   const setHealthConnectEnabled = useAppStore(s => s.setHealthConnectEnabled);
   const [healthConnectBusy, setHealthConnectBusy] = useState(false);
+  const healthKitEnabled    = useAppStore(s => s.healthKitEnabled);
+  const setHealthKitEnabled = useAppStore(s => s.setHealthKitEnabled);
+  const [healthKitBusy, setHealthKitBusy] = useState(false);
   const autoPauseEnabled    = useAppStore(s => s.autoPauseEnabled);
   const setAutoPauseEnabled = useAppStore(s => s.setAutoPauseEnabled);
   const completedSessions   = useAppStore(s => s.completedSessions);
@@ -284,6 +288,28 @@ export default function SettingsScreen() {
     }
   }
 
+  async function handleToggleHealthKit(value: boolean) {
+    if (!value) {
+      setHealthKitEnabled(false);
+      return;
+    }
+    setHealthKitBusy(true);
+    try {
+      const success = await enableHealthKit();
+      if (success) {
+        setHealthKitEnabled(true);
+      } else {
+        setHealthKitEnabled(false);
+        Alert.alert(
+          'Apple Health niet ingeschakeld',
+          'We konden geen toestemming krijgen voor Apple Health. Controleer of je toestemming hebt gegeven via Instellingen > Gezondheid op je toestel.',
+        );
+      }
+    } finally {
+      setHealthKitBusy(false);
+    }
+  }
+
   async function handleToggleReminders(value: boolean) {
     if (!value) {
       setRemindersEnabled(false);
@@ -335,6 +361,23 @@ export default function SettingsScreen() {
     }
     updateProfile({ maxHeartRate: val });
   }
+
+  // Health Connect (Android) en Apple Health (iOS) delen dezelfde rij in
+  // Instellingen: welke koppeling, tekst en handler getoond wordt, hangt af
+  // van het platform waarop de app draait.
+  const isHealthKitPlatform = Platform.OS === 'ios';
+  const healthAvailable = isHealthKitPlatform ? isHealthKitAvailable() : isHealthConnectAvailable();
+  const healthEnabled = isHealthKitPlatform ? healthKitEnabled : healthConnectEnabled;
+  const healthBusy = isHealthKitPlatform ? healthKitBusy : healthConnectBusy;
+  const handleToggleHealth = isHealthKitPlatform ? handleToggleHealthKit : handleToggleHealthConnect;
+  const healthLabel = isHealthKitPlatform ? 'Schrijf runs naar Apple Health' : 'Schrijf runs naar Health Connect';
+  const healthSub = isHealthKitPlatform
+    ? (healthAvailable
+      ? 'Runs zijn dan ook zichtbaar in de Gezondheid-app en andere apps die Apple Health lezen.'
+      : 'Hiervoor is een nieuwe app-build nodig. Nog niet beschikbaar in deze versie.')
+    : (healthAvailable
+      ? 'Runs zijn dan ook zichtbaar in Mi Fitness en andere apps die Health Connect lezen.'
+      : 'Hiervoor is een nieuwe app-build nodig. Nog niet beschikbaar in deze versie.');
 
   return (
     <SafeAreaView style={styles.container}>
@@ -641,28 +684,24 @@ export default function SettingsScreen() {
                 </>
               )}
               <Divider />
-              <View style={[styles.switchRow, !isHealthConnectAvailable() && styles.rowDisabled]}>
+              <View style={[styles.switchRow, !healthAvailable && styles.rowDisabled]}>
                 <Activity size={18} color={colors.textSecondary} strokeWidth={2} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.switchLabel}>Schrijf runs naar Health Connect</Text>
-                  <Text style={styles.switchSub}>
-                    {isHealthConnectAvailable()
-                      ? 'Runs zijn dan ook zichtbaar in Mi Fitness en andere apps die Health Connect lezen.'
-                      : 'Hiervoor is een nieuwe app-build nodig. Nog niet beschikbaar in deze versie.'}
-                  </Text>
+                  <Text style={styles.switchLabel}>{healthLabel}</Text>
+                  <Text style={styles.switchSub}>{healthSub}</Text>
                 </View>
                 <Switch
-                  value={healthConnectEnabled}
-                  onValueChange={handleToggleHealthConnect}
-                  disabled={!isHealthConnectAvailable() || healthConnectBusy}
-                  accessibilityLabel="Schrijf runs naar Health Connect"
+                  value={healthEnabled}
+                  onValueChange={handleToggleHealth}
+                  disabled={!healthAvailable || healthBusy}
+                  accessibilityLabel={healthLabel}
                   trackColor={{ false: colors.borderDefault, true: colors.brandPrimary + '88' }}
-                  thumbColor={healthConnectEnabled ? colors.brandPrimary : colors.textTertiary}
+                  thumbColor={healthEnabled ? colors.brandPrimary : colors.textTertiary}
                 />
               </View>
             </View>
             <Text style={styles.fieldNote}>
-              Garmin werkt via GPX-export op het samenvattingsscherm na elke training. Apple Health volgt pas bij een iOS-versie van de app.
+              Garmin werkt via GPX-export op het samenvattingsscherm na elke training.
             </Text>
           </View>
 

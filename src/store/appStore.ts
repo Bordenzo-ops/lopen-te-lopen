@@ -197,6 +197,18 @@ interface AppState {
   healthConnectEnabled: boolean;
   setHealthConnectEnabled: (enabled: boolean) => void;
 
+  // Apple Health-koppeling (offline-first, additief)
+  /**
+   * Schrijf voltooide runs weg naar Apple Health (iOS)? Default false: de
+   * gebruiker moet dit bewust aanzetten via Instellingen, waarna eerst
+   * toestemming gevraagd wordt via de HealthKit-permissiedialoog. Een aparte
+   * vlag van healthConnectEnabled: instellingen reizen via cloudsync mee
+   * tussen toestellen, en een Android-toestel en een iOS-toestel van
+   * dezelfde gebruiker moeten deze koppeling onafhankelijk kunnen zetten.
+   */
+  healthKitEnabled: boolean;
+  setHealthKitEnabled: (enabled: boolean) => void;
+
   // Auto-pauze tijdens het lopen (offline-first, additief)
   /**
    * Pauzeer de timer automatisch bij stilstand tijdens een run? Default true,
@@ -411,6 +423,10 @@ export const useAppStore = create<AppState>()(
       // Health Connect-koppeling (offline-first defaults)
       healthConnectEnabled: false,
       setHealthConnectEnabled: (enabled) => set({ healthConnectEnabled: enabled }),
+
+      // Apple Health-koppeling (offline-first defaults)
+      healthKitEnabled: false,
+      setHealthKitEnabled: (enabled) => set({ healthKitEnabled: enabled }),
 
       // Auto-pauze (offline-first default: aan)
       autoPauseEnabled: true,
@@ -657,6 +673,16 @@ export const useAppStore = create<AppState>()(
             });
         }
 
+        // Best-effort wegschrijven naar Apple Health. Zelfde redenering als
+        // hierboven bij Health Connect: lokale schrijfactie zonder wachtrij.
+        if (get().healthKitEnabled) {
+          import('../services/healthKitService')
+            .then(({ writeRunToHealthKit }) => writeRunToHealthKit(completed))
+            .catch(() => {
+              // Stil falen: schrijven naar Apple Health mag nooit crashen
+            });
+        }
+
         // Best-effort herplannen van de streak-bescherming en het
         // weekoverzicht. completeSession is de ene plek die altijd geraakt
         // wordt zodra een sessie voltooid is, ongeacht welk scherm dat doet
@@ -874,6 +900,7 @@ export const useAppStore = create<AppState>()(
         stravaAutoUpload:       state.stravaAutoUpload,
         stravaUploadQueue:      state.stravaUploadQueue,
         healthConnectEnabled:   state.healthConnectEnabled,
+        healthKitEnabled:       state.healthKitEnabled,
         autoPauseEnabled:       state.autoPauseEnabled,
         remindersEnabled:       state.remindersEnabled,
         reminderHour:           state.reminderHour,

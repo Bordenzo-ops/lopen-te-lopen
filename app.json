@@ -24,7 +24,7 @@
           "instagram-stories"
         ]
       },
-      "buildNumber": "9"
+      "buildNumber": "10"
     },
     "android": {
       "adaptiveIcon": {
@@ -32,7 +32,7 @@
         "backgroundColor": "#0A0F1A"
       },
       "package": "com.lopentelopen.app",
-      "versionCode": 15,
+      "versionCode": 16,
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -100,6 +100,14 @@
         {
           "organization": "dronevision-studios",
           "project": "android"
+        }
+      ],
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "Lopen te Lopen gebruikt Apple Health om je hardloopsessies op te slaan.",
+          "NSHealthUpdateUsageDescription": "Lopen te Lopen schrijft je voltooide hardloopsessies (workout en afstand) naar Apple Health.",
+          "background": false
         }
       ]
     ],
