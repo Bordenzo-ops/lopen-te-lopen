@@ -41,6 +41,9 @@ Thumbs.db
 # Sync-artefacten
 .fuse_hidden*
 
+# Supabase CLI (lokale artefacten, horen niet in git)
+supabase/.temp/
+
 # Website-exports en zip-artefacten (horen niet in de app-repo)
 *.zip
 assets/Lopen te Lopen - live.html
