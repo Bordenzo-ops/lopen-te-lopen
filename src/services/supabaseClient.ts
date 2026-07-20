@@ -37,6 +37,16 @@ export const isSupabaseConfigured = (): boolean =>
   isHttpsUrl(SUPABASE_URL) && SUPABASE_ANON_KEY.length > 0;
 
 /**
+ * Basis-URL van de edge functions (`/functions/v1`), of null zonder geldige
+ * configuratie. Gebruikt door services die een edge function aanroepen
+ * (bijvoorbeeld routeService → de route-proxy).
+ */
+export function getFunctionsBaseUrl(): string | null {
+  if (!isSupabaseConfigured()) return null;
+  return `${SUPABASE_URL}/functions/v1`;
+}
+
+/**
  * De client wordt eenmalig (lazy) aangemaakt. Is er geen configuratie,
  * dan blijft dit null en valt alle backend-logica stilletjes terug op
  * de lokale opslag.

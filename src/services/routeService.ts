@@ -8,9 +8,15 @@
  *  - outAndBack : heen-en-terug (halve afstand heen, zelfde weg terug)
  *
  * Documentatie: https://openrouteservice.org/dev/#/api-docs/v2/directions
+ *
+ * De ORS-sleutel zit niet meer in de app (WP3): alle calls lopen via de
+ * Supabase edge function `route`, die de sleutel serverside bewaart en de
+ * gebruiker via JWT verifieert. Zonder Supabase-configuratie of sessie kan de
+ * routeplanner daarom niet werken en faalt hij netjes met een nette melding.
  */
 
-import { PREMIUM_CONFIG } from '../config/premiumConfig';
+import { getFunctionsBaseUrl } from './supabaseClient';
+import { ensureAnonymousSession, getCurrentSession } from './authService';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -138,23 +144,44 @@ function parseOrsGeoJson(data: any, type: 'loop' | 'outAndBack'): PlannedRoute {
   return { type, waypoints, instructions, totalDistanceKm };
 }
 
-/** Voert een POST-request uit naar de ORS API, met time-out (anders blijft de UI eindeloos laden) */
+/**
+ * Voert een routeverzoek uit via de Supabase edge function `route`, met
+ * time-out (anders blijft de UI eindeloos laden). De edge function voegt
+ * serverside de ORS-sleutel toe en geeft de ORS-response ongewijzigd terug,
+ * zodat de foutafhandeling hieronder identiek blijft.
+ */
 async function orsPost(endpoint: string, body: object): Promise<any> {
+  const base = getFunctionsBaseUrl();
+  if (!base) {
+    // Zonder Supabase-configuratie is er geen route-proxy en dus geen
+    // routeplanner. Faal met dezelfde nette copy als bij een netwerkfout.
+    throw new Error(ORS_TIMEOUT_MESSAGE);
+  }
+
+  // Zorg voor een (anonieme) sessie en haal het access token op, zodat de
+  // edge function de JWT kan verifiëren. Zonder token kan de proxy niet.
+  await ensureAnonymousSession();
+  const session = await getCurrentSession();
+  const token = session?.access_token;
+  if (!token) {
+    throw new Error(ORS_TIMEOUT_MESSAGE);
+  }
+
   const controller = new AbortController();
   const timeoutId  = setTimeout(() => controller.abort(), ORS_TIMEOUT_MS);
 
   let res: Response;
   try {
     res = await fetch(
-      `https://api.openrouteservice.org/v2${endpoint}`,
+      `${base}/route`,
       {
         method: 'POST',
         headers: {
-          Authorization:  PREMIUM_CONFIG.ORS_API_KEY,
+          Authorization:  `Bearer ${token}`,
           'Content-Type': 'application/json',
           Accept:         'application/json, application/geo+json',
         },
-        body:   JSON.stringify(body),
+        body:   JSON.stringify({ endpoint, body }),
         signal: controller.signal,
       },
     );
