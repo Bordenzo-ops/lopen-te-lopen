@@ -16,6 +16,7 @@ import type { RotterdamRace } from '../../src/data/rotterdamRaces';
 import { usePremium } from '../../src/hooks/usePremium';
 import { isRaceDistanceFree } from '../../src/config/premiumConfig';
 import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
+import { trackEvent } from '../../src/services/analyticsService';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -60,6 +61,12 @@ export default function GoalScreen() {
     if (mode === 'training' && selectedGoal) {
       router.push({ pathname: '/(onboarding)/profile', params: { goal: selectedGoal, schemaMode: 'training' } });
     } else if (mode === 'race' && selectedRace) {
+      // Funnelstap: wedstrijddoel gekozen. Geen persoonsgegevens, alleen de
+      // race-id en afstand zodat we per wedstrijd kunnen meten.
+      void trackEvent('race_goal_chosen', {
+        raceId: selectedRace.id,
+        distance: selectedRace.distance,
+      });
       router.push({
         pathname: '/(onboarding)/profile',
         params: { goal: 'half_marathon', schemaMode: 'race', raceId: selectedRace.id },

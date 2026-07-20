@@ -8,6 +8,7 @@ import { resolveActivePlan } from '../data/activePlan';
 import { ensureAnonymousSession } from '../services/authService';
 import { syncAll } from '../services/syncService';
 import { isPremiumActive as fetchPremiumActive } from '../services/purchaseService';
+import { trackEvent } from '../services/analyticsService';
 import type { VoiceType } from '../config/voiceConfig';
 
 // ── Hulpfuncties voor het vrije schema ────────
@@ -617,7 +618,7 @@ export const useAppStore = create<AppState>()(
           profile: state.profile ? { ...state.profile, ...updates } : null,
         })),
 
-      startSession: (session, weekNumber) =>
+      startSession: (session, weekNumber) => {
         set({
           activeSession: {
             session,
@@ -629,7 +630,10 @@ export const useAppStore = create<AppState>()(
             route: [],
             isRunning: true,
           },
-        }),
+        });
+        // Funnelstap: run gestart. Alleen het schematype, geen persoonsgegevens.
+        void trackEvent('run_started', { schemaMode: get().schemaMode });
+      },
 
       updateActiveSession: (updates) =>
         set(state => ({
@@ -703,6 +707,13 @@ export const useAppStore = create<AppState>()(
 
         // Best-effort sync van de nieuwe sessie naar de cloud
         void get().syncNow();
+
+        // Funnelstap: run afgerond. Afgeronde afstand (op hele km) en bron,
+        // zodat we betrokkenheid kunnen meten. Geen route of persoonsgegevens.
+        void trackEvent('run_completed', {
+          distanceKm: Math.round(completed.actualDistanceKm),
+          source: completed.source,
+        });
 
         // Best-effort automatische upload naar Strava. Faalt stil en zet de
         // sessie in de wachtrij voor een latere herhaalpoging: uploaden mag

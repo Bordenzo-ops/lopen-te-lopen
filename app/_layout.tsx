@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -20,6 +21,7 @@ import {
   removePremiumListener,
 } from '../src/services/purchaseService';
 import { retryStravaQueue } from '../src/services/stravaService';
+import { flushEvents } from '../src/services/analyticsService';
 import { initCrashReporting, CrashReportingBoundary } from '../src/services/crashReporting';
 import { AnimatedSplash } from '../src/components/AnimatedSplash';
 // Side-effect import: garandeert dat de expo-task-manager achtergrondtaak
@@ -66,6 +68,17 @@ export default function RootLayout() {
   // Stil, blokkeert de UI nooit, zelfde filosofie als initBackend hierboven.
   useEffect(() => {
     void retryStravaQueue();
+  }, []);
+
+  // Best-effort flush van gebufferde analytics-events: bij app-start en
+  // telkens als de app naar de voorgrond komt (dan is er vaak weer netwerk en
+  // een geldige sessie). Stil, blokkeert de UI nooit.
+  useEffect(() => {
+    void flushEvents();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void flushEvents();
+    });
+    return () => sub.remove();
   }, []);
 
   // Initialiseer RevenueCat en ververs de premium-status best-effort op de

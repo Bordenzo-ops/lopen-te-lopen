@@ -16,6 +16,7 @@ import { useRef, useCallback, useState } from 'react';
 import { Alert, Platform, Linking, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
+import { trackEvent } from '../services/analyticsService';
 // Let op: expo-media-library wordt lazy geladen in saveToLibrary().
 // De native module (ExpoMediaLibraryNext) zit niet in Expo Go bij SDK 56;
 // een top-level import zou daar de hele app laten crashen.
@@ -197,7 +198,13 @@ export function useShareRun() {
       const uri = await captureCard();
       if (!uri) return { success: false, error: 'capture_failed' };
 
-      return await shareToInstagram(uri);
+      const result = await shareToInstagram(uri);
+      // Funnel/groei: elke gedeelde run-kaart is gratis reclame. Alleen bij
+      // succes en met het gebruikte kanaal (instagram/generic/saved).
+      if (result.success) {
+        void trackEvent('run_card_shared', { method: result.method ?? 'unknown' });
+      }
+      return result;
     } catch (err: any) {
       // Laatste vangnet: nooit een onafgehandelde exception naar de UI laten lekken.
       console.error('[useShareRun] share:', err);

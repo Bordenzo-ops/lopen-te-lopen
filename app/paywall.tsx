@@ -43,6 +43,7 @@ import {
   type PurchasesOffering,
   type PurchasesPackage,
 } from '../src/services/purchaseService';
+import { trackEvent } from '../src/services/analyticsService';
 
 const GOLD = colors.premium;
 
@@ -195,6 +196,11 @@ export default function PaywallScreen() {
     };
   }, []);
 
+  // Funnelstap: paywall getoond. Eén keer bij het openen van het scherm.
+  useEffect(() => {
+    void trackEvent('paywall_shown');
+  }, []);
+
   // Platform-conditionele tekst voor de fineprint: welk account regelt de opzegging.
   const storeAccountLabel = Platform.OS === 'ios' ? 'App Store-account' : 'Google Play-account';
 
@@ -224,11 +230,20 @@ export default function PaywallScreen() {
       );
       return;
     }
+    // Funnelstap: gebruiker tikt een concreet plan aan om te kopen.
+    const plan = option.title === 'Jaarlijks' ? 'yearly' : 'monthly';
+    void trackEvent('paywall_plan_tapped', { plan });
     setBusyId(option.pkg.identifier);
     try {
       const result = await purchasePackage(option.pkg);
       if (result.cancelled) return;
       if (result.ok && result.isPremium) {
+        // Funnelstap: aankoop geslaagd. Bij een jaarplan met proefperiode
+        // markeren we het ook als trial-start (de betaling volgt later).
+        void trackEvent('purchase_completed', { plan });
+        if (option.trialDays) {
+          void trackEvent('trial_started', { plan, trialDays: option.trialDays });
+        }
         setPremium(true);
         Alert.alert('Gelukt', result.message ?? 'Je premium is geactiveerd.', [
           { text: 'Top', onPress: close },

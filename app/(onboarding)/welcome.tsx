@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,10 +6,17 @@ import { CalendarDays, HeartPulse, MapPin } from 'lucide-react-native';
 import { typography, spacing, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { Button } from '../../src/components/ui/Button';
+import { trackEvent } from '../../src/services/analyticsService';
 
 export default function WelcomeScreen() {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  // Start van de funnel: het welkomstscherm is de eerste stap van de
+  // onboarding. Eén keer bij het tonen. Best-effort, blokkeert niets.
+  useEffect(() => {
+    void trackEvent('onboarding_started');
+  }, []);
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>

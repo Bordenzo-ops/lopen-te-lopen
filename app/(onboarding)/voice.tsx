@@ -16,6 +16,7 @@ import { ROTTERDAM_RACES } from '../../src/data/rotterdamRaces';
 import { buildRacePlan } from '../../src/data/buildRacePlan';
 import { usePremium } from '../../src/hooks/usePremium';
 import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
+import { trackEvent } from '../../src/services/analyticsService';
 
 export default function VoiceScreen() {
   const { goal, name, age, schemaMode, raceId, trainingDays } =
@@ -62,6 +63,9 @@ export default function VoiceScreen() {
 
     const mode = schemaMode === 'race' ? 'race' : 'training';
     setSchemaMode(mode);
+
+    // Funnelstap: onboarding afgerond (profiel plus schema staan klaar).
+    void trackEvent('onboarding_completed', { schemaMode: mode, goal: goal ?? 'unknown' });
 
     // Als wedstrijdmodus: zoek de race op en bouw direct het plan
     if (mode === 'race' && raceId) {
