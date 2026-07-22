@@ -19,7 +19,10 @@ import {
   init as initPurchases,
   addPremiumListener,
   removePremiumListener,
+  identifyUser,
+  logOut as logOutPurchases,
 } from '../src/services/purchaseService';
+import { onAuthChange } from '../src/services/authService';
 import { retryStravaQueue } from '../src/services/stravaService';
 import { flushEvents } from '../src/services/analyticsService';
 import { initCrashReporting, CrashReportingBoundary } from '../src/services/crashReporting';
@@ -100,6 +103,35 @@ export default function RootLayout() {
     };
   }, []);
 
+  // Koppel RevenueCat aan de Supabase-identiteit zodra een gebruiker echt
+  // in- of uitlogt (een e-mailaccount aanmaakt/koppelt, inlogt of uitlogt).
+  // Login blijft optioneel: zolang niemand inlogt, blijft dit abonnement
+  // stil en verandert er niets aan het bestaande (anonieme) RevenueCat-
+  // gedrag hierboven. Bewust een apart effect ná initPurchases/refreshPremium
+  // hierboven: identifyUser/logOut checken zelf op `configured`, dus een
+  // vroege auth-wijziging vóórdat RevenueCat klaar is, is sowieso onschadelijk.
+  // Na elke identiteitswissel verversen we premium opnieuw: de customerInfo
+  // hoort bij de nieuwe (of geen) gebruiker.
+  useEffect(() => {
+    const unsubscribe = onAuthChange((session) => {
+      void (async () => {
+        try {
+          if (session?.user?.id) {
+            await identifyUser(session.user.id);
+          } else {
+            await logOutPurchases();
+          }
+          await useAppStore.getState().refreshPremium();
+        } catch {
+          // Stil falen: premium-status blijft op de laatst bekende waarde staan
+        }
+      })();
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
   const isLight = useIsLightTheme();
 
   // Bij een font-fout starten we door met systeemfonts in plaats van eeuwig
@@ -119,6 +151,7 @@ export default function RootLayout() {
               <Stack.Screen name="session/active" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
               <Stack.Screen name="session/summary" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="paywall" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="account" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
               <Stack.Screen name="strava-callback" options={{ animation: 'fade' }} />
             </Stack>
           </SafeAreaProvider>

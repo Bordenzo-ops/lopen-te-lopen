@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, Switch, TouchableOpacity, StyleSheet, ScrollView,
   Alert, TextInput, KeyboardAvoidingView, Platform, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone, Cloud, Activity, Bell, HeartPulse, ChevronRight } from 'lucide-react-native';
+import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone, Cloud, Activity, Bell, HeartPulse, ChevronRight, Mail, LogOut } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
@@ -13,7 +13,13 @@ import * as voiceService from '../../src/services/voiceService';
 import type { VoiceType } from '../../src/config/voiceConfig';
 import { VOICES, voiceDefinition } from '../../src/config/voiceConfig';
 import { downloadPack, deletePack, getPackInfo, getRemotePackSizeLabel, isPackUpdateAvailable } from '../../src/services/voicePackService';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import {
+  getCurrentSession,
+  isAnonymous as checkIsAnonymous,
+  signOut as authSignOut,
+  onAuthChange,
+} from '../../src/services/authService';
 import { Minus, Plus } from 'lucide-react-native';
 import { usePremium } from '../../src/hooks/usePremium';
 import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
@@ -203,6 +209,68 @@ export default function SettingsScreen() {
   const reminderHour        = useAppStore(s => s.reminderHour);
   const setReminderHour     = useAppStore(s => s.setReminderHour);
   const [remindersBusy, setRemindersBusy] = useState(false);
+
+  // Account (e-mail, optioneel): niet ingelogd/anoniem toont "aanmaken"/
+  // "inloggen", ingelogd met e-mail toont het e-mailadres en "uitloggen".
+  // null e-mailadres betekent: geen sessie of nog anoniem.
+  const [accountEmail, setAccountEmail] = useState<string | null>(null);
+  const [accountBusy, setAccountBusy] = useState(false);
+
+  const refreshAccountStatus = useCallback(async () => {
+    try {
+      const session = await getCurrentSession();
+      const anon = await checkIsAnonymous();
+      setAccountEmail(session && !anon ? (session.user.email ?? null) : null);
+    } catch {
+      // Stil falen: laat het scherm gewoon "niet ingelogd" tonen
+      setAccountEmail(null);
+    }
+  }, []);
+
+  // Initieel ophalen, plus live bijwerken bij elke auth-wijziging (inloggen,
+  // uitloggen, account koppelen vanuit het account-scherm).
+  useEffect(() => {
+    void refreshAccountStatus();
+    const unsubscribe = onAuthChange(() => {
+      void refreshAccountStatus();
+    });
+    return unsubscribe;
+  }, [refreshAccountStatus]);
+
+  // Ook verversen zodra dit tabblad weer in beeld komt, bijvoorbeeld na
+  // terugkeren uit het account-scherm.
+  useFocusEffect(
+    useCallback(() => {
+      void refreshAccountStatus();
+    }, [refreshAccountStatus]),
+  );
+
+  function handleSignOut() {
+    Alert.alert(
+      'Uitloggen',
+      'Weet je zeker dat je wilt uitloggen?',
+      [
+        { text: 'Annuleren', style: 'cancel' },
+        {
+          text: 'Uitloggen',
+          style: 'destructive',
+          onPress: async () => {
+            setAccountBusy(true);
+            try {
+              // De globale onAuthChange-listener (app/_layout.tsx) koppelt
+              // RevenueCat los en ververst premium; hier alleen uitloggen
+              // en de lokale schermstatus bijwerken.
+              await authSignOut();
+              await refreshAccountStatus();
+            } finally {
+              setAccountBusy(false);
+            }
+          },
+        },
+      ],
+    );
+  }
+
   const activeVoiceType: VoiceType = profile?.voiceType ?? 'female';
   const [voicePackBusy, setVoicePackBusy] = useState(false);
   const [voicePackProgressPct, setVoicePackProgressPct] = useState<number | null>(null);
@@ -892,6 +960,69 @@ export default function SettingsScreen() {
             </Text>
           </View>
 
+          {/* Account */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Account</Text>
+            <View style={styles.card}>
+              {accountEmail ? (
+                <>
+                  <View style={styles.integrationRow}>
+                    <Mail size={18} color={colors.success} strokeWidth={2} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.switchLabel}>{accountEmail}</Text>
+                      <Text style={styles.switchSub}>Ingelogd</Text>
+                    </View>
+                  </View>
+                  <Divider />
+                  <TouchableOpacity
+                    onPress={handleSignOut}
+                    style={styles.dangerRow}
+                    activeOpacity={0.7}
+                    disabled={accountBusy}
+                    accessibilityRole="button"
+                    accessibilityLabel="Uitloggen"
+                  >
+                    <LogOut size={16} color={colors.error} strokeWidth={2} />
+                    <Text style={styles.dangerLabel}>Uitloggen</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <View style={styles.integrationRow}>
+                    <Mail size={18} color={colors.textSecondary} strokeWidth={2} />
+                    <Text style={styles.integrationInfo}>
+                      Maak een account aan om je voortgang te bewaren en te herstellen op een ander toestel.
+                    </Text>
+                  </View>
+                  <Divider />
+                  <View style={styles.accountButtonsRow}>
+                    <TouchableOpacity
+                      onPress={() => router.push({ pathname: '/account', params: { mode: 'create' } })}
+                      style={[styles.stravaConnectBtn, styles.accountBtnFlex]}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityLabel="Account aanmaken"
+                    >
+                      <Text style={styles.stravaConnectBtnText}>Account aanmaken</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => router.push({ pathname: '/account', params: { mode: 'login' } })}
+                      style={[styles.accountLoginBtn, styles.accountBtnFlex]}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityLabel="Inloggen"
+                    >
+                      <Text style={styles.accountLoginBtnText}>Inloggen</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+            <Text style={styles.fieldNote}>
+              Een account is niet verplicht: de app blijft ook zonder inloggen volledig werken.
+            </Text>
+          </View>
+
           {/* Overige */}
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Overige</Text>
@@ -1112,6 +1243,21 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   stravaConnectBtnText: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
     color: '#fff',
+  },
+  accountButtonsRow: {
+    flexDirection: 'row', gap: spacing[1],
+    paddingHorizontal: spacing[2], paddingVertical: spacing[1.5],
+  },
+  accountBtnFlex: { flex: 1, alignItems: 'center' },
+  accountLoginBtn: {
+    borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderDefault,
+    backgroundColor: colors.bgSurface,
+    paddingHorizontal: spacing[1.5], paddingVertical: spacing[1],
+    alignItems: 'center', justifyContent: 'center',
+  },
+  accountLoginBtnText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
+    color: colors.textPrimary,
   },
   dangerRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing[1.5],
