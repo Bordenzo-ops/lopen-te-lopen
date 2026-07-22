@@ -37,6 +37,7 @@ import {
   getOfferings,
   purchasePackage,
   restorePurchases,
+  waitForPremiumActivation,
   getTrialInfo,
   FALLBACK_PRICE_MONTHLY,
   FALLBACK_PRICE_YEARLY,
@@ -237,19 +238,45 @@ export default function PaywallScreen() {
     try {
       const result = await purchasePackage(option.pkg);
       if (result.cancelled) return;
-      if (result.ok && result.isPremium) {
-        // Funnelstap: aankoop geslaagd. Bij een jaarplan met proefperiode
-        // markeren we het ook als trial-start (de betaling volgt later).
-        void trackEvent('purchase_completed', { plan });
-        if (option.trialDays) {
-          void trackEvent('trial_started', { plan, trialDays: option.trialDays });
-        }
+
+      // Aankoop niet gelukt (echte fout, geen annulering): toon de melding.
+      if (!result.ok) {
+        if (result.message) Alert.alert('Aankoop', result.message);
+        return;
+      }
+
+      // Aankoop geslaagd bij de store. Meestal is het premium-entitlement
+      // meteen actief, maar RevenueCat kan de bon net iets later verwerken.
+      // Is premium nog niet zichtbaar, dan wachten we kort tot het entitlement
+      // binnenkomt in plaats van stil niets te doen. De customerInfo-listener
+      // (app/_layout.tsx) kan de store ondertussen ook al hebben bijgewerkt.
+      let premium = result.isPremium;
+      if (!premium) premium = await waitForPremiumActivation();
+      if (!premium) premium = useAppStore.getState().isPremium;
+
+      // Funnelstap: aankoop geslaagd. Bij een jaarplan met proefperiode
+      // markeren we het ook als trial-start (de betaling volgt later).
+      // De aankoop is bij de store voltooid, dus tellen we 'm ook mee als
+      // het entitlement nog aan het doorkomen is.
+      void trackEvent('purchase_completed', { plan });
+      if (option.trialDays) {
+        void trackEvent('trial_started', { plan, trialDays: option.trialDays });
+      }
+
+      if (premium) {
         setPremium(true);
-        Alert.alert('Gelukt', result.message ?? 'Je premium is geactiveerd.', [
+        Alert.alert('Gelukt', result.message ?? 'Je premium is geactiveerd. Veel loopplezier.', [
           { text: 'Top', onPress: close },
         ]);
-      } else if (result.message) {
-        Alert.alert('Aankoop', result.message);
+      } else {
+        // Aankoop is gelukt, maar het entitlement is nog niet doorgekomen.
+        // Nooit stil blijven: leg uit dat premium zo actief wordt en dat
+        // Aankopen herstellen of een herstart het bespoedigt.
+        Alert.alert(
+          'Bijna klaar',
+          'Je aankoop is gelukt. Premium wordt geactiveerd, dit kan een moment duren. ' +
+            'Werkt het niet meteen, tik dan op Aankopen herstellen of herstart de app.',
+        );
       }
     } finally {
       setBusyId(null);

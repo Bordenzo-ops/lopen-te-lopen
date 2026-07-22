@@ -260,6 +260,38 @@ export async function purchasePackage(
 }
 
 /**
+ * Wacht kort tot het premium-entitlement actief wordt na een geslaagde
+ * aankoop. RevenueCat verwerkt de bon soms net iets later dan dat de
+ * StoreKit-/Play-transactie "klaar" is; de customerInfo die purchasePackage
+ * direct teruggeeft, bevat het entitlement dan nog niet. Deze helper pollt
+ * daarom een paar keer met een korte pauze op getCustomerInfo, zodat de
+ * paywall niet stil blijft hangen op een aankoop die feitelijk wél gelukt is.
+ *
+ * Geeft true zodra premium actief is, anders false na de laatste poging.
+ * Best-effort: crasht nooit en geeft zonder configuratie meteen false terug.
+ * De customerInfo-listener (app/_layout.tsx) blijft daarnaast een vangnet dat
+ * premium alsnog aanzet zodra RevenueCat de update pusht.
+ */
+export async function waitForPremiumActivation(
+  attempts = 3,
+  delayMs = 1500,
+): Promise<boolean> {
+  if (!configured) return false;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const customerInfo = await Purchases.getCustomerInfo();
+      if (hasPremiumEntitlement(customerInfo)) return true;
+    } catch {
+      // Negeer deze poging en probeer het na de pauze opnieuw
+    }
+    if (i < attempts - 1) {
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+  return false;
+}
+
+/**
  * Herstel eerdere aankopen, bijvoorbeeld op een nieuw toestel. Best-effort.
  */
 export async function restorePurchases(): Promise<PurchaseResult> {
