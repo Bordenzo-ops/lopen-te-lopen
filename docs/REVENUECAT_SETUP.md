@@ -1,139 +1,255 @@
 # RevenueCat instellen voor Lopen te Lopen
 
-Met RevenueCat regel je de premium-abonnementen via Google Play Billing. De
-app is offline-first en defensief: zonder API-sleutel, zonder netwerk of bij
-een fout valt alles stilletjes terug op "geen premium". De gratis laag blijft
-dan volledig bruikbaar. Door de stappen hieronder krijg je echte abonnementen,
-een werkende betaalmuur en herstel van aankopen op een nieuw toestel.
+Met RevenueCat regel je de premium-abonnementen op **beide platforms**: Google
+Play Billing (Android) en de App Store (iOS). De app is offline-first en
+defensief: zonder API-sleutel, zonder netwerk of bij een fout valt alles
+stilletjes terug op "geen premium". De gratis laag blijft dan volledig
+bruikbaar.
 
-Volg de stappen in volgorde.
+Dit document beschrijft de **volledige, werkende setup** zoals die nu draait,
+inclusief de valkuilen die we onderweg tegenkwamen (zie ook de
+Probleemoplossing onderaan). Volg de stappen per platform.
 
-## 1. RevenueCat-account aanmaken
+> **Eén bron van waarheid: het entitlement `premium`.** De app checkt
+> hardgecodeerd op een entitlement met de identifier **`premium`** (kleine
+> letters, geen spatie) — zie `src/services/purchaseService.ts`
+> (`PREMIUM_ENTITLEMENT_ID`). De *Display Name* mag "Premium toegang" heten,
+> maar de **Identifier** moet exact `premium` zijn, anders ziet de app een
+> geslaagde aankoop niet als premium.
 
-1. Ga naar https://www.revenuecat.com en maak een gratis account.
-2. Maak een nieuw project, bijvoorbeeld Lopen te Lopen.
-3. Voeg in het project een app toe van het type Google Play Store.
+---
 
-## 2. Play Billing-producten aanmaken
+## 1. RevenueCat-project en apps
 
-Maak in de Google Play Console twee abonnementsproducten aan. Open de Play
-Console, kies je app, ga naar Monetiseren, Producten, Abonnementen.
+1. Maak op https://www.revenuecat.com een project aan (bijv. "Lopen te Lopen").
+2. Voeg **twee apps** toe binnen het project:
+   - een **Google Play Store**-app (Android)
+   - een **App Store**-app (iOS)
+3. Onthoud dat de config (producten, entitlement, offering) op **projectniveau**
+   gedeeld is tussen sandbox en productie; alleen de *klantdata* is per omgeving
+   gescheiden.
 
-Maak deze twee abonnementen:
+---
 
-1. Maandelijks abonnement
-   - Product-ID, bijvoorbeeld: premium_maandelijks
-   - Prijs: EUR 5,99 per maand
-   - Factureringsperiode: 1 maand
+## 2. Producten aanmaken in de stores
 
-2. Jaarlijks abonnement
-   - Product-ID, bijvoorbeeld: premium_jaarlijks
-   - Prijs: EUR 49 per jaar
-   - Factureringsperiode: 1 jaar
+### Android (Google Play Console → Monetiseren → Producten → Abonnementen)
 
-Activeer beide abonnementen. Zonder een actief verkoopaccount en een
-ondertekende app in een testtrack kun je niet testen met echte aankopen,
-gebruik daarvoor een interne test of de licentietester.
+Maak twee abonnementen en **activeer** ze:
 
-## 3. Producten koppelen in RevenueCat
+| Product-ID            | Prijs            | Periode  |
+| --------------------- | ---------------- | -------- |
+| `premium_maandelijks` | € 5,99 per maand | 1 maand  |
+| `premium_jaarlijks`   | € 49 per jaar    | 1 jaar   |
 
-1. Open in RevenueCat: Products. Voeg de twee Play-product-IDs toe
-   (premium_maandelijks en premium_jaarlijks).
-2. Open Entitlements. Maak een entitlement met de identifier exact: premium
-   Let op: de app verwacht precies deze naam (kleine letters).
-3. Koppel beide producten aan het entitlement premium.
+### iOS (App Store Connect → je app → Abonnementen)
+
+Maak dezelfde twee auto-verlengende abonnementen aan in één subscription group:
+
+| Product-ID            | Prijs            | Periode  |
+| --------------------- | ---------------- | -------- |
+| `premium_maandelijks` | € 5,99 per maand | 1 maand  |
+| `premium_jaarlijks`   | € 49 per jaar    | 1 jaar   |
+
+Voor de 14-daagse gratis proefperiode: voeg een **Introductory Offer** (Free
+trial) toe aan het jaarabonnement. De app leest de proef automatisch uit
+(`getTrialInfo`).
+
+---
+
+## 3. Producten en entitlement koppelen in RevenueCat
+
+1. **Products**: voeg alle vier de store-producten toe (twee Play-, twee
+   App-Store-product-ID's), elk gekoppeld aan de juiste app.
+2. **Entitlements**: maak één entitlement met identifier exact **`premium`**.
+3. **Koppel alle vier de producten** aan het entitlement `premium`
+   (zowel de Play- als de App-Store-varianten). Dit is cruciaal: een iOS-aankoop
+   die niet aan `premium` hangt, ontgrendelt de app niet.
 
 ## 4. Offering aanmaken
 
-1. Open in RevenueCat: Offerings.
-2. Maak een offering en zet die als current (de standaard).
-3. Voeg twee packages toe in deze offering:
-   - Het maandpakket: kies het type Monthly en koppel premium_maandelijks.
-   - Het jaarpakket: kies het type Annual en koppel premium_jaarlijks.
+1. **Offerings** → maak een offering en zet die als **current** (default).
+2. Voeg twee packages toe:
+   - **Monthly** → koppel de maandproducten.
+   - **Annual** → koppel de jaarproducten.
 
-De app leest de prijzen rechtstreeks uit deze offering (Monthly en Annual).
-Lukt dat niet, dan toont de app de vaste teksten EUR 5,99 per maand en
-EUR 49 per jaar als terugval.
+De app leest de prijzen rechtstreeks uit deze offering. Lukt dat niet, dan
+toont de app de vaste terugvalteksten (€ 5,99 p/m, € 49 p/j).
 
-## 5. API-sleutel invullen in .env
+---
 
-1. Open in RevenueCat: Project Settings, API keys.
-2. Kopieer de public app-specific key voor Google Play (begint meestal met
-   goog_). Gebruik niet de secret key.
-3. Open in de projectmap het bestand .env (kopieer eerst .env.example naar
-   .env als die er nog niet is).
-4. Vul in:
+## 5. iOS: App-Specific Shared Secret
 
-   EXPO_PUBLIC_REVENUECAT_API_KEY=hier de Google Play public key
+RevenueCat moet Apple-bonnen kunnen valideren. Zonder dit verschijnen
+iOS-aankopen niet en activeert het entitlement niet.
 
-Zet nooit de secret key in .env van de app en niet in versiebeheer.
+1. App Store Connect → je app → **App Information** (of onder In-App Purchases)
+   → kopieer de **App-Specific Shared Secret**.
+2. RevenueCat → je **App Store**-app → plak de Shared Secret in het
+   bijbehorende veld. (Optioneel, aanbevolen voor StoreKit 2: ook een
+   **In-App Purchase Key** toevoegen.)
 
-## 6. Pakket installeren
+TestFlight-aankopen zijn **sandbox**; die zie je in RevenueCat alleen met de
+**Sandbox data**-toggle aan.
 
-Installeer react-native-purchases met de Expo-installer, zodat de juiste
-versie voor SDK 56 wordt gekozen:
+---
 
-   npx expo install react-native-purchases
+## 6. Android: service-account + realtime notificaties (RTDN)
 
-## 7. Nieuwe EAS dev build maken
+Dit is de Android-tegenhanger van de iOS Shared Secret. Het bestaat uit meerdere
+lagen die **allemaal** moeten kloppen. De volgorde hieronder is belangrijk.
 
-RevenueCat is een native module. Die werkt alleen in een dev build of een
-release build, niet in Expo Go. Maak een nieuwe build:
+### 6a. Service-account aanmaken en aan RevenueCat geven
 
-   eas build --profile development --platform android
+1. Maak in het **Google Cloud-project dat aan je Play Console hangt** een
+   service-account aan (bijv. `revenuecat@<project>.iam.gserviceaccount.com`).
+2. Download de **JSON-sleutel** en upload die in RevenueCat → je Play Store-app
+   → Service Account Credentials. Status moet **"Valid credentials"** (groen)
+   worden.
 
-Installeer die build op je toestel en start de Metro-server opnieuw met
-npx expo start zodat de nieuwe .env-waarden geladen worden.
+### 6b. Play Console-rechten — óók op app-niveau (valkuil!)
 
-## 8. Betaalmuur activeren
+Rechten in de Play Console bestaan op **twee niveaus**: account-breed én per
+app. Het service-account moet de rechten **ook op app-niveau toegewezen**
+krijgen voor Lopen te Lopen, anders mag het niets voor deze app — zelfs met
+geldige credentials.
 
-Tijdens de testfase staat de betaalmuur uit, zodat iedereen premium features
-kan proberen. Zet de muur aan zodra je de aankopen getest hebt:
+- Play Console → **Users & permissions** → het service-account → geef toegang
+  tot de app met o.a. **financiële gegevens bekijken** en **bestellingen en
+  abonnementen beheren** ("Manage orders and subscriptions").
 
-1. Open src/config/premiumConfig.ts.
-2. Zet PAYWALL_ACTIVE op true.
+### 6c. Google Cloud API's aanzetten
 
-De feature-gating zelf wordt in een aparte laag geregeld via de hook
-usePremium. Dit document gaat alleen over RevenueCat en de paywall.
+In hetzelfde Google Cloud-project (zie `project_id` in de JSON):
 
-## 9. Controleren dat het werkt
+- **Google Play Android Developer API** → Enable
+- **Cloud Pub/Sub API** → Enable
 
-1. Open de app in de nieuwe dev build.
-2. Navigeer naar de betaalmuur (later vanuit een premium feature, of tijdelijk
-   via een testknop).
-3. Controleer dat de twee opties met de juiste prijzen verschijnen.
-4. Doe een testaankoop met een licentietester-account. Daarna hoort de app
-   premium te tonen.
-5. Test Aankopen herstellen op een schoon toestel of na opnieuw installeren.
+### 6d. IAM-rol voor het service-account (valkuil!)
+
+Voor RTDN moet RevenueCat namens jou een Pub/Sub-topic kunnen **aanmaken**. Geef
+het service-account daarvoor een Pub/Sub-rol in **IAM & Admin → IAM**:
+
+- Principal: `revenuecat@<project>.iam.gserviceaccount.com`
+- Rol: **Pub/Sub Admin** (`roles/pubsub.admin`) — Editor volstaat vaak niet.
+
+Zonder deze rol blijft in RevenueCat de topic-dropdown leeg en blijft de melding
+"Google Cloud Pub/Sub API must first be enabled" hangen, óók al staat de API aan.
+
+### 6e. RTDN verbinden
+
+RevenueCat → Play Store-app → **Google developer notifications**:
+
+1. Herlaad de pagina (na 6c/6d even 1–2 min wachten op propagatie).
+2. Kies de voorgestelde topic in de dropdown (bijv. `Play-Store-Notifications`).
+3. Klik **Connect to Google** → **Save changes**. Dit hoort **groen**
+   ("Connected") te worden. RevenueCat regelt de Play Console-koppeling dan
+   automatisch; je hoeft zelf niets in de Play Console te plakken.
+
+Vanaf nu pusht Google elke aankoop, verlenging, opzegging en refund realtime
+naar RevenueCat.
+
+---
+
+## 7. API-sleutels invullen in .env
+
+1. RevenueCat → Project Settings → **API keys**.
+2. Kopieer de **public app-specific keys** (niet de secret key):
+   - Google Play key (begint met `goog_`)
+   - App Store key (begint met `appl_`)
+3. Vul in `.env` (kopieer eerst `.env.example` naar `.env`):
+
+   ```
+   EXPO_PUBLIC_REVENUECAT_API_KEY=<goog_...>        # Android (Google Play)
+   EXPO_PUBLIC_REVENUECAT_IOS_API_KEY=<appl_...>    # iOS (App Store)
+   ```
+
+   > Deze namen staan vast in `src/services/purchaseService.ts` (Android leest
+   > `EXPO_PUBLIC_REVENUECAT_API_KEY`, iOS `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`).
+   > Zet nooit de secret key in de app-bundel of in versiebeheer.
+
+---
+
+## 8. Native build maken
+
+RevenueCat is een native module — werkt niet in Expo Go. Maak een dev- of
+release-build met de juiste `goog_`/`appl_`-sleutel erin:
+
+```
+npx expo install react-native-purchases
+eas build --profile development --platform android   # of ios
+```
+
+Installeer die build op je toestel; test **niet** met een lokale debug-build
+zonder de sleutel, want dan meldt de app aankopen niet aan RevenueCat.
+
+---
+
+## 9. Betaalmuur en verifiëren
+
+- De betaalmuur staat aan via `PREMIUM_CONFIG.PAYWALL_ACTIVE = true`
+  (`src/config/premiumConfig.ts`). Met de muur aan telt uitsluitend een actieve
+  RevenueCat-entitlement als premium.
+- **Testaankoop Android**: gepubliceerde testtrack (internal testing) +
+  license-tester-account. De transactie hoort binnen seconden in RevenueCat te
+  verschijnen.
+- **Testaankoop iOS**: TestFlight + sandbox-Apple-ID.
+- Let bij het zoeken op de **Sandbox/Production**-toggle: TestFlight = sandbox,
+  Android license-tester-aankopen staan vaak in de **productie**-weergave.
+- Test **Aankopen herstellen** na opnieuw installeren.
+
+---
 
 ## Wat de app zelf al doet
 
-- RevenueCat wordt bij app-start best-effort geinitialiseerd en de
-  premium-status wordt ververst (app/_layout.tsx).
-- De appUserID wordt gekoppeld aan de Supabase-user-id als die bekend is,
-  zodat aankopen aan hetzelfde account hangen op een nieuw toestel.
-- Het paywall-scherm staat op de route /paywall (app/paywall.tsx).
-- Premium-status leeft in de store (isPremium) en is op te vragen via de hook
-  usePremium. De store persisteert isPremium bewust niet: RevenueCat is de
-  bron van waarheid en de status wordt elke app-start opnieuw opgehaald.
+- RevenueCat wordt bij app-start best-effort geïnitialiseerd en de
+  premium-status wordt ververst (`app/_layout.tsx`).
+- Na een geslaagde aankoop wacht de paywall kort tot het entitlement echt
+  doorkomt (`waitForPremiumActivation`) en toont altijd feedback — nooit meer
+  stil niets doen bij een lag (`app/paywall.tsx`).
+- Een `CustomerInfoUpdateListener` werkt de store ook bij zonder dat de
+  gebruiker het scherm hoeft te verversen (automatische verlenging, verlopen
+  abonnement, aankoop op een ander toestel).
+- De appUserID wordt aan de Supabase-user-id gekoppeld wanneer die bekend is
+  (`init` / `identifyUser` in `purchaseService.ts`). **Let op:** zonder echte
+  login is er vaak geen Supabase-sessie en gebruikt RevenueCat een *anonieme,
+  aan de installatie gebonden* id. Zie de sectie hieronder.
+- Premium-status leeft in de store (`isPremium`) en is op te vragen via de hook
+  `usePremium`. De store **persisteert `isPremium` bewust wél**: een betalende
+  gebruiker die offline start mag niet per ongeluk de gratis laag zien. Bij een
+  netwerkfout blijft de laatst bekende waarde staan; alleen een bevestigd
+  antwoord van RevenueCat overschrijft de cache (`refreshPremium`).
+
+## Bekende beperking: entitlement hangt aan de installatie, niet aan de persoon
+
+Zolang er geen echte gebruikersauthenticatie is, hangt het entitlement aan een
+**anonieme RevenueCat-id per installatie**, niet aan een account. Gevolgen:
+
+- Premium "plakt" aan het toestel, ook als je in de store van account wisselt.
+- Premium volgt de persoon niet netjes over toestellen heen (alleen via
+  store-account-herstel met "Aankopen herstellen").
+
+De nette oplossing is echte auth + `Purchases.logIn(userId)` zodat de RevenueCat
+App User ID gelijk is aan de ingelogde gebruiker. Zie het aparte
+authenticatie-werkpakket.
+
+---
+
+## Probleemoplossing
+
+| Symptoom | Oorzaak / oplossing |
+| --- | --- |
+| Aankoop bevestigd, maar app doet niets / premium gaat niet aan | Entitlement-lag: is opgelost met `waitForPremiumActivation` + feedback in de paywall. Check ook dat de entitlement-**identifier** exact `premium` is en dat het gekochte product eraan gekoppeld is. |
+| iOS-aankoop verschijnt niet in RevenueCat | App-Specific Shared Secret ontbreekt/onjuist (stap 5). |
+| Android-aankoop verschijnt niet in RevenueCat | Kijk eerst naar de **Sandbox/Production**-toggle — Android test-aankopen staan vaak in productie. Anders: service-account of app-niveau-rechten (stap 6a/6b). |
+| "Pub/Sub API must first be enabled" blijft hangen / topic-dropdown leeg | Pub/Sub API aanzetten (6c) **én** het service-account de rol **Pub/Sub Admin** geven (6d). Daarna 1–2 min wachten en de RevenueCat-pagina herladen. |
+| "Connect to Google" geeft een rechtenfout | Service-account mist Play Console-rechten **op app-niveau** (6b) of de Pub/Sub Admin IAM-rol (6d). |
+| Premium blijft actief na wisselen van store-account | Verwacht gedrag door de anonieme install-gebonden id (zie beperking hierboven). Los op met echte auth. |
 
 ## Gevolgen voor de Android-build en Play Console
 
-- Billing-permissie: react-native-purchases voegt de permissie
-  com.android.vending.BILLING automatisch toe aan de samengevoegde
-  AndroidManifest tijdens de build. Je hoeft die dus niet handmatig in
-  app.json onder android.permissions te zetten. Controleer na de eerste
-  build wel even in de Play Console (App-inhoud, of het gebouwde bundel)
-  dat de billing-permissie aanwezig is.
-- Geen extra runtime-toestemming: in-app betalingen vragen niet om een
-  losse runtime-permissie zoals locatie. Er is dus geen nieuwe toestemming
-  die je in de Play Console-vragenlijst (Data safety) hoeft te verklaren
-  vanwege RevenueCat zelf.
-- Wel nodig in de Play Console: een actief betaalprofiel (Merchant account)
-  en de twee abonnementsproducten uit stap 2, plus een gepubliceerde build
-  in minstens een testtrack. Zonder dat kun je niet met echte aankopen testen.
-- Native module: zowel RevenueCat als de Supabase-auth-opslag zijn native
-  afhankelijkheden. Ze werken niet in Expo Go en vereisen een nieuwe EAS
-  dev build (stap 7). De bestaande release-build blijft werken zolang de
-  drie pakketten nog niet geinstalleerd zijn, want de code valt zonder de
-  modules stilletjes terug op offline en geen premium.
+- Billing-permissie `com.android.vending.BILLING` wordt automatisch aan de
+  samengevoegde AndroidManifest toegevoegd door react-native-purchases.
+- In-app betalingen vragen geen losse runtime-permissie (zoals locatie).
+- Wel nodig: een actief betaalprofiel (Merchant account), de abonnementen uit
+  stap 2, en een gepubliceerde build in minstens een testtrack.
