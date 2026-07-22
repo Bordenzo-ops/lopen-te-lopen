@@ -705,6 +705,9 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
   const [selectedDistances, setSelectedDistances] = useState<Set<RaceDistance>>(new Set());
   const [selectedCountries, setSelectedCountries] = useState<Set<string>>(new Set());
   const [registrationOpenOnly, setRegistrationOpenOnly] = useState(false);
+  // Filters staan standaard ingeklapt achter een Filter-knop, zodat het scherm
+  // rustig oogt. De knop toont een telbadge zodra er filters actief zijn.
+  const [filtersExpanded, setFiltersExpanded]     = useState(false);
 
   const { hasAccess, promptUpgrade, goToPaywall } = usePremium();
   const comfortableKm    = useAppStore(s => s.comfortableKm);
@@ -720,6 +723,12 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
     || selectedDistances.size > 0
     || selectedCountries.size > 0
     || registrationOpenOnly;
+
+  // Aantal actieve chip-filters (zoekterm telt niet mee: die heeft een eigen
+  // wisknop in de zoekbalk). Toont als badge op de Filter-knop.
+  const activeFilterCount = selectedDistances.size
+    + selectedCountries.size
+    + (registrationOpenOnly ? 1 : 0);
 
   // Land → provincie → stad, gefilterd op zoekterm + chips (EN-logica). Als er
   // filters actief zijn, vallen lege steden/provincies/landen weg; zonder
@@ -819,6 +828,11 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
     setRegistrationOpenOnly(prev => !prev);
   }
 
+  function toggleFiltersPanel() {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setFiltersExpanded(prev => !prev);
+  }
+
   function clearFilters() {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setSearchQuery('');
@@ -905,69 +919,103 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
           )}
         </View>
 
-        {/* Filterchips */}
-        <View style={styles.filtersSection}>
-          <View style={styles.filterGroupHeaderRow}>
-            <SlidersHorizontal size={13} color={colors.textTertiary} strokeWidth={2} />
-            <Text style={styles.filterGroupHeaderText}>Filters</Text>
-            {filtersActive && (
-              <TouchableOpacity style={styles.clearFiltersBtn} onPress={clearFilters} hitSlop={8}>
-                <RotateCcw size={12} color={colors.brandPrimary} strokeWidth={2} />
-                <Text style={styles.clearFiltersText}>Wis filters</Text>
-              </TouchableOpacity>
+        {/* Filterbalk: compacte knop die het chip-paneel open/dicht klapt */}
+        <View style={styles.filterToolbar}>
+          <TouchableOpacity
+            style={[styles.filterToggleBtn, (filtersExpanded || activeFilterCount > 0) && styles.filterToggleBtnActive]}
+            onPress={toggleFiltersPanel}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={filtersExpanded ? 'Filters verbergen' : 'Filters tonen'}
+            accessibilityState={{ expanded: filtersExpanded }}
+          >
+            <SlidersHorizontal
+              size={15}
+              color={activeFilterCount > 0 ? colors.brandPrimary : colors.textSecondary}
+              strokeWidth={2}
+            />
+            <Text style={[styles.filterToggleText, activeFilterCount > 0 && styles.filterToggleTextActive]}>
+              Filters
+            </Text>
+            {activeFilterCount > 0 && (
+              <View style={styles.filterCountBadge}>
+                <Text style={styles.filterCountBadgeText}>{activeFilterCount}</Text>
+              </View>
             )}
-          </View>
+            {filtersExpanded
+              ? <ChevronDown size={16} color={colors.textTertiary} strokeWidth={2} />
+              : <ChevronRight size={16} color={colors.textTertiary} strokeWidth={2} />
+            }
+          </TouchableOpacity>
 
-          <View style={styles.filterChipsRow}>
-            {DISTANCE_FILTERS.map(({ value, label }) => {
-              const selected = selectedDistances.has(value);
-              return (
-                <TouchableOpacity
-                  key={value}
-                  style={[styles.filterChip, selected && styles.filterChipActive]}
-                  onPress={() => toggleDistanceFilter(value)}
-                  activeOpacity={0.85}
-                  accessibilityRole="checkbox"
-                  accessibilityLabel={`Filter op afstand ${label}`}
-                  accessibilityState={{ checked: selected }}
-                >
-                  <Text style={[styles.filterChipText, selected && styles.filterChipTextActive]}>{label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          <View style={styles.filterChipsRow}>
-            {COUNTRIES.map(country => {
-              const selected = selectedCountries.has(country.id);
-              return (
-                <TouchableOpacity
-                  key={country.id}
-                  style={[styles.filterChip, selected && styles.filterChipActive]}
-                  onPress={() => toggleCountryFilter(country.id)}
-                  activeOpacity={0.85}
-                  accessibilityRole="checkbox"
-                  accessibilityLabel={`Filter op land ${country.name}`}
-                  accessibilityState={{ checked: selected }}
-                >
-                  <Text style={[styles.filterChipText, selected && styles.filterChipTextActive]}>{country.name}</Text>
-                </TouchableOpacity>
-              );
-            })}
+          {filtersActive && (
             <TouchableOpacity
-              style={[styles.filterChip, registrationOpenOnly && styles.filterChipActive]}
-              onPress={toggleRegistrationFilter}
-              activeOpacity={0.85}
-              accessibilityRole="checkbox"
-              accessibilityLabel="Filter op wedstrijden waar inschrijving open is"
-              accessibilityState={{ checked: registrationOpenOnly }}
+              style={styles.clearFiltersBtn}
+              onPress={clearFilters}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Alle filters en zoekterm wissen"
             >
-              <Text style={[styles.filterChipText, registrationOpenOnly && styles.filterChipTextActive]}>
-                Inschrijving open
-              </Text>
+              <RotateCcw size={13} color={colors.brandPrimary} strokeWidth={2} />
+              <Text style={styles.clearFiltersText}>Wis</Text>
             </TouchableOpacity>
-          </View>
+          )}
         </View>
+
+        {/* Chip-paneel: alleen zichtbaar als de gebruiker de filters uitklapt */}
+        {filtersExpanded && (
+          <View style={styles.filtersPanel}>
+            <View style={styles.filterChipsRow}>
+              {DISTANCE_FILTERS.map(({ value, label }) => {
+                const selected = selectedDistances.has(value);
+                return (
+                  <TouchableOpacity
+                    key={value}
+                    style={[styles.filterChip, selected && styles.filterChipActive]}
+                    onPress={() => toggleDistanceFilter(value)}
+                    activeOpacity={0.85}
+                    accessibilityRole="checkbox"
+                    accessibilityLabel={`Filter op afstand ${label}`}
+                    accessibilityState={{ checked: selected }}
+                  >
+                    <Text style={[styles.filterChipText, selected && styles.filterChipTextActive]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <View style={styles.filterChipsRow}>
+              {COUNTRIES.map(country => {
+                const selected = selectedCountries.has(country.id);
+                return (
+                  <TouchableOpacity
+                    key={country.id}
+                    style={[styles.filterChip, selected && styles.filterChipActive]}
+                    onPress={() => toggleCountryFilter(country.id)}
+                    activeOpacity={0.85}
+                    accessibilityRole="checkbox"
+                    accessibilityLabel={`Filter op land ${country.name}`}
+                    accessibilityState={{ checked: selected }}
+                  >
+                    <Text style={[styles.filterChipText, selected && styles.filterChipTextActive]}>{country.name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+              <TouchableOpacity
+                style={[styles.filterChip, registrationOpenOnly && styles.filterChipActive]}
+                onPress={toggleRegistrationFilter}
+                activeOpacity={0.85}
+                accessibilityRole="checkbox"
+                accessibilityLabel="Filter op wedstrijden waar inschrijving open is"
+                accessibilityState={{ checked: registrationOpenOnly }}
+              >
+                <Text style={[styles.filterChipText, registrationOpenOnly && styles.filterChipTextActive]}>
+                  Inschrijving open
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
@@ -1118,15 +1166,30 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.base,
     color: colors.textPrimary,
   },
-  filtersSection: { gap: spacing[0.5] },
-  filterGroupHeaderRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing[0.5],
+  // Filterbalk: Filter-knop + wisknop
+  filterToolbar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: spacing[1], marginTop: spacing[0.5],
   },
-  filterGroupHeaderText: {
-    flex: 1,
-    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.xs,
-    color: colors.textTertiary, textTransform: 'uppercase', letterSpacing: typography.letterSpacing.wide,
+  filterToggleBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: spacing[1.5], paddingVertical: spacing[1], minHeight: 40,
+    borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.borderDefault,
+    backgroundColor: colors.bgCard,
   },
+  filterToggleBtnActive: { borderColor: colors.brandPrimary + '99' },
+  filterToggleText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm, color: colors.textSecondary,
+  },
+  filterToggleTextActive: { color: colors.textPrimary },
+  filterCountBadge: {
+    minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
+    backgroundColor: colors.brandPrimary, alignItems: 'center', justifyContent: 'center',
+  },
+  filterCountBadgeText: {
+    fontFamily: typography.fontFamily.sansBold, fontSize: typography.fontSize.xs, color: '#fff',
+  },
+  filtersPanel: { gap: spacing[1], marginTop: spacing[1] },
   clearFiltersBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   clearFiltersText: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.xs, color: colors.brandPrimary,
