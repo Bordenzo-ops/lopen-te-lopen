@@ -8,7 +8,6 @@ import { useThemeColors } from '../../src/theme/useTheme';
 import { Button } from '../../src/components/ui/Button';
 import { useAppStore } from '../../src/store/appStore';
 import * as voiceService from '../../src/services/voiceService';
-import { greetingUtterance } from '../../src/config/voicePhrases';
 import { VOICES, type VoiceType } from '../../src/config/voiceConfig';
 import type { GoalType } from '../../src/data/trainingPlans';
 import { DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
@@ -30,10 +29,11 @@ export default function VoiceScreen() {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  // Korte voorbeeldzin zodat de gebruiker de stem direct hoort
+  // Korte voorbeeldzin zodat de gebruiker de stem direct hoort. Speelt de
+  // gebundelde preview-clip af (de ECHTE stem, ongated) — niet de telefoonstem.
   const previewVoice = (type: VoiceType) => {
     setVoiceType(type);
-    voiceService.speakPhrases(greetingUtterance(), type);
+    voiceService.playPreview(type);
   };
 
   const handleStart = () => {

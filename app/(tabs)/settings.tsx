@@ -10,7 +10,6 @@ import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
 import { zoneInfo, DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
 import * as voiceService from '../../src/services/voiceService';
-import { previewUtterance } from '../../src/config/voicePhrases';
 import type { VoiceType } from '../../src/config/voiceConfig';
 import { VOICES, voiceDefinition } from '../../src/config/voiceConfig';
 import { downloadPack, deletePack, getPackInfo, getRemotePackSizeLabel, isPackUpdateAvailable } from '../../src/services/voicePackService';
@@ -596,7 +595,7 @@ export default function SettingsScreen() {
                             key={voiceDef.key}
                             onPress={() => {
                               updateProfile({ voiceType: voiceDef.key });
-                              voiceService.speakPhrases(previewUtterance(), voiceDef.key);
+                              voiceService.playPreview(voiceDef.key);
                             }}
                             style={[styles.voiceListItem, isActive && styles.voiceListItemActive]}
                             activeOpacity={0.8}

@@ -37,9 +37,25 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { VoiceType } from '../config/voiceConfig';
 import { voiceDefinition } from '../config/voiceConfig';
 import type { PhraseUtterance } from '../config/voicePhrases';
+import { previewUtterance } from '../config/voicePhrases';
 import { useAppStore } from '../store/appStore';
 import { hasPremiumAccess } from '../config/premiumConfig';
 import { isPackAvailable, getLocalClipUri } from './voicePackService';
+
+// ── Gebundelde preview-clips (ongated) ──────────────────────────────────────
+//
+// Voor elke stem is één korte preview-clip als asset in de app meegebakken
+// (assets/audio/voice-previews/{stem}.mp3, gegenereerd/bijgewerkt door
+// scripts/generate-voice-packs.ts). Deze clips laten de ECHTE ElevenLabs-stem
+// horen zónder premium of gedownload stempakket — precies waar de gebruiker de
+// stem beoordeelt (onboarding + instellingen). Metro vereist letterlijke
+// require-paden, dus geen dynamische opbouw: een vaste map per stem.
+const PREVIEW_ASSETS: Record<VoiceType, number> = {
+  female: require('../../assets/audio/voice-previews/female.mp3'),
+  male: require('../../assets/audio/voice-previews/male.mp3'),
+  flemish_female: require('../../assets/audio/voice-previews/flemish_female.mp3'),
+  flemish_male: require('../../assets/audio/voice-previews/flemish_male.mp3'),
+};
 
 let currentPlayer: any = null;
 let audioModeReady = false;
@@ -71,8 +87,14 @@ function delay(ms: number): Promise<void> {
  *
  * Geeft `true` terug bij een normaal afgespeelde clip, `false` bij een fout,
  * een afgebroken wachtrij (nieuwere stop()-aanroep) of het 10s-vangnet.
+ *
+ * `source` is óf een string-uri (lokale stempakket-clip, fase C) óf een via
+ * `require()` ingeladen asset-module (een `number`, gebruikt voor de
+ * gebundelde preview-clips). `createAudioPlayer` accepteert beide vormen als
+ * AudioSource — geverifieerd in node_modules/expo-audio/build/AudioModule.types
+ * (AudioSource = string | number | AudioSourceObject | null).
  */
-function playClip(uri: string, myToken: number): Promise<boolean> {
+function playClip(source: string | number, myToken: number): Promise<boolean> {
   return new Promise<boolean>(resolve => {
     let settled = false;
     let player: any = null;
@@ -108,7 +130,7 @@ function playClip(uri: string, myToken: number): Promise<boolean> {
     }
 
     try {
-      player = createAudioPlayer({ uri }, { updateInterval: 100 });
+      player = createAudioPlayer(typeof source === 'string' ? { uri: source } : source, { updateInterval: 100 });
       currentPlayer = player;
       currentClipAbort = abort;
       subscription = player.addListener('playbackStatusUpdate', (status: { didJustFinish?: boolean }) => {
@@ -498,6 +520,45 @@ export async function speakPhrases(utterance: PhraseUtterance, voice: VoiceType 
   if (activeToken !== myToken) return;
 
   await fallbackSpeak(utterance.fallbackText, voice);
+}
+
+/**
+ * Speelt de gebundelde preview-clip van een stem af (zie PREVIEW_ASSETS boven).
+ *
+ * Bewust ONGATED: anders dan `speakPhrases` doet dit GEEN premium- of
+ * stempakket-controle. De preview bestaat juist om de échte stem te laten
+ * horen vóórdat iemand premium neemt of het pakket downloadt — met een gate
+ * zou de gebruiker op dat moment altijd de telefoonstem horen (precies de klacht
+ * die dit oplost). De clip zit in de app-bundel, dus dit werkt ook offline en
+ * meteen (belangrijk in de onboarding op een verse installatie).
+ *
+ * Defensief, in dezelfde geest als `speakPhrases`: lukt het afspelen van de
+ * assetclip niet (ontbrekende asset, fout) en heeft er nog niets geklonken,
+ * dan spreekt de telefoonstem alsnog de preview-vangnettekst. Is de aanroep
+ * ondertussen door een nieuwere `stop()`/preview afgebroken, dan gebeurt er
+ * niets meer.
+ */
+export async function playPreview(voice: VoiceType = 'female'): Promise<void> {
+  stop();
+  const myToken = activeToken;
+
+  let played = false;
+  try {
+    const asset = PREVIEW_ASSETS[voice];
+    if (asset != null) {
+      await ensureAudioMode();
+      if (activeToken !== myToken) return;
+      played = await playClip(asset, myToken);
+    }
+  } catch {
+    played = false;
+  }
+
+  if (played) return;
+  // Afgebroken door een nieuwere aanroep? Dan niet alsnog de fallback spreken.
+  if (activeToken !== myToken) return;
+
+  await fallbackSpeak(previewUtterance().fallbackText, voice);
 }
 
 /** Stopt alle lopende spraak: de stempakket-wachtrij (fase C) en de telefoonstem. */

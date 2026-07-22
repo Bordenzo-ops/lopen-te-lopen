@@ -67,6 +67,12 @@ const REQUEST_DELAY_MS = 200;
 const MAX_RETRIES = 3;
 const RETRY_DELAYS_MS = [5000, 15000, 30000];
 const DEFAULT_OUT_DIR = '_workspace/voice-packs-output';
+// Vaste bundel-locatie voor de preview-clips: de app bakt deze paden hard in
+// (assets/audio/voice-previews/{voice}.mp3, zonder hash) zodat een gebruiker
+// de échte stem kan beluisteren vóór aankoop/download. Deze map wordt hier
+// dus NIET los beheerd, maar blijft na elke (her)generatie automatisch in
+// sync met de daadwerkelijk gegenereerde preview-clip.
+const PREVIEW_BUNDLE_DIR = path.resolve(process.cwd(), 'assets/audio/voice-previews');
 
 // ── CLI-argumenten ───────────────────────────────────────────────────────────
 
@@ -340,6 +346,26 @@ async function processVoice(
     `  manifest.json geschreven (${Object.keys(files).length}/${phrases.length} clips aanwezig, ` +
       `${(totalBytes / 1024 / 1024).toFixed(1)} MB).`,
   );
+
+  // Gebundelde preview-asset bijwerken: kopieer de zojuist gegenereerde
+  // preview-clip naar assets/audio/voice-previews/{voice}.mp3 (stabiele naam
+  // zonder hash — de app bakt dat pad hard in om de stem ongated te laten
+  // beluisteren). Defensief: zonder preview-clip (bv. mislukt) slaan we dit
+  // stil over; een mislukte kopie mag de generatie niet laten crashen.
+  const previewFilename = files['preview'];
+  if (previewFilename) {
+    try {
+      fs.mkdirSync(PREVIEW_BUNDLE_DIR, { recursive: true });
+      const bundleDest = path.join(PREVIEW_BUNDLE_DIR, `${voice}.mp3`);
+      fs.copyFileSync(path.join(voiceDir, previewFilename), bundleDest);
+      console.log(`  preview-asset bijgewerkt: ${path.relative(process.cwd(), bundleDest)}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`  Kon preview-asset voor stem "${voice}" niet bijwerken: ${message}`);
+    }
+  } else {
+    console.warn(`  Geen preview-clip voor stem "${voice}" — gebundelde preview-asset niet bijgewerkt.`);
+  }
 }
 
 // ── Uploaden naar Supabase Storage ───────────────────────────────────────────
