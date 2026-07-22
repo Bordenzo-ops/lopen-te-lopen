@@ -17,8 +17,18 @@
  * terug. Ze gooien nooit, zodat de UI nooit crasht op een netwerkfout.
  */
 
+import { Platform } from 'react-native';
 import { getSupabase, isSupabaseConfigured } from './supabaseClient';
 import type { Session, User } from '@supabase/supabase-js';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
+import {
+  GoogleSignin,
+  statusCodes,
+  isSuccessResponse,
+  isCancelledResponse,
+} from '@react-native-google-signin/google-signin';
+import { GOOGLE_WEB_CLIENT_ID, GOOGLE_IOS_CLIENT_ID } from '../config/authConfig';
 
 export interface AuthResult {
   ok: boolean;
@@ -177,6 +187,160 @@ export async function signInWithEmail(
     return {
       ok: false,
       message: 'Inloggen lukte niet. Probeer het later opnieuw.',
+    };
+  }
+}
+
+/**
+ * Zorgt dat GoogleSignin eenmalig geconfigureerd is met de publieke
+ * client-ID's. Meerdere aanroepen zijn goedkoop/onschadelijk, maar we
+ * beperken het toch tot eenmaal per app-sessie.
+ */
+let googleConfigured = false;
+function ensureGoogleConfigured(): void {
+  if (googleConfigured) return;
+  GoogleSignin.configure({
+    webClientId: GOOGLE_WEB_CLIENT_ID,
+    iosClientId: GOOGLE_IOS_CLIENT_ID,
+  });
+  googleConfigured = true;
+}
+
+/**
+ * Log in met Google via de native Google Sign-In-flow en koppel de
+ * verkregen idToken aan Supabase via signInWithIdToken. Werkt op zowel
+ * Android als iOS.
+ *
+ * Volledig defensief: annulering door de gebruiker is geen fout en geeft
+ * {ok:false} zonder alarmerende message terug, zodat de UI niets storends
+ * toont. Deze library (v16+) geeft een annulering terug als een resultaat
+ * met type 'cancelled' in plaats van een geworpen fout; we controleren
+ * daarnaast ook op de statusCodes.SIGN_IN_CANCELLED-foutcode, mocht een
+ * onderliggende native laag toch een fout gooien. Andere fouten (geen Play
+ * Services, geen netwerk, ontbrekende configuratie) worden vertaald naar
+ * een nette Nederlandse melding.
+ */
+export async function signInWithGoogle(): Promise<AuthResult> {
+  if (!isSupabaseConfigured()) {
+    return { ok: false, message: 'Synchronisatie staat niet ingesteld.' };
+  }
+  const supabase = getSupabase();
+  if (!supabase) {
+    return { ok: false, message: 'Synchronisatie staat niet ingesteld.' };
+  }
+
+  try {
+    ensureGoogleConfigured();
+
+    if (Platform.OS === 'android') {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    }
+
+    const response = await GoogleSignin.signIn();
+
+    if (isCancelledResponse(response)) {
+      // Gebruiker annuleerde zelf: geen fout, stil afhandelen.
+      return { ok: false };
+    }
+    if (!isSuccessResponse(response) || !response.data.idToken) {
+      return {
+        ok: false,
+        message: 'Inloggen met Google lukte niet. Probeer het later opnieuw.',
+      };
+    }
+
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: 'google',
+      token: response.data.idToken,
+    });
+    if (error) {
+      return { ok: false, message: vertaalAuthFout(error.message) };
+    }
+    return { ok: true, message: 'Ingelogd met Google.', session: data.session };
+  } catch (e: any) {
+    // Gebruiker annuleerde zelf (oudere native foutcode): geen fout, stil afhandelen.
+    if (e?.code === statusCodes.SIGN_IN_CANCELLED) {
+      return { ok: false };
+    }
+    return {
+      ok: false,
+      message: 'Inloggen met Google lukte niet. Probeer het later opnieuw.',
+    };
+  }
+}
+
+/**
+ * Log in met Apple via de native "Sign in with Apple"-flow (alleen iOS) en
+ * koppel de verkregen identityToken aan Supabase via signInWithIdToken.
+ *
+ * Volgt de door Supabase aanbevolen flow met een nonce: we genereren zelf
+ * een willekeurige "rauwe" nonce, geven de SHA256-hash daarvan mee aan
+ * Apple (verplicht door Apple's beveiligingsmodel), en geven de rauwe nonce
+ * mee aan Supabase zodat die de hash kan herleiden en het token kan
+ * verifieren.
+ *
+ * Volledig defensief: alleen beschikbaar op iOS en als isAvailableAsync true
+ * is. Annulering door de gebruiker (ERR_REQUEST_CANCELED) is geen fout en
+ * geeft {ok:false} zonder alarmerende message terug.
+ */
+export async function signInWithApple(): Promise<AuthResult> {
+  if (Platform.OS !== 'ios') {
+    return { ok: false, message: 'Inloggen met Apple is alleen beschikbaar op iOS.' };
+  }
+  if (!isSupabaseConfigured()) {
+    return { ok: false, message: 'Synchronisatie staat niet ingesteld.' };
+  }
+  const supabase = getSupabase();
+  if (!supabase) {
+    return { ok: false, message: 'Synchronisatie staat niet ingesteld.' };
+  }
+
+  try {
+    const available = await AppleAuthentication.isAvailableAsync();
+    if (!available) {
+      return { ok: false, message: 'Inloggen met Apple is niet beschikbaar op dit toestel.' };
+    }
+
+    // Rauwe nonce genereren en hashen: Apple krijgt de hash, Supabase krijgt
+    // de rauwe waarde om de hash zelf te kunnen herleiden en verifieren.
+    const rawNonce = Crypto.randomUUID();
+    const hashedNonce = await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      rawNonce,
+    );
+
+    const credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+      nonce: hashedNonce,
+    });
+
+    if (!credential.identityToken) {
+      return {
+        ok: false,
+        message: 'Inloggen met Apple lukte niet. Probeer het later opnieuw.',
+      };
+    }
+
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: 'apple',
+      token: credential.identityToken,
+      nonce: rawNonce,
+    });
+    if (error) {
+      return { ok: false, message: vertaalAuthFout(error.message) };
+    }
+    return { ok: true, message: 'Ingelogd met Apple.', session: data.session };
+  } catch (e: any) {
+    // Gebruiker annuleerde zelf: geen fout, stil afhandelen.
+    if (e?.code === 'ERR_REQUEST_CANCELED') {
+      return { ok: false };
+    }
+    return {
+      ok: false,
+      message: 'Inloggen met Apple lukte niet. Probeer het later opnieuw.',
     };
   }
 }

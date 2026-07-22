@@ -13,6 +13,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.lopentelopen.app",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Lopen te Lopen gebruikt je locatie om je route, afstand en tempo bij te houden tijdens het hardlopen, ook als je scherm vergrendeld is.",
         "UIBackgroundModes": [
@@ -117,7 +118,14 @@
           "neverForLocation": false,
           "bluetoothAlwaysPermission": "Lopen te Lopen gebruikt Bluetooth om je hartslagmeter te verbinden en je hartslag live te tonen tijdens het lopen."
         }
-      ]
+      ],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.886963433887-ajddhje7rnv8ohsb18pk9tusuuk5o9hm"
+        }
+      ],
+      "expo-apple-authentication"
     ],
     "extra": {
       "router": {},
