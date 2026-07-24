@@ -87,6 +87,25 @@ npx expo start zodat de nieuwe .env-waarden geladen worden.
 Ziet je geen rijen, dan controleer je: staan de sleutels in .env, is de Metro-
 server herstart, staan anonieme logins aan, en zijn de migraties gedraaid.
 
+## 8. GitHub-integratie (automatische migraties)
+
+Sinds 20 juli 2026 staat de GitHub-integratie aan in Supabase (Project Settings
+of Integrations, GitHub). Die koppelt het project aan de repo
+Bordenzo-ops/lopen-te-lopen:
+
+- Working directory: "." (de map supabase/ staat in de repo-root).
+- Deploy to production: aan.
+- Production branch: main.
+- Branching (preview database per pull request): bewust niet aangezet. Dat
+  vereist het Pro-plan en kost geld per actief branch-uur; niet nodig voor dit
+  solo-project.
+
+Gevolg: nieuwe bestanden in supabase/migrations/ worden voortaan automatisch
+toegepast op de productiedatabase zodra ze naar main gemerged worden. Optie A
+en B hierboven (handmatig via SQL Editor of supabase db push) zijn dus niet
+meer nodig voor migraties die al op main staan, maar blijven werken als
+fallback of voor een snelle losse wijziging.
+
 ## Wat er gebeurt zonder backend
 
 Zonder sleutels of zonder netwerk slaat de app alles lokaal op (AsyncStorage)
