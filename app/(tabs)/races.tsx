@@ -3,6 +3,7 @@ import { SafeAreaView, StyleSheet } from 'react-native';
 import { type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
+import { useMaybeShowPremiumIntro } from '../../src/hooks/usePremiumIntro';
 import { RacePickerScreen } from '../../src/components/ui/RacePickerScreen';
 import type { RacePlan } from '../../src/data/buildRacePlan';
 
@@ -13,6 +14,7 @@ export default function RacesTab() {
   const setSchemaMode        = useAppStore(s => s.setSchemaMode);
   const updateProfile        = useAppStore(s => s.updateProfile);
   const setRaceTargetSeconds = useAppStore(s => s.setRaceTargetSeconds);
+  const maybeShowIntro       = useMaybeShowPremiumIntro();
 
   function handleSelectRace(plan: RacePlan, targetSeconds: number | null) {
     // setRacePlan reset eerst de doeltijd; daarna zetten we de nieuwe (premium).
@@ -22,6 +24,9 @@ export default function RacesTab() {
     // Sync profile.goal zodat het vrije trainingsschema ook klopt als de
     // gebruiker later terugschakelt naar trainingsmodus
     updateProfile({ goal: plan.goal });
+    // Wedstrijddoel-trigger voor het premium value-scherm: best-effort, met
+    // korte vertraging zodat de keuze eerst zichtbaar verwerkt wordt.
+    setTimeout(maybeShowIntro, 400);
   }
 
   return (

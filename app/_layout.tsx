@@ -151,6 +151,7 @@ export default function RootLayout() {
               <Stack.Screen name="session/active" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
               <Stack.Screen name="session/summary" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="paywall" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="premium-intro" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
               <Stack.Screen name="account" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
               <Stack.Screen name="strava-callback" options={{ animation: 'fade' }} />
             </Stack>

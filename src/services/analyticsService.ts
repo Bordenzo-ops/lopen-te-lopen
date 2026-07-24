@@ -38,7 +38,9 @@ export type AnalyticsEvent =
   | 'purchase_completed'
   | 'run_started'
   | 'run_completed'
-  | 'run_card_shared';
+  | 'run_card_shared'
+  | 'premium_intro_shown'
+  | 'premium_intro_cta';
 
 /** Kleine, generieke eigenschappen bij een event. Geen persoonsgegevens. */
 export type AnalyticsProps = Record<string, string | number | boolean | null>;

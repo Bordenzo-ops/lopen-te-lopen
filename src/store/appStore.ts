@@ -344,6 +344,27 @@ interface AppState {
   dismissDashboardUpsell: () => void;
 
   /**
+   * Hoeveel keer is het premium value-scherm (app/premium-intro.tsx) al
+   * getoond? Gebruikt door canShowPremiumIntro (premiumIntroConfig.ts) om de
+   * frequentie te begrenzen. Gepersisteerd.
+   */
+  premiumIntroShownCount: number;
+  /**
+   * Tijdstip (ms sinds epoch) waarop het premium value-scherm voor het laatst
+   * getoond is, of null als dat nog nooit gebeurd is. Gepersisteerd.
+   */
+  premiumIntroLastShownAt: number | null;
+  /**
+   * Heeft de gebruiker bij het premium value-scherm bewust "Niet meer tonen"
+   * gekozen? Blijft daarna permanent verborgen (gepersisteerd).
+   */
+  premiumIntroDismissed: boolean;
+  /** Registreert dat het value-scherm getoond is: hoogt de teller op en zet het tijdstip. */
+  registerPremiumIntroShown: () => void;
+  /** Verbergt het premium value-scherm permanent. */
+  dismissPremiumIntro: () => void;
+
+  /**
    * Registreert dat er een route gepland is en hoogt de weekteller op. Reset
    * de teller automatisch als er een nieuwe week begonnen is. Gepersisteerd.
    */
@@ -498,6 +519,9 @@ export const useAppStore = create<AppState>()(
       isPremium: false,
       premiumExpiredNoticePending: false,
       dashboardUpsellDismissed: false,
+      premiumIntroShownCount: 0,
+      premiumIntroLastShownAt: null,
+      premiumIntroDismissed: false,
 
       setPremium: (value) => {
         const wasPremium = get().isPremium;
@@ -512,6 +536,13 @@ export const useAppStore = create<AppState>()(
 
       dismissPremiumExpiredNotice: () => set({ premiumExpiredNoticePending: false }),
       dismissDashboardUpsell: () => set({ dashboardUpsellDismissed: true }),
+
+      registerPremiumIntroShown: () =>
+        set(s => ({
+          premiumIntroShownCount: s.premiumIntroShownCount + 1,
+          premiumIntroLastShownAt: Date.now(),
+        })),
+      dismissPremiumIntro: () => set({ premiumIntroDismissed: true }),
 
       setCloudSyncEnabled: (v) => {
         set({ cloudSyncEnabled: v });
@@ -976,6 +1007,11 @@ export const useAppStore = create<AppState>()(
         isPremium:                   state.isPremium,
         premiumExpiredNoticePending: state.premiumExpiredNoticePending,
         dashboardUpsellDismissed:    state.dashboardUpsellDismissed,
+        // Frequentie-state van het premium value-scherm (premium-intro.tsx):
+        // hoort bij dezelfde offline-first filosofie als de velden hierboven.
+        premiumIntroShownCount:  state.premiumIntroShownCount,
+        premiumIntroLastShownAt: state.premiumIntroLastShownAt,
+        premiumIntroDismissed:   state.premiumIntroDismissed,
         // Expliciete gebruikerskeuze, moet een herstart overleven. isSignedIn
         // en syncStatus blijven bewust ongepersisteerd: syncNow() (aangeroepen
         // vanuit onRehydrateStorage hieronder) herstelt die vluchtige

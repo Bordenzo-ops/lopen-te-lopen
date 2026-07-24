@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { retryStravaQueue } from '../../src/services/stravaService';
@@ -17,6 +17,7 @@ import { ScaleIn } from '../../src/components/motion/ScaleIn';
 import { CountUpText } from '../../src/components/motion/CountUpText';
 import { useRacePace } from '../../src/hooks/useRacePace';
 import { usePremium } from '../../src/hooks/usePremium';
+import { useMaybeShowPremiumIntro } from '../../src/hooks/usePremiumIntro';
 import { computeRunStats, computeMilestones } from '../../src/data/achievements';
 import { formatPacePerKm } from '../../src/data/paceModel';
 import type { GoalType, Session } from '../../src/data/trainingPlans';
@@ -54,6 +55,19 @@ export default function DashboardScreen() {
   useEffect(() => {
     void retryStravaQueue();
   }, []);
+
+  // App-open-trigger voor het premium value-scherm: hooguit één keer per
+  // mount, met een korte vertraging zodat het dashboard eerst rustig kan
+  // renderen. useMaybeShowPremiumIntro checkt zelf de eligibility (premium,
+  // dismissed, frequentie).
+  const maybeShowIntro = useMaybeShowPremiumIntro();
+  const introChecked = useRef(false);
+  useEffect(() => {
+    if (introChecked.current) return;
+    introChecked.current = true;
+    const t = setTimeout(maybeShowIntro, 700);
+    return () => clearTimeout(t);
+  }, [maybeShowIntro]);
 
   if (!profile) return null;
 
