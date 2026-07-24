@@ -4,7 +4,7 @@ import {
   Alert, TextInput, KeyboardAvoidingView, Platform, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone, Cloud, Activity, Bell, HeartPulse, ChevronRight, Mail, LogOut } from 'lucide-react-native';
+import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone, Cloud, Activity, Bell, HeartPulse, ChevronRight, Mail, LogOut, Crown } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
@@ -22,6 +22,7 @@ import {
 } from '../../src/services/authService';
 import { Minus, Plus } from 'lucide-react-native';
 import { usePremium } from '../../src/hooks/usePremium';
+import { openManageSubscriptions } from '../../src/services/purchaseService';
 import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
 import { connectStrava, disconnectStrava, isStravaConfigured } from '../../src/services/stravaService';
 import { enableHealthConnect, isHealthConnectAvailable } from '../../src/services/healthConnectService';
@@ -181,7 +182,7 @@ export default function SettingsScreen() {
   const resetProgress = useAppStore(s => s.resetProgress);
   const themePreference = useAppStore(s => s.themePreference);
   const setThemePreference = useAppStore(s => s.setThemePreference);
-  const { hasAccess, goToPaywall } = usePremium();
+  const { hasAccess, goToPaywall, isPremium } = usePremium();
   const cloudSyncEnabled    = useAppStore(s => s.cloudSyncEnabled);
   const setCloudSyncEnabled = useAppStore(s => s.setCloudSyncEnabled);
   const syncStatus          = useAppStore(s => s.syncStatus);
@@ -269,6 +270,21 @@ export default function SettingsScreen() {
         },
       ],
     );
+  }
+
+  // Open de store-beheerpagina om van plan te wisselen of op te zeggen. Van
+  // plan wisselen mag nooit via een verse aankoop in de app (dubbele
+  // afschrijving/weigering); de store regelt de proratie zelf.
+  async function handleManageSubscription() {
+    const opened = await openManageSubscriptions();
+    if (!opened) {
+      Alert.alert(
+        'Abonnement beheren',
+        Platform.OS === 'ios'
+          ? 'Open Instellingen → je naam → Abonnementen om je abonnement te wijzigen of op te zeggen.'
+          : 'Open de Play Store → profiel → Betalingen en abonnementen → Abonnementen om je abonnement te wijzigen of op te zeggen.',
+      );
+    }
   }
 
   const activeVoiceType: VoiceType = profile?.voiceType ?? 'female';
@@ -959,6 +975,35 @@ export default function SettingsScreen() {
               Als cloudsync aan staat, worden je profiel en trainingsresultaten versleuteld opgeslagen bij Supabase (EU). Routes worden niet gesynchroniseerd. Zie het privacybeleid voor details.
             </Text>
           </View>
+
+          {/* Abonnement: alleen tonen wanneer premium actief is. Van plan
+              wisselen of opzeggen gebeurt veilig via de store-beheerpagina. */}
+          {isPremium && (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Abonnement</Text>
+              <View style={styles.card}>
+                <TouchableOpacity
+                  onPress={handleManageSubscription}
+                  style={styles.integrationRow}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Abonnement beheren"
+                >
+                  <Crown size={18} color={colors.premium} strokeWidth={2} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.switchLabel}>Premium actief</Text>
+                    <Text style={styles.switchSub}>Van plan wisselen of opzeggen</Text>
+                  </View>
+                  <ChevronRight size={16} color={colors.textTertiary} strokeWidth={2} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.fieldNote}>
+                Wisselen (bijv. jaarlijks → maandelijks) en opzeggen doe je in de{' '}
+                {Platform.OS === 'ios' ? 'App Store' : 'Play Store'}. Zo voorkom je een
+                dubbel abonnement.
+              </Text>
+            </View>
+          )}
 
           {/* Account */}
           <View style={styles.section}>

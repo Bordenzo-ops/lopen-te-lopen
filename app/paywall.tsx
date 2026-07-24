@@ -38,6 +38,7 @@ import {
   purchasePackage,
   restorePurchases,
   waitForPremiumActivation,
+  openManageSubscriptions,
   getTrialInfo,
   FALLBACK_PRICE_MONTHLY,
   FALLBACK_PRICE_YEARLY,
@@ -135,6 +136,9 @@ export default function PaywallScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const setPremium = useAppStore(s => s.setPremium);
   const refreshPremium = useAppStore(s => s.refreshPremium);
+  // Al premium? Dan geen verse aankoop meer, maar doorsturen naar de
+  // store-beheerpagina om veilig van plan te wisselen of op te zeggen.
+  const isPremium = useAppStore(s => s.isPremium);
 
   const [loadingOfferings, setLoadingOfferings] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -223,7 +227,29 @@ export default function PaywallScreen() {
     }
   };
 
+  // Open de abonnementenpagina van de store om van plan te wisselen of op te
+  // zeggen. Lukt het openen niet, dan tonen we een nette uitleg i.p.v. stil te
+  // blijven of te crashen.
+  const onManageSubscription = async () => {
+    const opened = await openManageSubscriptions();
+    if (!opened) {
+      Alert.alert(
+        'Abonnement beheren',
+        Platform.OS === 'ios'
+          ? 'Open Instellingen → je naam → Abonnementen om je abonnement te wijzigen of op te zeggen.'
+          : 'Open de Play Store → profiel → Betalingen en abonnementen → Abonnementen om je abonnement te wijzigen of op te zeggen.',
+      );
+    }
+  };
+
   const onPurchase = async (option: PlanOption) => {
+    // Vangnet: wie al premium is, mag geen tweede abonnement kopen. Van plan
+    // wisselen gebeurt veilig via de store-beheerpagina (proratie, geen
+    // dubbele afschrijving). Zie onManageSubscription.
+    if (isPremium) {
+      await onManageSubscription();
+      return;
+    }
     if (!option.pkg) {
       Alert.alert(
         'Nog niet beschikbaar',
@@ -329,7 +355,9 @@ export default function PaywallScreen() {
           Lopen te Lopen Premium
         </Text>
         <Text style={styles.subtitle}>
-          Haal alles uit je training met onbeperkt plannen en de beste coaching.
+          {isPremium
+            ? 'Je hebt Lopen te Lopen Premium. Beheer of wijzig je abonnement in de store.'
+            : 'Haal alles uit je training met onbeperkt plannen en de beste coaching.'}
         </Text>
 
         {/* Voordelen */}
@@ -344,51 +372,70 @@ export default function PaywallScreen() {
           ))}
         </Card>
 
-        {/* Abonnementsopties */}
-        {loadingOfferings ? (
-          <View style={styles.loadingPrices}>
-            <ActivityIndicator color={colors.brandPrimary} />
-            <Text style={styles.loadingText}>Prijzen laden</Text>
-          </View>
+        {/* Al premium: geen koopknoppen, maar een veilige route naar de
+            store-beheerpagina om van plan te wisselen of op te zeggen. */}
+        {isPremium ? (
+          <>
+            <Button
+              label="Abonnement beheren"
+              onPress={onManageSubscription}
+              style={styles.manageButton}
+            />
+            <Text style={styles.fineprint}>
+              Van plan wisselen (bijvoorbeeld van jaarlijks naar maandelijks) of
+              opzeggen doe je veilig via je {storeAccountLabel}. Zo voorkom je een
+              dubbel abonnement en regelt de store de verrekening zelf.
+            </Text>
+          </>
         ) : (
-          <View style={styles.options}>
-            <PlanCard
-              option={yearly}
-              highlighted
-              busy={busyId === yearly.pkg?.identifier}
-              disabled={anyBusy}
-              onPress={() => onPurchase(yearly)}
-            />
-            <PlanCard
-              option={monthly}
-              busy={busyId === monthly.pkg?.identifier}
-              disabled={anyBusy}
-              onPress={() => onPurchase(monthly)}
-            />
-            {yearly.trialDays && yearly.rawPriceString && (
-              <Text style={styles.trialAfterText}>
-                Daarna {yearly.rawPriceString} per jaar, stop wanneer je wilt
-              </Text>
+          <>
+            {/* Abonnementsopties */}
+            {loadingOfferings ? (
+              <View style={styles.loadingPrices}>
+                <ActivityIndicator color={colors.brandPrimary} />
+                <Text style={styles.loadingText}>Prijzen laden</Text>
+              </View>
+            ) : (
+              <View style={styles.options}>
+                <PlanCard
+                  option={yearly}
+                  highlighted
+                  busy={busyId === yearly.pkg?.identifier}
+                  disabled={anyBusy}
+                  onPress={() => onPurchase(yearly)}
+                />
+                <PlanCard
+                  option={monthly}
+                  busy={busyId === monthly.pkg?.identifier}
+                  disabled={anyBusy}
+                  onPress={() => onPurchase(monthly)}
+                />
+                {yearly.trialDays && yearly.rawPriceString && (
+                  <Text style={styles.trialAfterText}>
+                    Daarna {yearly.rawPriceString} per jaar, stop wanneer je wilt
+                  </Text>
+                )}
+              </View>
             )}
-          </View>
+
+            <Button
+              label="Aankopen herstellen"
+              variant="ghost"
+              onPress={onRestore}
+              loading={restoring}
+              disabled={anyBusy}
+              style={styles.restoreButton}
+            />
+
+            <Text style={styles.fineprint}>
+              Het abonnement verlengt automatisch tot je opzegt. Opzeggen kan op elk
+              moment via je {storeAccountLabel}.
+              {yearly.trialDays
+                ? ' Na de gratis proefperiode wordt het abonnement automatisch betaald, tenzij je minstens 24 uur voor het einde opzegt.'
+                : ''}
+            </Text>
+          </>
         )}
-
-        <Button
-          label="Aankopen herstellen"
-          variant="ghost"
-          onPress={onRestore}
-          loading={restoring}
-          disabled={anyBusy}
-          style={styles.restoreButton}
-        />
-
-        <Text style={styles.fineprint}>
-          Het abonnement verlengt automatisch tot je opzegt. Opzeggen kan op elk
-          moment via je {storeAccountLabel}.
-          {yearly.trialDays
-            ? ' Na de gratis proefperiode wordt het abonnement automatisch betaald, tenzij je minstens 24 uur voor het einde opzegt.'
-            : ''}
-        </Text>
 
         <View style={styles.legalLinksRow}>
           <TouchableOpacity
@@ -678,6 +725,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   restoreButton: {
     marginTop: spacing[1],
+    marginBottom: spacing[2],
+  },
+  manageButton: {
+    width: '100%',
+    marginTop: spacing[2],
     marginBottom: spacing[2],
   },
   fineprint: {

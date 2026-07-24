@@ -18,7 +18,7 @@
  * Vereist: npx expo install react-native-purchases
  */
 
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import Purchases, {
   type CustomerInfo,
   type CustomerInfoUpdateListener,
@@ -289,6 +289,37 @@ export async function waitForPremiumActivation(
     }
   }
   return false;
+}
+
+/**
+ * Diepe link naar de abonnementenpagina van de store, waar de gebruiker
+ * veilig van plan kan wisselen (bijv. jaar → maand) of kan opzeggen. De store
+ * regelt daar zelf de proratie en voorkomt dubbele abonnementen.
+ *
+ * BELANGRIJK: van plan wisselen mag NOOIT via een verse aankoop in de app.
+ * Wie al premium is en in de app een ander plan "koopt", laat Google Play/Apple
+ * ofwel de wissel weigeren ("je kunt dit abonnement niet wijzigen") ofwel een
+ * tweede abonnement naast het bestaande aanmaken. Daarom sturen we bestaande
+ * abonnees altijd naar de store-eigen beheerpagina.
+ *
+ *  - iOS: https://apps.apple.com/account/subscriptions
+ *  - Android: https://play.google.com/store/account/subscriptions
+ *
+ * Best-effort: geeft false terug als de link niet geopend kon worden, zodat de
+ * aanroeper een nette uitleg kan tonen in plaats van te crashen.
+ */
+const IOS_MANAGE_SUBSCRIPTIONS_URL = 'https://apps.apple.com/account/subscriptions';
+const ANDROID_MANAGE_SUBSCRIPTIONS_URL = 'https://play.google.com/store/account/subscriptions';
+
+export async function openManageSubscriptions(): Promise<boolean> {
+  const url =
+    Platform.OS === 'ios' ? IOS_MANAGE_SUBSCRIPTIONS_URL : ANDROID_MANAGE_SUBSCRIPTIONS_URL;
+  try {
+    await Linking.openURL(url);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
