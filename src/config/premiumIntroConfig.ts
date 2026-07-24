@@ -6,9 +6,8 @@
  * frequentie-logica makkelijk aan te passen zijn zonder het scherm zelf aan
  * te hoeven passen.
  *
- * ⚠️ De Rotterdam-marathondatum (11 april 2027) in de subkop hieronder is nog
- * niet officieel bevestigd. Controleer en werk deze bij zodra de definitieve
- * datum bekend is.
+ * De Rotterdam-marathondatum in de subkop hieronder is bevestigd op zondag
+ * 11 april 2027. Werk deze bij zodra de campagne naar een volgende race gaat.
  *
  * De prijzen in de copy zijn campagne-tekst; de echte store-prijzen komen uit
  * de paywall zelf (zie app/paywall.tsx). Niet dynamisch maken.
