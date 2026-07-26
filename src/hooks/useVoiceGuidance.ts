@@ -69,12 +69,15 @@ export function useVoiceGuidance(
   }, [enabled, voiceType]);
 
   /**
-   * Aanroepen wanneer de sessie voltooid is.
+   * Aanroepen wanneer de sessie voltooid is. `finishVariant` (CP4, optioneel)
+   * rouleert de afsluitzin ("Geweldig gedaan!" / varianten) — de aanroeper
+   * geeft hiervoor het aantal eerder voltooide sessies mee, zodat de variant
+   * over meerdere runs heen rouleert in plaats van binnen één sessie.
    */
-  const onFinish = useCallback((distanceKm: number, durationSeconds: number) => {
+  const onFinish = useCallback((distanceKm: number, durationSeconds: number, finishVariant: number = 0) => {
     if (!enabled || finishSpoken.current) return;
     finishSpoken.current = true;
-    voiceService.speakPhrases(finishUtterance(distanceKm, durationSeconds), voiceType);
+    voiceService.speakPhrases(finishUtterance(distanceKm, durationSeconds, finishVariant), voiceType);
   }, [enabled, voiceType]);
 
   /**

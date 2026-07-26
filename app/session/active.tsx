@@ -165,6 +165,9 @@ export default function ActiveSessionScreen() {
   const schemaMode      = useAppStore(s => s.schemaMode);
   const startSession    = useAppStore(s => s.startSession);
   const completeSession = useAppStore(s => s.completeSession);
+  // Aantal eerder voltooide sessies: rouleert de dagdeel-begroeting en de
+  // finish-afsluitzin over meerdere runs heen (CP4, zie voicePhrases.ts).
+  const completedSessionsCount = useAppStore(s => s.completedSessions.length);
   const cancelSession   = useAppStore(s => s.cancelSession);
   const activeSession   = useAppStore(s => s.activeSession);
   const updateProfile   = useAppStore(s => s.updateProfile);
@@ -356,7 +359,10 @@ export default function ActiveSessionScreen() {
       ) {
         introSpokenRef.current = true;
         void voiceService.speakPhrases(
-          sessionIntroUtterance(session.type, session.distanceKm, session.zone),
+          sessionIntroUtterance(session.type, session.distanceKm, session.zone, {
+            hour: new Date().getHours(),
+            variant: completedSessionsCount,
+          }),
           voiceType,
         );
       }
@@ -781,7 +787,7 @@ export default function ActiveSessionScreen() {
                 );
               }
             } else {
-              onFinish(finalDist, elapsed);
+              onFinish(finalDist, elapsed, completedSessionsCount);
             }
             completeSession(
               {

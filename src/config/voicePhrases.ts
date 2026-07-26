@@ -245,6 +245,29 @@ const INTRO_TEXTS: Record<'easy' | 'tempo' | 'long' | 'cross', string> = {
 // Zelfde halve-kilometersystematiek als rem_/dist_ hierboven (KM_RANGE_MIN..
 // KM_RANGE_MAX, stappen van 0,5 km) — vergt dus geen eigen grenzen/helpers.
 
+// ── 15b. Dagdeel-begroeting bij sessiestart — fase E-uitbreiding (CP4) ──────
+// Twee tekstvarianten per dagdeel zodat de begroeting niet elke run identiek
+// klinkt (zelfde rouleeropzet als ENC_MESSAGES/HR_TEXTS). Het dagdeel zelf
+// wordt bepaald door de aanroeper (new Date().getHours(), zie active.tsx) —
+// hier alleen de teksten en de grenzen in greetingForSessionStart hieronder.
+const GREET_TEXTS: Record<'morning' | 'afternoon' | 'evening', [string, string]> = {
+  morning:   ['Goedemorgen! Klaar voor je ochtendrun?', 'Goedemorgen! Tijd om de dag sportief te beginnen.'],
+  afternoon: ['Goedemiddag! Klaar voor je training?', 'Goedemiddag! Mooi moment voor een run.'],
+  evening:   ['Goedenavond! Klaar om nog even te lopen?', 'Goedenavond! Laten we deze dag sportief afsluiten.'],
+};
+
+// ── 15c. Finish-afsluiters — fase E-uitbreiding (CP4) ───────────────────────
+// Index 0 ("Geweldig gedaan!") is de OORSPRONKELIJKE tekst en blijft
+// letterlijk staan — zijn clip-id is en blijft 'well_done' (zie FIXED_TEXTS),
+// niet hernoemen. Index 1-3 zijn de nieuwe varianten (finish_var_1..3, zie
+// allPhrases hieronder); finishUtterance rouleert erover.
+const FINISH_CLOSERS: [string, string, string, string] = [
+  'Geweldig gedaan!',
+  'Wat een prestatie!',
+  'Dat heb je verdiend!',
+  'Knap gelopen!',
+];
+
 // ── 15. Race-felicitaties — "Gefeliciteerd! Je hebt {race} uitgelopen!" ────
 // Eén clip per wedstrijd uit rotterdamRaces.ts. getAllRaces() geeft de
 // daadwerkelijk kiesbare "bladwedstrijden" terug (bij een evenement met
@@ -378,6 +401,19 @@ export function allPhrases(): CatalogPhrase[] {
     });
   });
 
+  // 15b. Dagdeel-begroeting
+  (Object.keys(GREET_TEXTS) as Array<keyof typeof GREET_TEXTS>).forEach(period => {
+    GREET_TEXTS[period].forEach((text, i) => {
+      phrases.push({ id: `greet_${period}_${i}`, text });
+    });
+  });
+
+  // 15c. Finish-afsluiters — index 0 is 'well_done' (al in FIXED_TEXTS), dus
+  // hier alleen de 3 nieuwe varianten.
+  FINISH_CLOSERS.slice(1).forEach((text, i) => {
+    phrases.push({ id: `finish_var_${i + 1}`, text });
+  });
+
   return phrases;
 }
 
@@ -451,8 +487,18 @@ export function halfwayUtterance(remainingKm: number): PhraseUtterance {
  * minuten. Geweldig gedaan!" Tijd in de clip-versie in hele/vijf minuten
  * (zie TIME_FINE_MAX/TIME_STEP_ABOVE), de fallback-tijd blijft exact
  * (minuten + seconden, huidig gedrag).
+ *
+ * `variant` rouleert de afsluitzin (0 = "Geweldig gedaan!"/well_done, 1-3 de
+ * fase E-varianten finish_var_1..3) zodat een gebruiker die vaak loopt niet
+ * elke keer exact dezelfde felicitatie hoort — zie CP4 in
+ * Elevenlabs-creditplan-aug-2026.md. De aanroeper (useVoiceGuidance) geeft
+ * hiervoor het aantal voltooide sessies mee; deze functie klemt zelf modulo 4.
  */
-export function finishUtterance(distanceKm: number, durationSeconds: number): PhraseUtterance {
+export function finishUtterance(
+  distanceKm: number,
+  durationSeconds: number,
+  variant: number = 0,
+): PhraseUtterance {
   const distId = `dist_${halfStepSuffix(roundHalfClamped(distanceKm, KM_RANGE_MIN, KM_RANGE_MAX))}`;
 
   const totalMinutes = durationSeconds / 60;
@@ -467,9 +513,13 @@ export function finishUtterance(distanceKm: number, durationSeconds: number): Ph
   const secs = durationSeconds % 60;
   const timeStr = secs > 0 ? `${mins} minuten en ${secs} seconden` : `${mins} minuten`;
 
+  const idx = ((variant % 4) + 4) % 4;
+  const closerId = idx === 0 ? 'well_done' : `finish_var_${idx}`;
+  const closerText = FINISH_CLOSERS[idx];
+
   return {
-    ids: ['finish', distId, timeId, 'well_done'],
-    fallbackText: `Sessie voltooid! Je hebt ${km} kilometer gelopen in ${timeStr}. Geweldig gedaan!`,
+    ids: ['finish', distId, timeId, closerId],
+    fallbackText: `Sessie voltooid! Je hebt ${km} kilometer gelopen in ${timeStr}. ${closerText}`,
   };
 }
 
@@ -558,9 +608,26 @@ export function previewUtterance(): PhraseUtterance {
 }
 
 /**
+ * Dagdeel-begroeting bij sessiestart (fase E, CP4): "Goedemorgen! Klaar voor
+ * je ochtendrun?" `hour` is 0-23 (de aanroeper geeft new Date().getHours()
+ * mee — als parameter in plaats van intern opgevraagd, zodat deze functie
+ * deterministisch test-baar blijft). Grenzen: ochtend 5-11, middag 12-17,
+ * avond 18-4 (nacht/vroege ochtend telt als avond — geen aparte "nacht"-
+ * variant, dat zou de catalogus vergroten voor een zeldzaam moment). `variant`
+ * rouleert (modulo 2), zelfde opzet als de aanmoedigingen.
+ */
+export function greetingForSessionStart(hour: number, variant: number = 0): PhraseUtterance {
+  const period: 'morning' | 'afternoon' | 'evening' =
+    hour >= 5 && hour < 12 ? 'morning' : hour >= 12 && hour < 18 ? 'afternoon' : 'evening';
+  const idx = ((variant % 2) + 2) % 2;
+  return { ids: [`greet_${period}_${idx}`], fallbackText: GREET_TEXTS[period][idx] };
+}
+
+/**
  * Gesproken sessie-intro bij de start van een geplande sessie (fase E, zie
- * app/session/active.tsx): "Vandaag: een tempotraining. Het doel is ongeveer
- * 8,5 kilometer. Zone 3. Tempozone. Uitdagend maar houdbaar. Veel plezier!"
+ * app/session/active.tsx): "Goedemorgen! Klaar voor je ochtendrun? Vandaag:
+ * een tempotraining. Het doel is ongeveer 8,5 kilometer. Zone 3. Tempozone.
+ * Uitdagend maar houdbaar. Veel plezier!"
  *
  * `zone` is optioneel en alleen gebruikt als hij een bekende ZONE_IDS-waarde
  * is — een onbekende/ontbrekende zone laat de zone-clip gewoon weg (net als
@@ -568,14 +635,30 @@ export function previewUtterance(): PhraseUtterance {
  * De fallbackText gebruikt de EXACTE sessieafstand (niet afgerond, in
  * tegenstelling tot de clip-versie via goal_X) zodat de telefoonstem-fallback
  * dezelfde precisie heeft als het scherm.
+ *
+ * `greeting` is optioneel (CP4): meegeven om de dagdeel-begroeting vóór de
+ * intro te laten klinken, als ÉÉN doorlopende uitspraak (twee losse
+ * speakPhrases-aanroepen zouden elkaar afkappen, zie de toelichting bij
+ * finish/raceFinishUtterance in active.tsx). Zonder dit argument (bijv. de
+ * race-felicitatie-tak, die geen sessie-intro gebruikt) verandert er niets
+ * aan bestaand gedrag.
  */
 export function sessionIntroUtterance(
   type: 'easy' | 'tempo' | 'long' | 'cross',
   distanceKm: number,
   zone?: string,
+  greeting?: { hour: number; variant?: number },
 ): PhraseUtterance {
+  const ids: string[] = [];
+  let greetSentence = '';
+  if (greeting) {
+    const g = greetingForSessionStart(greeting.hour, greeting.variant);
+    ids.push(...g.ids);
+    greetSentence = `${g.fallbackText} `;
+  }
+
   const goalId = `goal_${halfStepSuffix(roundHalfClamped(distanceKm, KM_RANGE_MIN, KM_RANGE_MAX))}`;
-  const ids = [`intro_${type}`, goalId];
+  ids.push(`intro_${type}`, goalId);
 
   const hasZone = !!zone && zone in ZONE_DESCRIPTIONS;
   if (hasZone) ids.push(`zone_${zone}`);
@@ -586,7 +669,7 @@ export function sessionIntroUtterance(
     ids,
     // Nederlandse notatie met komma (bv. "7,5"), anders leest de telefoonstem
     // de punt voor als "punt".
-    fallbackText: `${INTRO_TEXTS[type]} Het doel is ongeveer ${String(distanceKm).replace('.', ',')} kilometer.${zoneSentence} Veel plezier!`,
+    fallbackText: `${greetSentence}${INTRO_TEXTS[type]} Het doel is ongeveer ${String(distanceKm).replace('.', ',')} kilometer.${zoneSentence} Veel plezier!`,
   };
 }
 
