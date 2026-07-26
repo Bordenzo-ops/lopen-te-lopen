@@ -101,6 +101,21 @@ export const SESSION_TYPE_INFO: Record<Session['type'], {
     waarom: 'Cross-training vermindert de kans op blessures, geeft je loopspieren rust en houdt je conditie op niveau op dagen dat hardlopen te veel zou zijn. Het maakt je ook een completer atleet.',
     accentColor: palette.green[500],
   },
+  interval: {
+    label: 'Intervaltraining',
+    emoji: '⏱️',
+    tagline: 'Wisselen tussen hard en herstel',
+    wat: 'Bij intervaltraining wissel je korte, stevige versnellingen af met rustig herstel. Je loopt niet één gelijkmatig tempo, maar bewust in blokjes: even hard, dan weer rustig uit. De app telt je door elke fase heen.',
+    hoe: [
+      'Begin altijd met een rustige warming-up van ongeveer tien minuten.',
+      'Loop de werkintervallen stevig maar beheerst, niet meteen voluit.',
+      'Gebruik het herstel echt om bij te komen: rustig dribbelen of wandelen mag.',
+      'Houd elke herhaling even sterk als de eerste en verdeel je kracht.',
+      'Sluit af met een rustige cooling-down zodat je hartslag daalt.',
+    ],
+    waarom: 'Intervaltraining verhoogt je VO2max en je snelheid: je went je lichaam aan een hoger tempo en leert sneller herstellen. Daardoor gaat je wedstrijdtempo op den duur lichter voelen. Eén keer per week in de opbouwfase is genoeg, want het is intensief en vraagt om rust eromheen.',
+    accentColor: palette.zone.z4,
+  },
 };
 
 // ── Component ─────────────────────────────────────────────────────────────────

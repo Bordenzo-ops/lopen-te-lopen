@@ -24,11 +24,12 @@ interface SessionCardProps {
 }
 
 const sessionTypeLabel: Record<Session['type'], string> = {
-  easy:  'Rustige duurloop',
-  tempo: 'Tempoduurloop',
-  long:  'Lange duurloop',
-  rest:  'Rustdag',
-  cross: 'Cross-training',
+  easy:     'Rustige duurloop',
+  tempo:    'Tempoduurloop',
+  long:     'Lange duurloop',
+  rest:     'Rustdag',
+  cross:    'Cross-training',
+  interval: 'Intervaltraining',
 };
 
 const dayLabel = ['', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag', 'Zondag'];
@@ -92,7 +93,7 @@ export function SessionCard({ session, isCompleted = false, isSkipped = false, o
         <View style={styles.stat}>
           <MapPin size={14} color={colors.textSecondary} strokeWidth={2} />
           <Text style={[styles.statValue, isCompleted && styles.textMuted]}>
-            {session.distanceKm} km
+            {session.type === 'interval' ? `~${session.distanceKm} km` : `${session.distanceKm} km`}
           </Text>
         </View>
         <ZoneBadge zone={session.zone} size="sm" />

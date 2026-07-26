@@ -94,7 +94,7 @@ export function SessionEditorSheet({ visible, initialSession, onClose, onSave }:
   useEffect(() => {
     if (!visible) return;
     if (initialSession) {
-      const initType: EditableType = initialSession.type === 'rest' ? 'easy' : initialSession.type;
+      const initType: EditableType = initialSession.type === 'rest' || initialSession.type === 'interval' ? 'easy' : initialSession.type;
       setDay(initialSession.day);
       setType(initType);
       setZone(initialSession.zone);

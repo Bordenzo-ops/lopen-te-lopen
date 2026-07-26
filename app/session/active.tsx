@@ -20,8 +20,10 @@ import { useVoiceGuidance } from '../../src/hooks/useVoiceGuidance';
 import { useRoutePlanner } from '../../src/hooks/useRoutePlanner';
 import { useRouteCoaching } from '../../src/hooks/useRouteCoaching';
 import { useHeartRateCoaching } from '../../src/hooks/useHeartRateCoaching';
+import { useIntervalCoaching } from '../../src/hooks/useIntervalCoaching';
 import * as voiceService from '../../src/services/voiceService';
-import { sessionIntroUtterance, raceFinishUtterance } from '../../src/config/voicePhrases';
+import { sessionIntroUtterance, intervalIntroUtterance, raceFinishUtterance } from '../../src/config/voicePhrases';
+import { buildIntervalSegments, intervalStateAt } from '../../src/data/intervals';
 import { RoutePreviewSheet } from '../../src/components/ui/RoutePreviewSheet';
 import { SessionTypeSheet } from '../../src/components/ui/SessionTypeSheet';
 import { Button } from '../../src/components/ui/Button';
@@ -154,6 +156,7 @@ const sessionTypeShort: Record<string, string> = {
   long:  'Lang',
   rest:  'Rust',
   cross: 'Cross',
+  interval: 'Interval',
 };
 
 // ── Scherm ────────────────────────────────────────────────────────────────────
@@ -307,6 +310,20 @@ export default function ActiveSessionScreen() {
   const onHeartRateCoachingUpdateRef = useRef(onHeartRateCoachingUpdate);
   onHeartRateCoachingUpdateRef.current = onHeartRateCoachingUpdate;
 
+  // ── Intervalcoaching (sessietype 'interval') ──────────────────────────────
+  const isInterval = session?.type === 'interval' && !!session.interval;
+  const intervalSegments = useMemo(
+    () => (session?.interval ? buildIntervalSegments(session.interval) : []),
+    [session],
+  );
+  const intervalCoaching = useIntervalCoaching(voiceEnabled, session?.interval, voiceType);
+  // Refs zodat de secondetimer hieronder (met een leeg dependency-array)
+  // altijd de laatste waarden ziet, net als onHeartRateCoachingUpdateRef hierboven.
+  const isIntervalRef = useRef(isInterval);
+  isIntervalRef.current = isInterval;
+  const intervalOnTickRef = useRef(intervalCoaching.onTick);
+  intervalOnTickRef.current = intervalCoaching.onTick;
+
   // ── Init sessie ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (session && !activeSession) {
@@ -352,7 +369,17 @@ export default function ActiveSessionScreen() {
       // -check. Alleen met spraak aan en een bekend, loopbaar sessietype
       // (geen 'rest' — daar loop je niet naartoe — en geen sessie zonder
       // type, de toekomstige "vrije run" uit het ontwerpdoc).
-      if (
+      if (voiceEnabled && !introSpokenRef.current && session && isInterval) {
+        // Intervalsessie: eigen intro (dekt de warming-up al) in plaats van
+        // de gewone sessie-intro, en de coachingtoestand van de nieuwe
+        // sessie op nul zetten.
+        introSpokenRef.current = true;
+        intervalCoaching.reset();
+        void voiceService.speakPhrases(
+          intervalIntroUtterance({ hour: new Date().getHours(), variant: completedSessionsCount }),
+          voiceType,
+        );
+      } else if (
         voiceEnabled && !introSpokenRef.current && session &&
         (session.type === 'easy' || session.type === 'tempo' ||
          session.type === 'long' || session.type === 'cross')
@@ -424,8 +451,13 @@ export default function ActiveSessionScreen() {
         setGpsReady(true);
         firstGpsRef.current = { lat: latitude, lon: longitude };
 
-        // Vraag de gebruiker of er een route gepland moet worden
-        if (canUsePlanner && !routePlanTriggered.current) {
+        // Intervalsessie: geen routevraag, meteen starten zonder route (de
+        // segmentklok stuurt de sessie, een vooraf uitgestippelde route heeft
+        // hier geen functie).
+        if (isIntervalRef.current && !routePlanTriggered.current) {
+          routePlanTriggered.current = true;
+          startSessionNow(null);
+        } else if (canUsePlanner && !routePlanTriggered.current) {
           routePlanTriggered.current = true;
           setShowRouteQuestion(true);
         } else if (!routePlanTriggered.current) {
@@ -515,7 +547,9 @@ export default function ActiveSessionScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
-      onKmUpdate(distanceRef.current, paceRef.current);
+      // Km-/halverwege-cues slaan we over bij een intervalsessie: die wordt
+      // gestuurd door de segmentklok (useIntervalCoaching), niet door afstand.
+      if (!isIntervalRef.current) onKmUpdate(distanceRef.current, paceRef.current);
       onRouteCoachingUpdate(latitude, longitude, distanceRef.current);
     };
 
@@ -657,6 +691,9 @@ export default function ActiveSessionScreen() {
       timerRef.current = setInterval(() => setElapsed(e => {
         const next = e + 1;
         elapsedRef.current = next;
+        // Intervalcoaching: de segmentklok loopt gelijk met deze timer, dus
+        // pauzeert vanzelf mee (deze tak draait alleen terwijl isRunning).
+        if (isIntervalRef.current) intervalOnTickRef.current(next);
         return next;
       }), 1000);
     } else {
@@ -972,6 +1009,10 @@ export default function ActiveSessionScreen() {
   const lastPos = routeRef.current[routeRef.current.length - 1];
   // Houd de ref gelijk met de state voor de terugknop-handler.
   isLockedRef.current = isLocked;
+  // Intervalpaneel: huidige segmenttoestand o.b.v. de verstreken tijd. Alleen
+  // berekend bij een intervalsessie, andere sessietypes gebruiken de gewone
+  // afstand-voortgangsbalk hieronder en blijven ongewijzigd.
+  const ivState = isInterval ? intervalStateAt(intervalSegments, elapsed) : null;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bgBase }]}>
@@ -1031,16 +1072,45 @@ export default function ActiveSessionScreen() {
           <Text style={styles.timer}>{formatTime(elapsed)}</Text>
         </View>
 
-        {/* Afstand progress bar */}
-        <View style={styles.progressContainer}>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${targetPct}%`, backgroundColor: zoneColor }]} />
+        {/* Afstand progress bar, of het intervalpaneel bij een intervalsessie */}
+        {isInterval && ivState ? (
+          <View style={styles.intervalPanel}>
+            <Text style={[styles.intervalPhaseLabel, { color: zoneInfo[ivState.segment.zone].color }]}>
+              {ivState.phase === 'warmup' ? 'WARMING-UP'
+                : ivState.phase === 'work' ? `INTERVAL ${ivState.segment.repIndex ?? ''} / ${ivState.segment.repTotal ?? ''}`
+                : ivState.phase === 'recovery' ? 'HERSTEL'
+                : 'COOLING-DOWN'}
+            </Text>
+            <Text style={[styles.intervalCountdown, { color: zoneInfo[ivState.segment.zone].color }]}>
+              {formatTime(ivState.segmentRemainingSec)}
+            </Text>
+            {ivState.segment.repTotal ? (
+              <View style={styles.intervalDots}>
+                {Array.from({ length: ivState.segment.repTotal }).map((_, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.intervalDot,
+                      i < (ivState.segment.repIndex ?? 0)
+                        ? { backgroundColor: zoneInfo[ivState.segment.zone].color }
+                        : { backgroundColor: colors.borderDefault },
+                    ]}
+                  />
+                ))}
+              </View>
+            ) : null}
           </View>
-          <View style={styles.progressLabels}>
-            <Text style={styles.progressText}>{distanceKm.toFixed(2)} km</Text>
-            <Text style={styles.progressTarget}>Doel: {session.distanceKm} km</Text>
+        ) : (
+          <View style={styles.progressContainer}>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${targetPct}%`, backgroundColor: zoneColor }]} />
+            </View>
+            <View style={styles.progressLabels}>
+              <Text style={styles.progressText}>{distanceKm.toFixed(2)} km</Text>
+              <Text style={styles.progressTarget}>Doel: {session.distanceKm} km</Text>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Stats grid */}
         <View style={styles.statsGrid}>
@@ -1397,6 +1467,25 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   progressTarget: {
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm, color: colors.textTertiary,
+  },
+
+  // Intervalpaneel (vervangt de afstand-progressbar bij sessietype 'interval')
+  intervalPanel: {
+    paddingHorizontal: spacing[3], alignItems: 'center', gap: spacing[1], marginBottom: spacing[2],
+  },
+  intervalPhaseLabel: {
+    fontFamily: typography.fontFamily.sansBold, fontSize: typography.fontSize.sm,
+    textTransform: 'uppercase', letterSpacing: typography.letterSpacing.widest,
+  },
+  intervalCountdown: {
+    fontFamily: typography.fontFamily.display, fontSize: typography.fontSize['4xl'],
+    letterSpacing: -2, fontVariant: ['tabular-nums'],
+  },
+  intervalDots: {
+    flexDirection: 'row', gap: 6, marginTop: 2,
+  },
+  intervalDot: {
+    width: 8, height: 8, borderRadius: 4,
   },
   statsGrid: {
     flexDirection: 'row', marginHorizontal: spacing[3], marginBottom: spacing[2],

@@ -286,6 +286,55 @@ function raceNamePhrase(raceName: string): string {
   return /^(de|het)\s/i.test(raceName) ? raceName : `de ${raceName}`;
 }
 
+// ── 16. Interval-cues — gesproken cues tijdens een intervaltraining ─────────
+// Aparte cue-groep naast INTRO_TEXTS: 'interval' is geen gewoon trainingstype
+// uit die tabel maar krijgt een eigen intro (intro_interval, via
+// intervalIntroUtterance) en een eigen set cues die tíjdens het lopen klinken
+// (warming-up, aftellen, aanzetten, halverwege, laatste tien seconden,
+// herstellen, halverwege de reeks, cooling-down). Waar herhaling anders saai
+// zou worden staan meerdere varianten die rouleren (zelfde rouleeropzet als
+// ENC_MESSAGES/HR_TEXTS/GREET_TEXTS hierboven, modulo op de lengte van de
+// lijst). "Drie, twee, één." (iv_countdown) is een vaste clip die vóór elke
+// "ga"-cue klinkt; in de fallbackText schrijven we "een" zonder trema (leest
+// voor de telefoonstem prettiger), de clip-tekst zelf houdt het trema aan.
+const INTRO_INTERVAL_TEXT =
+  'Vandaag: een intervaltraining. We wisselen stevige inspanning af met rustig herstel. Ik tel je overal doorheen, jij hoeft alleen maar te lopen.';
+
+const IV_COUNTDOWN_FALLBACK = 'Drie, twee, een.';
+
+const IV_FIXED_TEXTS: Record<string, string> = {
+  iv_warmup: 'We beginnen met een rustige warming-up. Loop losjes in en maak je lichaam wakker.',
+  iv_countdown: 'Drie, twee, één.',
+  iv_go_last: 'Laatste interval. Alles wat je hebt, geef het nu.',
+  iv_work_half: 'Halverwege. Blijf sterk en houd je vorm vast.',
+  iv_set_half: 'Je bent op de helft van je intervallen. Lekker bezig.',
+  iv_cooldown: 'Dat waren al je intervallen, sterk gewerkt. We sluiten af met een rustige cooling-down. Loop losjes uit.',
+};
+
+const IV_GET_READY_TEXTS: [string, string] = [
+  'Bijna. Maak je klaar voor de volgende versnelling.',
+  'Zet je schrap, we gaan zo weer aan.',
+];
+
+const IV_GO_TEXTS: [string, string, string, string] = [
+  'Gaan! Zet aan.',
+  'Nu versnellen. Sterk en soepel.',
+  'Volle focus, dit is jouw interval.',
+  'Aanzetten! Voel de kracht in je benen.',
+];
+
+const IV_WORK_END_TEXTS: [string, string] = [
+  'Nog tien seconden. Volhouden.',
+  'Bijna, laatste tien tellen. Doorzetten.',
+];
+
+const IV_RECOVER_TEXTS: [string, string, string, string] = [
+  'Mooi. Loop nu rustig uit en herstel.',
+  'Goed gedaan. Adem diep en laat je hartslag zakken.',
+  'Sterk. Dribbel rustig door, klaar voor de volgende.',
+  'Knap. Even bijkomen, schud je armen los.',
+];
+
 // ── Catalogus-enumeratie ─────────────────────────────────────────────────────
 
 export interface CatalogPhrase {
@@ -412,6 +461,24 @@ export function allPhrases(): CatalogPhrase[] {
   // hier alleen de 3 nieuwe varianten.
   FINISH_CLOSERS.slice(1).forEach((text, i) => {
     phrases.push({ id: `finish_var_${i + 1}`, text });
+  });
+
+  // 16. Interval-cues
+  phrases.push({ id: 'intro_interval', text: INTRO_INTERVAL_TEXT });
+  Object.entries(IV_FIXED_TEXTS).forEach(([id, text]) => {
+    phrases.push({ id, text });
+  });
+  IV_GET_READY_TEXTS.forEach((text, i) => {
+    phrases.push({ id: `iv_get_ready_${i}`, text });
+  });
+  IV_GO_TEXTS.forEach((text, i) => {
+    phrases.push({ id: `iv_go_${i}`, text });
+  });
+  IV_WORK_END_TEXTS.forEach((text, i) => {
+    phrases.push({ id: `iv_work_end_${i}`, text });
+  });
+  IV_RECOVER_TEXTS.forEach((text, i) => {
+    phrases.push({ id: `iv_recover_${i}`, text });
   });
 
   return phrases;
@@ -686,4 +753,83 @@ export function raceFinishUtterance(raceId: string, raceName: string): PhraseUtt
   const fallbackText = `Gefeliciteerd! Je hebt ${raceNamePhrase(raceName)} uitgelopen!`;
   const known = RACE_LIST.some(race => race.id === raceId);
   return { ids: known ? [`race_${raceId}`] : [], fallbackText };
+}
+
+/**
+ * Gesproken intro bij de start van een intervalsessie (vervangt de gewone
+ * sessie-intro voor type 'interval'). Optioneel met dagdeel-begroeting ervoor,
+ * net als sessionIntroUtterance, en afgesloten met "Veel plezier!".
+ */
+export function intervalIntroUtterance(
+  greeting?: { hour: number; variant?: number },
+): PhraseUtterance {
+  const ids: string[] = [];
+  let greetSentence = '';
+  if (greeting) {
+    const g = greetingForSessionStart(greeting.hour, greeting.variant);
+    ids.push(...g.ids);
+    greetSentence = `${g.fallbackText} `;
+  }
+
+  ids.push('intro_interval', 'have_fun');
+
+  return {
+    ids,
+    fallbackText: `${greetSentence}${INTRO_INTERVAL_TEXT} Veel plezier!`,
+  };
+}
+
+/**
+ * Eén interval-cue tijdens het lopen. `kind` bepaalt het moment; `opts.variant`
+ * rouleert waar er varianten zijn (modulo), `opts.isLast` markeert de laatste
+ * werkherhaling.
+ */
+export function intervalCueUtterance(
+  kind: 'warmup' | 'getReady' | 'go' | 'workHalf' | 'workEnd' | 'recover' | 'setHalf' | 'cooldown',
+  opts?: { variant?: number; isLast?: boolean },
+): PhraseUtterance {
+  const variant = opts?.variant ?? 0;
+
+  switch (kind) {
+    case 'warmup':
+      return { ids: ['iv_warmup'], fallbackText: IV_FIXED_TEXTS.iv_warmup };
+
+    case 'getReady': {
+      const idx = ((variant % 2) + 2) % 2;
+      return { ids: [`iv_get_ready_${idx}`], fallbackText: IV_GET_READY_TEXTS[idx] };
+    }
+
+    case 'go': {
+      if (opts?.isLast) {
+        return {
+          ids: ['iv_countdown', 'iv_go_last'],
+          fallbackText: `${IV_COUNTDOWN_FALLBACK} ${IV_FIXED_TEXTS.iv_go_last}`,
+        };
+      }
+      const idx = ((variant % 4) + 4) % 4;
+      return {
+        ids: ['iv_countdown', `iv_go_${idx}`],
+        fallbackText: `${IV_COUNTDOWN_FALLBACK} ${IV_GO_TEXTS[idx]}`,
+      };
+    }
+
+    case 'workHalf':
+      return { ids: ['iv_work_half'], fallbackText: IV_FIXED_TEXTS.iv_work_half };
+
+    case 'workEnd': {
+      const idx = ((variant % 2) + 2) % 2;
+      return { ids: [`iv_work_end_${idx}`], fallbackText: IV_WORK_END_TEXTS[idx] };
+    }
+
+    case 'recover': {
+      const idx = ((variant % 4) + 4) % 4;
+      return { ids: [`iv_recover_${idx}`], fallbackText: IV_RECOVER_TEXTS[idx] };
+    }
+
+    case 'setHalf':
+      return { ids: ['iv_set_half'], fallbackText: IV_FIXED_TEXTS.iv_set_half };
+
+    case 'cooldown':
+      return { ids: ['iv_cooldown'], fallbackText: IV_FIXED_TEXTS.iv_cooldown };
+  }
 }
