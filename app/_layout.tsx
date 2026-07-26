@@ -150,6 +150,8 @@ export default function RootLayout() {
               <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
               <Stack.Screen name="session/active" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
               <Stack.Screen name="session/summary" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="routine/warmup" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="routine/cooldown" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
               <Stack.Screen name="paywall" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
               <Stack.Screen name="premium-intro" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
               <Stack.Screen name="account" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />

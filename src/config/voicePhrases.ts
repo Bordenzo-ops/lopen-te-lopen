@@ -335,6 +335,37 @@ const IV_RECOVER_TEXTS: [string, string, string, string] = [
   'Knap. Even bijkomen, schud je armen los.',
 ];
 
+// ── 17. Warming-up & cooling-down — losse routine (CP3) ─────────────────────
+// Losstaand van een geplande sessie: een gebruiker start deze routine via een
+// eigen knop (zie app/routine/warmup.tsx en cooldown.tsx), niet gekoppeld aan
+// active.tsx of aan een sessietype. Intervalsessies hebben al hun EIGEN,
+// stille warming-up/cooling-down-fase met een korte cue (iv_warmup/
+// iv_cooldown, zie sectie 16) — dat blijft ongewijzigd; deze routine is een
+// apart, uitgebreider stap-voor-stap-format voor wie dat losstaand wil doen.
+// Zinnen mogen hier langer zijn (±60-80 tekens, zie het creditplan) omdat het
+// er maar 15 zijn. Stapduren (voor de timer in de UI) staan in
+// src/data/warmupCooldown.ts, niet hier — dit bestand bevat alleen teksten.
+const WU_INTRO_TEXT = 'We beginnen met een korte warming-up. Volg de stappen rustig op je eigen tempo.';
+const WU_DONE_TEXT = 'Mooi zo, je bent los en warm. Veel plezier met je training!';
+const WU_STEP_TEXTS: string[] = [
+  'Begin met een minuut rustig dribbelen ter plaatse.',
+  'Draai losjes met beide armen, eerst naar voren, dan naar achteren.',
+  'Til om de beurt je knieën vijf keer flink op, allebei de kanten.',
+  'Zwaai je benen om de beurt losjes naar voren en naar achteren.',
+  'Doe drie lichte uitvalspassen per been om je benen wakker te maken.',
+  'Rond af met dertig seconden rustig joggen op de plek.',
+];
+
+const CD_INTRO_TEXT = 'Tijd om rustig af te sluiten. Volg de stappen op je gemak.';
+const CD_DONE_TEXT = 'Goed gedaan. Je spieren komen weer tot rust.';
+const CD_STEP_TEXTS: string[] = [
+  'Loop nog een minuut rustig uit en laat je hartslag geleidelijk zakken.',
+  'Rek je kuiten: duw een hiel in de grond en leun rustig naar voren.',
+  'Rek je hamstrings: strek een been en buig langzaam voorover.',
+  'Rek je quadriceps: pak je enkel vast en trek je hiel richting je bil.',
+  'Adem een paar keer rustig diep in en uit, en voel hoe je ontspant.',
+];
+
 // ── Catalogus-enumeratie ─────────────────────────────────────────────────────
 
 export interface CatalogPhrase {
@@ -480,6 +511,19 @@ export function allPhrases(): CatalogPhrase[] {
   IV_RECOVER_TEXTS.forEach((text, i) => {
     phrases.push({ id: `iv_recover_${i}`, text });
   });
+
+  // 17. Warming-up & cooling-down (losse routine)
+  phrases.push({ id: 'wu_intro', text: WU_INTRO_TEXT });
+  WU_STEP_TEXTS.forEach((text, i) => {
+    phrases.push({ id: `wu_step_${i}`, text });
+  });
+  phrases.push({ id: 'wu_done', text: WU_DONE_TEXT });
+
+  phrases.push({ id: 'cd_intro', text: CD_INTRO_TEXT });
+  CD_STEP_TEXTS.forEach((text, i) => {
+    phrases.push({ id: `cd_step_${i}`, text });
+  });
+  phrases.push({ id: 'cd_done', text: CD_DONE_TEXT });
 
   return phrases;
 }
@@ -832,4 +876,36 @@ export function intervalCueUtterance(
     case 'cooldown':
       return { ids: ['iv_cooldown'], fallbackText: IV_FIXED_TEXTS.iv_cooldown };
   }
+}
+
+/** Aantal stappen in de warming-up-routine (CP3) — voor de UI-stepper. */
+export const WU_STEP_COUNT = WU_STEP_TEXTS.length;
+/** Aantal stappen in de cooling-down-routine (CP3) — voor de UI-stepper. */
+export const CD_STEP_COUNT = CD_STEP_TEXTS.length;
+
+/**
+ * Eén moment van de losstaande warming-up-routine (CP3, zie sectie 17
+ * hierboven): 'intro' bij de start, een 0-based stapindex per oefening, of
+ * 'done' aan het eind. Een stapindex buiten bereik klemt naar de dichtstbij-
+ * zijnde geldige stap, zodat deze functie nooit een niet-bestaande clip-id
+ * kan opleveren.
+ */
+export function warmupUtterance(step: 'intro' | number | 'done'): PhraseUtterance {
+  if (step === 'intro') return { ids: ['wu_intro'], fallbackText: WU_INTRO_TEXT };
+  if (step === 'done') return { ids: ['wu_done'], fallbackText: WU_DONE_TEXT };
+  const idx = clamp(Math.round(step), 0, WU_STEP_TEXTS.length - 1);
+  return { ids: [`wu_step_${idx}`], fallbackText: WU_STEP_TEXTS[idx] };
+}
+
+/**
+ * Eén moment van de losstaande cooling-down-routine (CP3). Zelfde vorm als
+ * warmupUtterance hierboven. Bewust een andere naam dan de bestaande
+ * intervalCueUtterance('cooldown') — dat is de korte, enkele cue tijdens een
+ * intervaltraining (sectie 16), dit is de uitgebreide, losstaande routine.
+ */
+export function cooldownRoutineUtterance(step: 'intro' | number | 'done'): PhraseUtterance {
+  if (step === 'intro') return { ids: ['cd_intro'], fallbackText: CD_INTRO_TEXT };
+  if (step === 'done') return { ids: ['cd_done'], fallbackText: CD_DONE_TEXT };
+  const idx = clamp(Math.round(step), 0, CD_STEP_TEXTS.length - 1);
+  return { ids: [`cd_step_${idx}`], fallbackText: CD_STEP_TEXTS[idx] };
 }

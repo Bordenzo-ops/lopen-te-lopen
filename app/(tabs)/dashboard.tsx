@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensio
 import { router } from 'expo-router';
 import { retryStravaQueue } from '../../src/services/stravaService';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Play, TrendingUp, Flame, Timer, Award, Crown, X } from 'lucide-react-native';
+import { Play, TrendingUp, Flame, Timer, Award, Crown, X, Wind, Snowflake } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore, selectWeeklyKm, selectIsSessionCompleted, selectTotalKm, selectCurrentWeek } from '../../src/store/appStore';
@@ -191,6 +191,31 @@ export default function DashboardScreen() {
             </Text>
             <Text style={styles.goal}>{planLabel} · week {currentWeek} van {totalWeeks}</Text>
           </View>
+        </View>
+
+        {/* Losstaande warming-up/cooling-down-routine (CP3): geen koppeling
+            aan een sessie of aan het schema, gewoon los te starten. */}
+        <View style={styles.routineRow}>
+          <TouchableOpacity
+            onPress={() => router.push('/routine/warmup')}
+            style={styles.routineBtn}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Start de warming-up-routine"
+          >
+            <Wind size={18} color={colors.brandPrimary} strokeWidth={2} />
+            <Text style={styles.routineBtnText}>Warming-up</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.push('/routine/cooldown')}
+            style={styles.routineBtn}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Start de cooling-down-routine"
+          >
+            <Snowflake size={18} color={colors.info} strokeWidth={2} />
+            <Text style={styles.routineBtnText}>Cooling-down</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Premium verlopen: eenmalige, vriendelijke melding. Schema en runs
@@ -515,6 +540,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   goal: {
     fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.sm,
     color: colors.textSecondary, marginTop: 4,
+  },
+  routineRow: { flexDirection: 'row', gap: spacing[1.5] },
+  routineBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: colors.bgCard, borderRadius: radius.lg, paddingVertical: spacing[1.5],
+    borderWidth: 1, borderColor: colors.borderSubtle, minHeight: 44,
+  },
+  routineBtnText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
+    color: colors.textPrimary,
   },
   expiredCard: {
     backgroundColor: colors.bgCard, borderRadius: radius.xl, padding: spacing[2],
