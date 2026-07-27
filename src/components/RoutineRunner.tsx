@@ -15,7 +15,7 @@
  * Altijd volledig overslaanbaar via de sluitknop, op elk moment.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -92,7 +92,17 @@ export function RoutineRunner({ mode }: { mode: Mode }) {
 
   // Countdown-timer, alleen actief tijdens een stap (niet bij intro/done).
   // Telt terug naar 0 en gaat dan automatisch naar de volgende stap/done.
-  useEffect(() => {
+  //
+  // useLayoutEffect en niet useEffect: de beginwaarde van de teller moet gezet
+  // zijn vóór het eerste frame van de nieuwe stap, anders zie je heel even de
+  // seconden van de vorige stap staan.
+  //
+  // De sprong naar de volgende stap gebruikt de absolute waarde `phase + 1` en
+  // niet de updater-vorm `p => p + 1`: React mag een updater meer dan eens
+  // aanroepen, en dan zou de routine een stap overslaan. `phase` staat vast
+  // voor de duur van dit effect (het staat in de dependencies), dus de
+  // absolute vorm is hier zowel correct als herhaalbaar.
+  useLayoutEffect(() => {
     if (!isStep) return;
     setRemainingSec(config.durations[phase] ?? 0);
 
@@ -100,7 +110,7 @@ export function RoutineRunner({ mode }: { mode: Mode }) {
       setRemainingSec(prev => {
         if (prev <= 1) {
           clearInterval(interval);
-          setPhase(p => p + 1);
+          setPhase(phase + 1);
           return 0;
         }
         return prev - 1;

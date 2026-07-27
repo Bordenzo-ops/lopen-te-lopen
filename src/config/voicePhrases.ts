@@ -358,11 +358,16 @@ const WU_STEP_TEXTS: string[] = [
 
 const CD_INTRO_TEXT = 'Tijd om rustig af te sluiten. Volg de stappen op je gemak.';
 const CD_DONE_TEXT = 'Goed gedaan. Je spieren komen weer tot rust.';
+// De drie rekstappen zijn eenzijdig: ze rekken één been tegelijk. Ze duren
+// elk dertig seconden (zie COOLDOWN_STEP_DURATIONS_SEC in
+// src/data/warmupCooldown.ts), dus de tekst noemt zelf het wisselmoment na
+// vijftien seconden. Zonder die zin zou een loper die de stem letterlijk
+// volgt maar één been rekken.
 const CD_STEP_TEXTS: string[] = [
   'Loop nog een minuut rustig uit en laat je hartslag geleidelijk zakken.',
-  'Rek je kuiten: duw een hiel in de grond en leun rustig naar voren.',
-  'Rek je hamstrings: strek een been en buig langzaam voorover.',
-  'Rek je quadriceps: pak je enkel vast en trek je hiel richting je bil.',
+  'Rek je kuiten: duw een hiel in de grond en leun rustig naar voren. Wissel na vijftien seconden van been.',
+  'Rek je hamstrings: strek een been en buig langzaam voorover. Wissel na vijftien seconden van been.',
+  'Rek je quadriceps: pak je enkel vast en trek je hiel richting je bil. Wissel na vijftien seconden van been.',
   'Adem een paar keer rustig diep in en uit, en voel hoe je ontspant.',
 ];
 
