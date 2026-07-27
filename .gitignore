@@ -7,9 +7,11 @@ web-build/
 node_modules/
 npm-debug.log*
 
-# Native builds
-ios/
-android/
+# Native builds (prebuild-output in de projectroot).
+# Let op de leidende slash: zonder anker matcht "ios/" ELKE map met die naam,
+# ook modules/*/ios van lokale Expo-modules — die horen juist wél in git.
+/ios/
+/android/
 *.ipa
 *.apk
 *.aab

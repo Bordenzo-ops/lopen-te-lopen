@@ -13,22 +13,39 @@
  */
 
 import { useRef, useCallback, useState } from 'react';
-import { Alert, Platform, Linking, View } from 'react-native';
+import { Alert, Platform, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
+import Constants from 'expo-constants';
 import { trackEvent } from '../services/analyticsService';
+import * as InstagramStory from '../../modules/instagram-story';
+import { palette } from '../theme/tokens';
 // Let op: expo-media-library wordt lazy geladen in saveToLibrary().
 // De native module (ExpoMediaLibraryNext) zit niet in Expo Go bij SDK 56;
 // een top-level import zou daar de hele app laten crashen.
 
-// ── Instagram URL-scheme ───────────────────────────────────────────────────────
-// Instagram Stories accepteert een afbeelding als "background_image" of "sticker_image"
-// via de custom URL scheme (identiek aan hoe Strava dit doet).
-const INSTAGRAM_STORIES_SCHEME = 'instagram-stories://share';
+// ── Instagram Stories ─────────────────────────────────────────────────────────
+// De twee platforms delen via compleet verschillende mechanismen:
+//
+//  iOS     — Instagram leest de afbeelding uit het systeem-pasteboard onder de
+//            sleutel com.instagram.sharedSticker.backgroundImage. Query-parameters
+//            op instagram-stories://share worden GENEGEERD; een file://-URI is
+//            bovendien onbruikbaar voor Instagram vanwege de app-sandbox. Dit
+//            loopt daarom via de lokale native module modules/instagram-story.
+//  Android — het gewone deelmenu (expo-sharing) met Instagram als target; daar
+//            is geen custom scheme voor nodig.
+//
+// Meta-documentatie: developers.facebook.com/docs/instagram-platform/sharing-to-stories/
 
-// Facebook App ID (optioneel — vergroot vertrouwen bij IG)
-// Vervang door je eigen app ID als je die hebt:
-const FB_APP_ID = ''; // bijv. '123456789012345'
+// Facebook App ID voor source_application. Optioneel: laat leeg in app.json en de
+// native module stuurt de bundle identifier mee.
+const FB_APP_ID: string = (Constants.expoConfig?.extra as any)?.instagramAppId ?? '';
+
+// Vulkleuren voor het scherm boven/onder de kaart wanneer het toestel hoger is
+// dan 9:16. Gelijk aan de gradient van ShareRunCard/SharePeriodCard, zodat de
+// story naadloos oogt in plaats van met witte balken.
+const STORY_TOP_COLOR    = palette.neutral[950];
+const STORY_BOTTOM_COLOR = palette.neutral[800];
 
 export interface ShareResult {
   success: boolean;
@@ -67,46 +84,36 @@ export function useShareRun() {
    * Dezelfde aanpak als Strava: open de IG custom scheme met de image-URI.
    */
   const shareToInstagram = useCallback(async (imageUri: string): Promise<ShareResult> => {
-    if (Platform.OS === 'web') {
-      return shareGeneric(imageUri);
-    }
-
-    // canOpenURL gooit op iOS een error als het scheme niet in LSApplicationQueriesSchemes
-    // staat — vang dat af zodat we altijd netjes terugvallen op het native deelmenu.
-    let isInstagramAvailable = false;
-    try {
-      isInstagramAvailable = await Linking.canOpenURL(INSTAGRAM_STORIES_SCHEME);
-    } catch (err) {
-      console.error('[useShareRun] canOpenURL:', err);
-      return shareGeneric(imageUri);
-    }
-    if (!isInstagramAvailable) {
-      return shareGeneric(imageUri);
-    }
-
-    // Bouw de URL op (iOS: data als query-param, Android via native intent)
-    const params: Record<string, string> = {
-      'background_image': imageUri,
-    };
-    if (FB_APP_ID) params['source_application'] = FB_APP_ID;
-
     if (Platform.OS === 'ios') {
-      // iOS: open URL-scheme met de afbeelding-URI als parameter
-      const queryString = Object.entries(params)
-        .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
-        .join('&');
-      const fullUrl = `${INSTAGRAM_STORIES_SCHEME}?${queryString}`;
+      // Pasteboard-route via de lokale native module. Ontbreekt die (Expo Go of
+      // een build van vóór deze module) of is Instagram niet geïnstalleerd, dan
+      // vallen we terug op het deelmenu.
+      if (!InstagramStory.isSupported) {
+        return shareGeneric(imageUri);
+      }
       try {
-        await Linking.openURL(fullUrl);
-        return { success: true, method: 'instagram' };
+        const available = await InstagramStory.isAvailableAsync();
+        if (!available) {
+          return shareGeneric(imageUri);
+        }
+        const opened = await InstagramStory.shareBackgroundImageAsync(imageUri, {
+          appId:       FB_APP_ID,
+          topColor:    STORY_TOP_COLOR,
+          bottomColor: STORY_BOTTOM_COLOR,
+        });
+        if (opened) {
+          return { success: true, method: 'instagram' };
+        }
+        return shareGeneric(imageUri);
       } catch (err) {
-        console.error('[useShareRun] openURL:', err);
+        console.error('[useShareRun] shareToInstagram(ios):', err);
         return shareGeneric(imageUri);
       }
     }
 
     if (Platform.OS === 'android') {
-      // Android: expo-sharing met Instagram als target
+      // Android: het systeemdeelmenu heeft Instagram als target — geen custom
+      // scheme nodig. Werkt en blijft ongewijzigd.
       const isAvailable = await Sharing.isAvailableAsync();
       if (isAvailable) {
         await Sharing.shareAsync(imageUri, {

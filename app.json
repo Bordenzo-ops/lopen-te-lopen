@@ -141,6 +141,7 @@
     ],
     "extra": {
       "router": {},
+      "instagramAppId": "",
       "eas": {
         "projectId": "77bb6e1a-d692-48e8-8206-3cb6cdcea770"
       }
