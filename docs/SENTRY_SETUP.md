@@ -8,7 +8,12 @@ eigen Nederlandse foutmelding (CrashReportingBoundary).
 ## 1. Wat er al staat (gedaan)
 
 1. `@sentry/react-native` staat in package.json en in de plugins-lijst van
-   app.json, met organization `dronevision-studios` en project `android`.
+   app.json, met organization `dronevision-studios` en project
+   `lopen-te-lopen`. Dat project heette tot 27-07-2026 `android`, maar vangt
+   crashes van **beide** platforms op: er is één DSN voor iOS en Android. Wil
+   je per platform kijken, filter dan in Sentry op `os.name:iOS` of
+   `os.name:Android`. De DSN zelf bevat het project-ID (`4511701714862160`),
+   niet de projectnaam — hernoemen raakt reeds uitgeleverde apps dus niet.
 2. `EXPO_PUBLIC_SENTRY_DSN` staat in `.env` en is toegevoegd aan de
    `preview`- en `production`-env in `eas.json`, zodat gebuilde apps 'm ook
    meekrijgen.
@@ -40,6 +45,15 @@ Sentry een auth-token nodig met schrijfrechten. Dit token hoort nooit in
 
    eas secret:create --scope project --name SENTRY_AUTH_TOKEN --value <token> --type string
 
+4. **Zet daarna `SENTRY_DISABLE_AUTO_UPLOAD` op `"false"`** in de `preview`- en
+   `production`-env van `eas.json`. Die staat nu bewust op `"true"`: zonder
+   auth-token faalt de upload-stap en klapt de hele build. Zolang die
+   schakelaar aanstaat wordt de `project`-waarde uit `app.json` niet gebruikt
+   en blijven stacktraces geminificeerd — een token zetten alléén is dus niet
+   genoeg. Controleer bij het omzetten meteen of `project` in `app.json` op
+   `lopen-te-lopen` staat, anders uploadt de build naar een niet-bestaand
+   project.
+
 5. Dit vereist dat je bent ingelogd bij EAS (`eas login`) met het account dat
    dit project beheert.
 
@@ -48,8 +62,8 @@ Sentry een auth-token nodig met schrijfrechten. Dit token hoort nooit in
 1. Maak een nieuwe EAS-build (bijvoorbeeld `eas build --platform android
    --profile production`, of eerst een preview/dev-build om te testen).
 2. Forceer na installatie een test-crash (of wacht op een echte) en
-   controleer in het Sentry-project `android` onder Issues of het rapport
-   binnenkomt.
+   controleer in het Sentry-project `lopen-te-lopen` onder Issues of het
+   rapport binnenkomt.
 3. Open het issue en controleer of de stacktrace leesbare bestandsnamen en
    regelnummers toont (bijvoorbeeld `src/services/...ts:42`) in plaats van
    `index.android.bundle:1:123456`. Zo niet, controleer of `SENTRY_AUTH_TOKEN`

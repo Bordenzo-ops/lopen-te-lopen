@@ -112,7 +112,7 @@
         "@sentry/react-native",
         {
           "organization": "dronevision-studios",
-          "project": "android"
+          "project": "lopen-te-lopen"
         }
       ],
       [
