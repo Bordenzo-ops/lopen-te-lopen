@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Volume2, EyeOff, Check } from 'lucide-react-native';
@@ -92,7 +92,9 @@ export default function VoiceScreen() {
         </View>
       </View>
 
-      <View style={styles.content}>
+      {/* ScrollView: op kleinere toestellen (SE, mini) of met grotere systeemlettergrootte
+          past de inhoud niet altijd op het scherm, dus moet die kunnen scrollen. */}
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.titleGroup}>
           <Text style={styles.step}>Stap 3 van 3</Text>
           <Text style={styles.title}>Hoe wil je begeleid worden?</Text>
@@ -202,7 +204,7 @@ export default function VoiceScreen() {
         <Text style={styles.note}>
           Je kunt dit altijd wijzigen in de instellingen.
         </Text>
-      </View>
+      </ScrollView>
 
       <View style={styles.footer}>
         <Button label="Start mijn schema" onPress={handleStart} fullWidth size="lg" />
@@ -222,7 +224,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   progressDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.borderDefault },
   progressDotActive: { backgroundColor: colors.brandPrimary, width: 20 },
   content: {
-    flex: 1, paddingHorizontal: spacing[3], paddingTop: spacing[3], gap: spacing[3],
+    paddingHorizontal: spacing[3], paddingTop: spacing[3], paddingBottom: spacing[3], gap: spacing[3],
   },
   titleGroup: { gap: spacing[1] },
   step: {

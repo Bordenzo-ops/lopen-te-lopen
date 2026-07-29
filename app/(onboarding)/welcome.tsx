@@ -1,5 +1,5 @@
 import React, { useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CalendarDays, HeartPulse, MapPin } from 'lucide-react-native';
@@ -19,7 +19,9 @@ export default function WelcomeScreen() {
   }, []);
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+      {/* ScrollView: bij grotere systeemlettergrootte of op kleine toestellen past
+          de inhoud niet altijd op het scherm, dus moet die kunnen scrollen. */}
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Hero area */}
         <View style={styles.hero}>
           <View style={styles.iconWrapper}>
@@ -57,7 +59,7 @@ export default function WelcomeScreen() {
             Gratis en zonder account. Jouw data blijft op jouw apparaat.
           </Text>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -68,7 +70,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.bgBase,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: spacing[3],
     paddingTop: spacing[4],
     paddingBottom: spacing[3],
