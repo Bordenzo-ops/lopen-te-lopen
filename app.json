@@ -2,7 +2,7 @@
   "expo": {
     "name": "Lopen te Lopen",
     "slug": "lopen-te-lopen",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "lopentelopen",
@@ -27,7 +27,7 @@
           "instagram-stories"
         ]
       },
-      "buildNumber": "21"
+      "buildNumber": "22"
     },
     "android": {
       "adaptiveIcon": {
@@ -35,7 +35,7 @@
         "backgroundColor": "#0A0F1A"
       },
       "package": "com.lopentelopen.app",
-      "versionCode": 21,
+      "versionCode": 22,
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
