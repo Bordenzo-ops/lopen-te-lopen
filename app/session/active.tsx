@@ -269,7 +269,7 @@ export default function ActiveSessionScreen() {
   const weekNum = parseInt(weekNumber ?? '1');
   const resolveWeek = (): TrainingWeek | undefined => {
     if (!profile) return undefined;
-    return resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal })
+    return resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal, trainingDays: profile.trainingDays })
       .weeks.find(w => w.weekNumber === weekNum);
   };
   const week    = resolveWeek();

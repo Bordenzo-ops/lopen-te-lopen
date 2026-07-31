@@ -26,14 +26,18 @@ function recalcTotalKm(sessions: Session[]): number {
 }
 
 /**
- * Bepaalt of alle sessies van een week afgehandeld zijn: voltooid ÓF bewust
- * overgeslagen telt allebei als "af". Dedupliceert op sessionId, zodat een
- * sessie die opnieuw gelopen is (zie completeSession — duplicaten op
- * sessionId+weekNumber zijn daar bewust toegestaan) niet dubbel meetelt en
- * een week niet vaker dan één keer "af" maakt. Gedeeld door completeSession
- * en skipSession, zodat beide altijd dezelfde definitie van "week klaar"
- * hanteren — ongeacht in welke volgorde sessies voltooid of overgeslagen zijn.
- * Een lege week (weekSessions.length === 0) is triviaal altijd af.
+ * Bepaalt of alle VERPLICHTE sessies van een week afgehandeld zijn: voltooid
+ * ÓF bewust overgeslagen telt allebei als "af". Optionele bonus-duurloopjes
+ * (session.optional) tellen bewust niet mee: dat is een vrijblijvend aanbod
+ * op extra trainingsdagen, en zonder deze uitsluiting zou de week nooit meer
+ * opschuiven zodra de gebruiker zo'n bonusrun overslaat. Dedupliceert op
+ * sessionId, zodat een sessie die opnieuw gelopen is (zie completeSession —
+ * duplicaten op sessionId+weekNumber zijn daar bewust toegestaan) niet dubbel
+ * meetelt en een week niet vaker dan één keer "af" maakt. Gedeeld door
+ * completeSession en skipSession, zodat beide altijd dezelfde definitie van
+ * "week klaar" hanteren — ongeacht in welke volgorde sessies voltooid of
+ * overgeslagen zijn. Een lege week (weekSessions.length === 0, of een week
+ * die uitsluitend bonus-sessies bevat) is triviaal altijd af.
  */
 function isWeekHandled(
   weekSessions: TrainingWeek['sessions'],
@@ -44,7 +48,7 @@ function isWeekHandled(
     ...completed.map(c => c.sessionId),
     ...skipped.map(s => s.sessionId),
   ]);
-  return weekSessions.every(s => handledIds.has(s.id));
+  return weekSessions.filter(s => !s.optional).every(s => handledIds.has(s.id));
 }
 
 // ── Hulpfuncties ──────────────────────────────
@@ -720,7 +724,7 @@ export const useAppStore = create<AppState>()(
         // actieve schema (sjabloon, vrij schema of wedstrijdschema).
         const currentWeek = schemaMode === 'race' ? currentWeekRace : currentWeekTraining;
         const totalWeeks = profile
-          ? resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal }).totalWeeks
+          ? resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal, trainingDays: profile.trainingDays }).totalWeeks
           : currentWeek; // fallback: niet ophogen
 
         const nextWeek = weekDone
@@ -822,7 +826,7 @@ export const useAppStore = create<AppState>()(
 
         const currentWeek = schemaMode === 'race' ? currentWeekRace : currentWeekTraining;
         const totalWeeks = profile
-          ? resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal }).totalWeeks
+          ? resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal, trainingDays: profile.trainingDays }).totalWeeks
           : currentWeek;
 
         const nextWeek = weekDone

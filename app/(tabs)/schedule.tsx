@@ -7,7 +7,7 @@ import Animated, { FadeIn, FadeOut, ReduceMotion } from 'react-native-reanimated
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore, selectIsSessionCompleted, selectCurrentWeek } from '../../src/store/appStore';
-import { getTrainingPlan, zoneInfo, remapWeekDays, DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
+import { getTrainingPlan, zoneInfo, DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
 import type { Session } from '../../src/data/trainingPlans';
 import { resolveActivePlan } from '../../src/data/activePlan';
 import { DayPicker } from '../../src/components/ui/DayPicker';
@@ -59,22 +59,22 @@ export default function ScheduleScreen() {
 
   const trainingDays = profile.trainingDays ?? DEFAULT_TRAINING_DAYS;
   // Tijdens het bewerken volgen we een lokale concept-selectie, zodat de
-  // gebruiker dagen kan wegklikken voordat er weer 3 gekozen zijn. Pas bij
-  // precies 3 dagen slaan we de wijziging op in het profiel.
+  // gebruiker dagen kan wegklikken voordat er weer minstens 3 gekozen zijn.
+  // Pas bij 3 of meer dagen slaan we de wijziging op in het profiel.
   const pickerDays = draftDays ?? trainingDays;
 
   const fallbackPlan = getTrainingPlan(profile.goal);
-  const activePlan = resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal });
+  const activePlan = resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal, trainingDays: profile.trainingDays });
   const useRace = activePlan.isRace;
   const isCustom = activePlan.isCustom;
-  // Zet de sessies op de zelfgekozen trainingsdagen — maar alleen voor het
-  // sjabloon-plan (training zonder customPlan) en het wedstrijdschema, exact
-  // zoals voorheen. Een eigen vrij schema kiest de dag per sessie zelf, dus
-  // daar remappen we niets: dat zou de bewuste keuze van de gebruiker
-  // overschrijven. Muteert het schema niet.
-  const planWeeks = isCustom
-    ? activePlan.weeks
-    : activePlan.weeks.map(w => remapWeekDays(w, trainingDays));
+  // De weken uit resolveActivePlan staan al op de zelfgekozen trainingsdagen
+  // en zijn (voor sjabloon/wedstrijdschema) al aangevuld met optionele
+  // bonus-duurloopjes — dat gebeurt centraal in resolveActivePlan/prepareWeeks.
+  // NIET hier nogmaals remappen: dan zou een week met bonus-sessies een
+  // tweede keer herverdeeld worden en zouden sessies naar de verkeerde dag
+  // springen. Een eigen vrij schema (customPlan) staat hier ook al in zijn
+  // oorspronkelijke vorm in, want resolveActivePlan remapt dat bewust niet.
+  const planWeeks = activePlan.weeks;
   const planName  = activePlan.name;
   const planTotal = activePlan.totalWeeks;
   const weeksLeftLabel = useRace && racePlan ? weeksUntilLabel(racePlan.race.date) : null;
@@ -288,16 +288,17 @@ export default function ScheduleScreen() {
               value={pickerDays}
               onChange={(days) => {
                 setDraftDays(days);
-                // Bewaar pas zodra er precies 3 dagen gekozen zijn.
-                if (days.length === 3) {
+                // Bewaar zodra er weer minstens 3 dagen gekozen zijn (tot 7).
+                if (days.length >= 3) {
                   updateProfile({ trainingDays: days });
                   setDraftDays(null);
                 }
               }}
-              required={3}
             />
             <Text style={styles.daysPickerNote}>
-              De lange duurloop komt op je laatste trainingsdag.
+              De lange duurloop komt op je laatste trainingsdag. Kies je meer dagen,
+              dan vullen we de rest met rustige bonusloopjes — die mag je zonder
+              gevolgen overslaan.
             </Text>
           </View>
         )}
@@ -324,18 +325,30 @@ export default function ScheduleScreen() {
           const isExpanded = expandedWeek === week.weekNumber;
           const isCurrent = week.weekNumber === currentWeek;
           const isPast = week.weekNumber < currentWeek;
-          const weekSessionIds = week.sessions.map(s => s.id);
+          // Optionele bonus-duurloopjes tellen niet mee voor weekvoltooiing:
+          // ze zijn puur een vrijblijvend aanbod (zie ook isWeekHandled in
+          // appStore.ts, die dezelfde regel hanteert).
+          const weekSessionIds = week.sessions.filter(s => !s.optional).map(s => s.id);
           const completedCount = weekSessionIds.filter(
             id => completedSessions.some(c => c.sessionId === id),
           ).length;
-          // Een week telt als afgehandeld zodra elke sessie voltooid of bewust
-          // overgeslagen is, zodat een overgeslagen training de week niet open laat.
+          // Een week telt als afgehandeld zodra elke verplichte sessie voltooid
+          // of bewust overgeslagen is, zodat een overgeslagen training de week
+          // niet open laat.
           const handledCount = weekSessionIds.filter(
             id =>
               completedSessions.some(c => c.sessionId === id) ||
               skippedSessions.some(sk => sk.sessionId === id),
           ).length;
-          const allDone = handledCount === week.sessions.length;
+          const allDone = handledCount === weekSessionIds.length;
+          // week.totalKm bevat bewust alleen de schema-kilometers, zodat de
+          // voortgangsstatistieken niet vervuild raken door een vrijblijvend
+          // aanbod. Zonder deze extra regel zou de gebruiker de sessies eronder
+          // optellen en op een hoger getal uitkomen dan de weekbalk toont.
+          const bonusKm =
+            Math.round(
+              week.sessions.filter(s => s.optional).reduce((sum, s) => sum + s.distanceKm, 0) * 10,
+            ) / 10;
 
           return (
             <View style={[styles.weekBlock, isCurrent && styles.weekBlockCurrent, allDone && styles.weekBlockDone]}>
@@ -361,7 +374,9 @@ export default function ScheduleScreen() {
                 <View style={styles.weekHeaderRight}>
                   <View style={styles.weekKmBlock}>
                     <Text style={styles.weekKm} numberOfLines={1}>{week.totalKm} km</Text>
-                    <Text style={styles.weekKmLabel} numberOfLines={1}>totaal</Text>
+                    <Text style={styles.weekKmLabel} numberOfLines={1}>
+                      {bonusKm > 0 ? `+${bonusKm} km bonus` : 'totaal'}
+                    </Text>
                   </View>
                   {isCustom && editMode && (
                     <TouchableOpacity

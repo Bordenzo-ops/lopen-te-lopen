@@ -77,7 +77,7 @@ export default function SummaryScreen() {
     if (showRunUpsell) return;
 
     const weekNumForReview = parseInt(weekNumber ?? '1');
-    const planForReview = resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal }).weeks;
+    const planForReview = resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal, trainingDays: profile.trainingDays }).weeks;
     const sessionForReview = planForReview
       .find(w => w.weekNumber === weekNumForReview)
       ?.sessions.find(s => s.id === sessionId);
@@ -159,7 +159,7 @@ export default function SummaryScreen() {
 
   // Zoek week en sessie op in het juiste plan (sjabloon, vrij schema of race)
   const weekNum = parseInt(weekNumber ?? '1');
-  const activePlan = resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal });
+  const activePlan = resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal, trainingDays: profile.trainingDays });
   const resolveWeek = (): TrainingWeek | undefined =>
     activePlan.weeks.find(w => w.weekNumber === weekNum);
 

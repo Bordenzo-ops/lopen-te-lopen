@@ -35,6 +35,9 @@ export interface Session {
   description: string;
   coachTip: string;
   interval?: IntervalStructure; // alleen aanwezig bij type === 'interval'
+  /** True voor automatisch toegevoegde bonus-duurloopjes op vrije trainingsdagen.
+   *  Optionele sessies tellen niet mee voor weekvoltooiing of weektotalen. */
+  optional?: boolean;
 }
 
 export interface TrainingWeek {
@@ -626,34 +629,60 @@ export const trainingPlans: TrainingPlan[] = [
 // Weekdagnummers: 1=ma, 2=di, 3=wo, 4=do, 5=vr, 6=za, 7=zo.
 export const DEFAULT_TRAINING_DAYS = [1, 3, 6];
 
+// Valideert een dagenkeuze: 3 t/m 7 unieke, gehele weekdagnummers (1-7).
+// Gedeeld door remapWeekDays en addBonusRuns zodat beide functies exact
+// dezelfde definitie van "geldige trainingsdagen" hanteren.
+function isValidTrainingDays(days?: number[]): days is number[] {
+  return (
+    Array.isArray(days) &&
+    days.length >= 3 &&
+    days.length <= 7 &&
+    days.every(d => Number.isInteger(d) && d >= 1 && d <= 7) &&
+    new Set(days).size === days.length
+  );
+}
+
+/** Geeft `count` oplopende, unieke indexen binnen [0, len-1], gelijkmatig
+ *  gespreid en altijd beginnend op 0. */
+function spreadIndices(count: number, len: number): number[] {
+  if (count <= 0 || len <= 0) return [];
+  if (count >= len) {
+    return Array.from({ length: count }, (_, i) => Math.min(i, len - 1));
+  }
+  return Array.from({ length: count }, (_, i) => Math.round((i * (len - 1)) / count));
+}
+
 /**
  * Geeft een nieuwe TrainingWeek terug waarin de sessies op de zelfgekozen
  * trainingsdagen staan. De lange duurloop (type 'long', anders de sessie met
  * de grootste afstand) komt op de laatst gekozen dag (chronologisch). De
- * overige sessies behouden hun onderlinge volgorde en komen op de eerdere
- * gekozen dagen.
+ * overige sessies behouden hun onderlinge volgorde en worden via
+ * `spreadIndices` gelijkmatig over de eerdere gekozen dagen verdeeld.
+ *
+ * Controlevoorbeelden (moeten kloppen, zie ook spreadIndices hierboven):
+ * - 3 dagen [a,b,c]: earlierDays = [a,b], count 2 → spreadIndices(2,2) = [0,1]
+ *   → sessies op a en b, lange duurloop op c. Identiek aan het gedrag van
+ *   vóór de generalisatie (dit was het enige ondersteunde geval).
+ * - 5 dagen [1,2,3,5,6]: earlierDays = [1,2,3,5], count 2 →
+ *   spreadIndices(2,4) = [0,2] → ma en wo, lange duurloop op za. Vrije
+ *   dagen: di en vr.
+ * - 7 dagen [1..7]: earlierDays = [1..6], count 2 → spreadIndices(2,6) =
+ *   [0,3] → ma en do, lange duurloop op zo.
  *
  * Muteert niets: zowel de week als de sessies worden gekopieerd. Alleen het
  * veld `day` verandert, de sessie-id's blijven gelijk zodat voltooide-sessie-
  * matching blijft werken.
  *
- * @param week  De originele trainingsweek (3 sessies).
- * @param days  Drie weekdagnummers (1 t/m 7). Bij een ongeldige of onvolledige
- *              invoer wordt teruggevallen op DEFAULT_TRAINING_DAYS.
+ * @param week  De originele trainingsweek.
+ * @param days  Drie tot zeven weekdagnummers (1 t/m 7), uniek. Bij een
+ *              ongeldige invoer wordt teruggevallen op DEFAULT_TRAINING_DAYS.
  */
 export function remapWeekDays(week: TrainingWeek, days?: number[]): TrainingWeek {
-  // Valideer de invoer: precies 3 unieke dagen tussen 1 en 7.
-  const valid =
-    Array.isArray(days) &&
-    days.length === 3 &&
-    days.every(d => Number.isInteger(d) && d >= 1 && d <= 7) &&
-    new Set(days).size === 3;
+  const chosen = (isValidTrainingDays(days) ? days : DEFAULT_TRAINING_DAYS).slice().sort((a, b) => a - b);
 
-  const chosen = (valid ? days! : DEFAULT_TRAINING_DAYS).slice().sort((a, b) => a - b);
-
-  // Niet ingrijpen als de week geen 3 sessies heeft (defensief).
-  if (week.sessions.length !== 3) {
-    return { ...week, sessions: week.sessions.map(s => ({ ...s })) };
+  // Niet ingrijpen als de week geen sessies heeft (defensief).
+  if (week.sessions.length === 0) {
+    return { ...week, sessions: [] };
   }
 
   // Bepaal de lange-duurloop-sessie: bij voorkeur type 'long', anders de
@@ -674,15 +703,158 @@ export function remapWeekDays(week: TrainingWeek, days?: number[]): TrainingWeek
   // Lange duurloop op de laatst gekozen dag.
   remapped[longIndex] = { ...remapped[longIndex], day: lastDay };
 
-  // Overige sessies op de eerdere dagen, in volgorde.
-  let earlierPos = 0;
-  for (let i = 0; i < remapped.length; i++) {
-    if (i === longIndex) continue;
-    remapped[i] = { ...remapped[i], day: earlierDays[earlierPos] ?? remapped[i].day };
-    earlierPos++;
-  }
+  // Overige sessies gelijkmatig over de eerdere dagen, in hun onderlinge
+  // volgorde behouden.
+  const earlierSessionIdxs = remapped.map((_, i) => i).filter(i => i !== longIndex);
+  const positions = spreadIndices(earlierSessionIdxs.length, earlierDays.length);
+
+  // Veiligheidsnet: spreadIndices garandeert unieke posities zolang er niet
+  // meer sessies zijn dan eerdere dagen. Mocht dat toch gebeuren (een
+  // toekomstig schema met meer sessies dan gekozen dagen), dan voorkomt dit
+  // dat twee sessies op dezelfde dag belanden.
+  const usedDays = new Set<number>([lastDay]);
+  earlierSessionIdxs.forEach((sessionIdx, i) => {
+    let day = earlierDays[positions[i]] ?? remapped[sessionIdx].day;
+    if (usedDays.has(day)) {
+      const fallbackDay = chosen.find(d => !usedDays.has(d));
+      if (fallbackDay !== undefined) day = fallbackDay;
+    }
+    usedDays.add(day);
+    remapped[sessionIdx] = { ...remapped[sessionIdx], day };
+  });
 
   return { ...week, sessions: remapped };
+}
+
+// ── Afstemming van de bonus-duurloopjes ───────────────────────────────────
+//
+// Deze drie getallen bepalen samen hoeveel extra werk een gebruiker erbij
+// krijgt als hij meer dan 3 dagen per week aanvinkt. Ze staan hier bij elkaar
+// zodat ze te verantwoorden en in één plek bij te stellen zijn.
+
+/** Maximaal deel van de weekkilometers dat aan bonusloopjes besteed mag worden.
+ *  25% is de gangbare bovengrens voor het uitbreiden van een loopweek zonder
+ *  de belangrijke sessies (interval, tempo, lange duurloop) te ondermijnen. */
+const BONUS_BUDGET_FRACTIE = 0.25;
+
+/** Ondergrens per bonusloop. Korter dan dit voelt niet als een training en is
+ *  de moeite van het omkleden niet waard. */
+const MIN_BONUS_KM = 2;
+
+/** Bovengrens per bonusloop. Daarboven wordt het een echte training in plaats
+ *  van een rustig extra rondje. */
+const MAX_BONUS_KM = 6;
+
+/**
+ * Vult de vrije trainingsdagen van een week (na remapWeekDays) aan met
+ * optionele, rustige bonus-duurloopjes. Bedoeld voor gebruikers die meer dan
+ * 3 dagen per week willen trainen terwijl de schema's zelf altijd op 3
+ * sessies gebaseerd blijven.
+ *
+ * Bonus-sessies tellen bewust niet mee in `week.totalKm`: dat veld blijft
+ * uitsluitend de kilometers van het onderliggende schema, zodat weekvoort-
+ * gang en -statistieken niet vervuild raken door een vrijblijvend aanbod.
+ *
+ * Bonus-id's zijn opgebouwd uit de ordinal (0, 1, 2, ...) van de bonus-
+ * sessie, niet uit de gekozen dag. Verandert een gebruiker zijn trainings-
+ * dagen, dan blijft een al voltooide bonusrun dus gewoon matchen.
+ *
+ * Muteert niets.
+ *
+ * @param week  Een trainingsweek die al door remapWeekDays is gehaald.
+ * @param days  De zelfgekozen trainingsdagen (3 t/m 7).
+ */
+export function addBonusRuns(week: TrainingWeek, days?: number[]): TrainingWeek {
+  if (!isValidTrainingDays(days) || days.length <= 3) return week;
+  if (week.sessions.length === 0 || week.totalKm <= 0) return week;
+  if (week.focus.toLowerCase().includes('herstel')) return week;
+
+  const chosen = days.slice().sort((a, b) => a - b);
+  const occupiedDays = new Set(week.sessions.map(s => s.day));
+  const freeDays = chosen.filter(d => !occupiedDays.has(d));
+
+  const shortestKm = week.sessions.reduce(
+    (min, s) => (s.distanceKm > 0 && s.distanceKm < min ? s.distanceKm : min),
+    Infinity,
+  );
+  // Geen enkele schema-sessie met een positieve afstand: er is niets om een
+  // bonusafstand op te baseren (komt in de praktijk niet voor).
+  if (!Number.isFinite(shortestKm)) return week;
+
+  // Naar beneden afronden op halve kilometers: zo kan het totaal van de
+  // bonusloopjes het weekbudget nooit overschrijden door afrondingsruis.
+  const floorToHalf = (n: number) => Math.floor(n * 2) / 2;
+  const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+
+  // Het budget is een percentage van de weekkilometers. Dat is de echte
+  // veiligheidsrem: iemand die zeven dagen aanvinkt krijgt geen zeven volle
+  // trainingen, maar wel meer loopmomenten binnen dezelfde extra belasting.
+  const budgetKm = week.totalKm * BONUS_BUDGET_FRACTIE;
+
+  // BELANGRIJK — verdeel het budget over zoveel mogelijk vrije dagen in plaats
+  // van er één lange loop van te maken. Wie meer dagen kiest vraagt om vaker
+  // lopen, niet om verder lopen; vier rondjes van 2 km dienen dat doel beter
+  // dan één van 8 km, bij precies dezelfde weekbelasting. Deelden we het
+  // budget niet, dan slokte de eerste bonusloop het in zijn eentje op en
+  // leverde 7 dagen aanvinken evenveel loopdagen op als 4.
+  const maxAantal = Math.min(freeDays.length, Math.floor(budgetKm / MIN_BONUS_KM));
+  if (maxAantal <= 0) return week;
+
+  // Lengte per bonusloop: het eerlijk verdeelde budget, maar nooit langer dan
+  // 60% van de kortste schema-sessie (een bonusloop hoort een uitloopje te
+  // zijn, geen tweede training) en nooit langer dan MAX_BONUS_KM. De ondergrens
+  // van MIN_BONUS_KM is gegarandeerd haalbaar door de deling hierboven.
+  const perBonusKm = clamp(
+    floorToHalf(Math.min(budgetKm / maxAantal, shortestKm * 0.6, MAX_BONUS_KM)),
+    MIN_BONUS_KM,
+    MAX_BONUS_KM,
+  );
+
+  // Score per vrije dag: hoe hoger, hoe drukker die dag al omringd is door
+  // zware trainingen. We kiezen straks de laagste (rustigste) scores.
+  // - dag erna is de lange duurloop: +3 (rust vóór de lange duurloop).
+  // - een aangrenzende dag (ervoor of erna) is interval/tempo: +2.
+  // - een aangrenzende dag heeft een andere sessie: +1.
+  // Elke aangrenzende dag telt voor precies één van deze categorieën mee,
+  // dus dubbel tellen (bijv. +2 én +1 voor dezelfde tempo-sessie) gebeurt
+  // niet.
+  const scoreForDay = (day: number): number => {
+    let score = 0;
+    const prev = week.sessions.find(s => s.day === day - 1);
+    const next = week.sessions.find(s => s.day === day + 1);
+
+    if (next) {
+      score += next.type === 'long' ? 3 : next.type === 'interval' || next.type === 'tempo' ? 2 : 1;
+    }
+    if (prev) {
+      score += prev.type === 'interval' || prev.type === 'tempo' ? 2 : 1;
+    }
+    return score;
+  };
+
+  const scored = freeDays.map(day => ({ day, score: scoreForDay(day) }));
+  // Laagste score wint; bij gelijke score de vroegste dag (freeDays is al
+  // oplopend, dus een stabiele sort behoudt die volgorde vanzelf).
+  scored.sort((a, b) => a.score - b.score || a.day - b.day);
+  const bonusDays = scored.slice(0, maxAantal).map(x => x.day).sort((a, b) => a - b);
+
+  const bonusSessions: Session[] = bonusDays.map((day, ordinal) => ({
+    id: `bonus-${week.sessions[0].id}-${ordinal}`,
+    day,
+    type: 'easy',
+    distanceKm: perBonusKm,
+    zone: 'Z2',
+    description: 'Bonus: rustige duurloop',
+    coachTip:
+      'Een extra rondje omdat je vaker wilt lopen. Houd het echt rustig, ' +
+      'je moet er nog bij kunnen praten. Geen zin of moe? Sla hem gerust ' +
+      'over, je schema is ook zonder deze loop compleet.',
+    optional: true,
+  }));
+
+  const sessions = [...week.sessions.map(s => ({ ...s })), ...bonusSessions].sort((a, b) => a.day - b.day);
+
+  return { ...week, sessions };
 }
 
 export const getTrainingPlan = (goal: GoalType): TrainingPlan =>

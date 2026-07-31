@@ -39,14 +39,19 @@ export default function VoiceScreen() {
   const handleStart = () => {
     voiceService.stop();
 
-    // Trainingsdagen uit de onboarding-parameter teruglezen. Valt terug op de
-    // standaarddagen bij ontbreken of een ongeldige waarde (geen 3 dagen).
+    // Trainingsdagen uit de onboarding-parameter teruglezen. De gebruiker kiest
+    // in het vorige scherm 3 t/m 7 unieke dagen; alleen bij ontbreken of een
+    // écht ongeldige waarde vallen we terug op de standaarddagen. Let op: dit
+    // is de enige plek waar die keuze nog gecontroleerd wordt voor hij wordt
+    // opgeslagen — een te strenge check hier gooit de keuze van de gebruiker
+    // stilzwijgend weg zonder dat hij dat merkt.
     const parsedDays = (trainingDays ?? '')
       .split(',')
       .map(d => parseInt(d, 10))
       .filter(d => Number.isInteger(d) && d >= 1 && d <= 7);
+    const uniqueDayCount = new Set(parsedDays).size;
     const chosenDays =
-      parsedDays.length === 3 && new Set(parsedDays).size === 3
+      parsedDays.length >= 3 && parsedDays.length <= 7 && uniqueDayCount === parsedDays.length
         ? parsedDays
         : DEFAULT_TRAINING_DAYS;
 

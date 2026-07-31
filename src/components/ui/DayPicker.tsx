@@ -19,30 +19,41 @@ interface DayPickerProps {
   value: number[];
   /** Wordt aangeroepen met de nieuwe selectie zodra de gebruiker tikt. */
   onChange: (days: number[]) => void;
-  /** Aantal dagen dat exact gekozen moet worden. Default 3. */
-  required?: number;
+  /** Minimaal aantal dagen. Default 3. Puur informatief voor de statusregel —
+   *  deselecteren blijft altijd mogelijk, ook onder dit minimum. De ouder
+   *  bepaalt met dit gegeven of de gebruiker verder mag (bv. "Volgende"-knop). */
+  min?: number;
+  /** Maximaal aantal dagen. Default 7. Een tik boven dit maximum wordt genegeerd
+   *  in plaats van dat de oudste keuze wordt vervangen. */
+  max?: number;
 }
 
 /**
- * Compacte dagkiezer waarmee de gebruiker precies `required` (default 3)
- * trainingsdagen kiest. Toont 7 dagknoppen en een statusregel die aangeeft
- * hoeveel dagen er nog gekozen moeten worden. Volledig herbruikbaar in de
- * onboarding en het Schema-tabblad.
+ * Compacte dagkiezer waarmee de gebruiker vrij tussen `min` en `max`
+ * (default 3–7) trainingsdagen kiest. Toont 7 dagknoppen en een statusregel
+ * die aangeeft hoeveel dagen er nog gekozen moeten worden om het minimum te
+ * halen. Volledig herbruikbaar in de onboarding en het Schema-tabblad.
+ *
+ * Validatie van het minimum ligt bewust bij de ouder (bv. het al dan niet
+ * actief zijn van een "Volgende"-knop): deze component dwingt zelf niets af,
+ * zodat de gebruiker eerst dagen kan wegklikken en daarna opnieuw kan kiezen
+ * zonder dat de component in de weg zit.
  */
-export function DayPicker({ value, onChange, required = 3 }: DayPickerProps) {
-  const isComplete = value.length === required;
+export function DayPicker({ value, onChange, min = 3, max = 7 }: DayPickerProps) {
+  const meetsMin = value.length >= min;
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   function toggleDay(day: number) {
     if (value.includes(day)) {
+      // Deselecteren mag altijd, ook als je daarmee onder `min` uitkomt: de
+      // gebruiker moet eerst kunnen wegklikken voor hij opnieuw kiest.
       onChange(value.filter(d => d !== day));
       return;
     }
-    // Maximaal `required` dagen: bij vol vervangt een nieuwe tik de oudste keuze.
-    if (value.length >= required) {
-      const next = [...value.slice(1), day];
-      onChange(next);
+    // Boven `max` wordt een nieuwe tik genegeerd in plaats van dat de oudste
+    // keuze wordt vervangen — de gebruiker deselecteert dan bewust zelf eerst.
+    if (value.length >= max) {
       return;
     }
     onChange([...value, day]);
@@ -70,10 +81,10 @@ export function DayPicker({ value, onChange, required = 3 }: DayPickerProps) {
           );
         })}
       </View>
-      <Text style={[styles.status, isComplete && styles.statusOk]}>
-        {isComplete
-          ? `Top, je traint ${required} dagen per week.`
-          : `Kies nog ${required - value.length} ${required - value.length === 1 ? 'dag' : 'dagen'}.`}
+      <Text style={[styles.status, meetsMin && styles.statusOk]}>
+        {meetsMin
+          ? `Top, je traint ${value.length} dagen per week.`
+          : `Kies nog ${min - value.length} ${min - value.length === 1 ? 'dag' : 'dagen'}.`}
       </Text>
     </View>
   );

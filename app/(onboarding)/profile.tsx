@@ -20,7 +20,9 @@ export default function ProfileScreen() {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const daysValid = trainingDays.length === 3;
+  // Vrije keuze: 3 t/m 7 trainingsdagen per week. Schema's vullen dagen boven
+  // de 3 automatisch met rustige bonus-duurloopjes (zie trainingPlans.ts).
+  const daysValid = trainingDays.length >= 3 && trainingDays.length <= 7;
 
   const maxHr = 220 - age;
   const adjustAge = (delta: number) => {
@@ -90,9 +92,11 @@ export default function ProfileScreen() {
           <View style={styles.field}>
             <Text style={styles.label}>Jouw trainingsdagen</Text>
             <Text style={styles.daysHint}>
-              Kies de 3 dagen waarop je wil trainen. De lange duurloop plannen we op de laatste dag.
+              Kies minimaal 3 dagen waarop je wil trainen. De lange duurloop plannen we op de
+              laatste dag. Kies je meer dagen, dan vullen we die op met rustige bonusloopjes,
+              zover je schema dat aankan.
             </Text>
-            <DayPicker value={trainingDays} onChange={setTrainingDays} required={3} />
+            <DayPicker value={trainingDays} onChange={setTrainingDays} />
           </View>
 
           {/* Hartslagzone preview */}

@@ -59,7 +59,7 @@ export default function SchemaCompleteScreen() {
 
   const lastSession = completedSessions[completedSessions.length - 1];
 
-  const resolved = resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal });
+  const resolved = resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal, trainingDays: profile.trainingDays });
   const planName = resolved.isRace || resolved.isCustom ? resolved.name : (goalLabel[profile.goal] ?? profile.goal);
 
   const totalRunKm = completedSessions.reduce((s, c) => s + c.actualDistanceKm, 0);

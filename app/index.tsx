@@ -26,7 +26,7 @@ async function saveRecoveredRun(snapshot: RunSnapshot): Promise<void> {
     const { profile, racePlan, customPlan, schemaMode, startSession, completeSession } = useAppStore.getState();
     if (!profile) return;
 
-    const week = resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal })
+    const week = resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal, trainingDays: profile.trainingDays })
       .weeks.find(w => w.weekNumber === snapshot.weekNumber);
     const session = week?.sessions.find(s => s.id === snapshot.sessionId);
 

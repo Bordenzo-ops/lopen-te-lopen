@@ -70,6 +70,18 @@ export function SessionCard({ session, isCompleted = false, isSkipped = false, o
             </Text>
             <Info size={13} color={colors.textTertiary} strokeWidth={2} />
           </TouchableOpacity>
+          {/* Subtiele markering voor automatisch toegevoegde bonus-duurloopjes:
+              een vrijblijvend aanbod, dus bewust ingetogen (geen accentkleur)
+              in plaats van iets dat om aandacht vraagt zoals "Volgende". */}
+          {session.optional && (
+            <View
+              style={styles.bonusTag}
+              accessible
+              accessibilityLabel="Optionele bonussessie, mag je overslaan"
+            >
+              <Text style={styles.bonusLabel}>Bonus</Text>
+            </View>
+          )}
         </View>
         {isCompleted && (
           <CheckCircle2 size={22} color={colors.success} strokeWidth={2} />
@@ -223,6 +235,21 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.borderSubtle,
   },
   skippedLabel: {
+    fontFamily: typography.fontFamily.sansSemi,
+    fontSize: typography.fontSize.xs,
+    color: colors.textTertiary,
+    letterSpacing: typography.letterSpacing.wide,
+  },
+  bonusTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.bgSurface,
+    paddingHorizontal: spacing[1],
+    paddingVertical: 2,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+  },
+  bonusLabel: {
     fontFamily: typography.fontFamily.sansSemi,
     fontSize: typography.fontSize.xs,
     color: colors.textTertiary,

@@ -7,7 +7,6 @@ import { Play, TrendingUp, Flame, Timer, Award, Crown, X, Wind, Snowflake } from
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore, selectWeeklyKm, selectIsSessionCompleted, selectTotalKm, selectCurrentWeek } from '../../src/store/appStore';
-import { remapWeekDays, DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
 import { resolveActivePlan } from '../../src/data/activePlan';
 import { SessionCard } from '../../src/components/ui/SessionCard';
 import { StatRing } from '../../src/components/ui/StatRing';
@@ -71,7 +70,7 @@ export default function DashboardScreen() {
 
   if (!profile) return null;
 
-  const resolved    = resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal });
+  const resolved    = resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal, trainingDays: profile.trainingDays });
   const useRace     = resolved.isRace;
   const isCustom    = resolved.isCustom;
   const activePlan  = resolved.weeks;
@@ -81,15 +80,14 @@ export default function DashboardScreen() {
   // Werkelijk totaal km van het schema (voor de voortgangsring)
   const planTotalKm = activePlan.reduce((sum, w) => sum + w.totalKm, 0);
 
-  const trainingDays = profile.trainingDays ?? DEFAULT_TRAINING_DAYS;
-  // Remap de getoonde week naar de zelfgekozen trainingsdagen — maar niet
-  // voor een eigen vrij schema (customPlan): daar kiest de gebruiker de dag
-  // al bewust per sessie. Voor het sjabloon en het wedstrijdschema blijft dit
-  // exact het bestaande gedrag. De sessie-id's blijven in beide gevallen
-  // gelijk, alleen het dagveld verandert, dus de voltooide-sessie-matching
-  // blijft werken.
-  const rawWeek = activePlan[currentWeek - 1];
-  const week = rawWeek ? (isCustom ? rawWeek : remapWeekDays(rawWeek, trainingDays)) : rawWeek;
+  // De weken uit resolveActivePlan staan al op de zelfgekozen trainingsdagen
+  // en zijn (voor sjabloon en wedstrijdschema) al aangevuld met optionele
+  // bonus-duurloopjes — dat gebeurt centraal in resolveActivePlan/prepareWeeks.
+  // NIET hier nogmaals remappen: een week met bonus-sessies zou dan een
+  // tweede keer herverdeeld worden en sessies zouden naar de verkeerde dag
+  // springen (en de bonus-sessie zou daarna niet meer terug te vinden zijn
+  // via week.sessions.find, zie het commentaar in activePlan.ts).
+  const week = activePlan[currentWeek - 1];
   // Bewust NIET gededupliceerd op sessionId: dit is een totaal-kilometers-
   // stat voor de week ("hoeveel heb ik deze week echt gelopen"), geen
   // schema-voortgang. Een opnieuw gelopen sessie (zie handleReopenSession)
