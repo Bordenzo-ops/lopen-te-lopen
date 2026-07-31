@@ -1,0 +1,109 @@
+/* ─────────────────────────────────────────────
+   Lopen te Lopen — merkstijl voor marketing-assets
+   Gedeeld door alle pagina's in scripts/brand-assets/.
+   Kleuren spiegelen src/theme/tokens.ts.
+   ───────────────────────────────────────────── */
+
+@font-face { font-family: 'Inter'; font-weight: 400; src: url('../../node_modules/@expo-google-fonts/inter/Inter_400Regular.ttf'); }
+@font-face { font-family: 'Inter'; font-weight: 500; src: url('../../node_modules/@expo-google-fonts/inter/Inter_500Medium.ttf'); }
+@font-face { font-family: 'Inter'; font-weight: 600; src: url('../../node_modules/@expo-google-fonts/inter/Inter_600SemiBold.ttf'); }
+@font-face { font-family: 'Inter'; font-weight: 700; src: url('../../node_modules/@expo-google-fonts/inter/Inter_700Bold.ttf'); }
+@font-face { font-family: 'Inter'; font-weight: 800; src: url('../../node_modules/@expo-google-fonts/inter/Inter_800ExtraBold.ttf'); }
+@font-face { font-family: 'Inter'; font-weight: 900; src: url('../../node_modules/@expo-google-fonts/inter/Inter_900Black.ttf'); }
+
+:root {
+  --navy:        #0A0F1A;
+  --surface:     #111827;
+  --orange:      #F25011;
+  --orange-lite: #FF7430;
+  --white:       #F9FAFB;
+  --muted:       #9CA3AF;
+  --dim:         #6B7280;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  overflow: hidden;
+  background: var(--navy);
+  font-family: 'Inter', system-ui, sans-serif;
+  color: var(--white);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+/* De canvas is exact zo groot als de export; Chrome schiet de viewport. */
+.canvas { position: relative; overflow: hidden; }
+
+/* Achtergrond-artwork, met een leesbaarheidsverloop erover. */
+.art {
+  position: absolute; inset: 0;
+  background-size: cover; background-repeat: no-repeat;
+}
+.scrim { position: absolute; inset: 0; }
+
+/* ── Merkelementen ────────────────────────────
+   De oranje streep boven het woordmerk is de vaste
+   merk-tic; hij komt terug op elk formaat. */
+.rule {
+  background: linear-gradient(90deg, var(--orange) 0%, var(--orange-lite) 100%);
+  border-radius: 999px;
+}
+
+.wordmark {
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 0.95;
+  color: #FFFFFF;
+}
+
+.eyebrow {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--orange-lite);
+}
+
+.label {
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--dim);
+}
+
+/* Grote statwaarde: strak, extra-bold, negatieve tracking. */
+.hero {
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 0.86;
+  color: #FFFFFF;
+}
+
+.cta {
+  display: inline-flex; align-items: center;
+  border-radius: 999px;
+  background: linear-gradient(100deg, var(--orange) 0%, var(--orange-lite) 100%);
+  color: #FFFFFF;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.pill {
+  display: inline-flex; align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(242, 80, 17, 0.45);
+  background: rgba(242, 80, 17, 0.16);
+  color: var(--orange-lite);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Onderbalk: app-icoon + naam + handle. Dit is het stukje
+   dat de kaart tot uithangbord maakt, dus nadrukkelijk zichtbaar. */
+.brandbar { display: flex; align-items: center; }
+.brandbar .icon { border-radius: 26%; display: block; }
+.brandbar .name { font-weight: 700; letter-spacing: -0.01em; color: #FFFFFF; }
+.brandbar .handle { font-weight: 500; color: var(--muted); }
+
+.hair { background: linear-gradient(90deg, rgba(242,80,17,0.75) 0%, rgba(242,80,17,0.10) 100%); }

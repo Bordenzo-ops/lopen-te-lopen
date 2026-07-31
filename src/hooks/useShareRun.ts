@@ -45,7 +45,10 @@ const FB_APP_ID: string = (Constants.expoConfig?.extra as any)?.instagramAppId ?
 // dan 9:16. Gelijk aan de gradient van ShareRunCard/SharePeriodCard, zodat de
 // story naadloos oogt in plaats van met witte balken.
 const STORY_TOP_COLOR    = palette.neutral[950];
-const STORY_BOTTOM_COLOR = palette.neutral[800];
+// Sinds de kaarten op merk-artwork staan lopen ze boven én onder in hetzelfde
+// diepe navy af, dus beide vulkleuren zijn gelijk. Met de oude, lichtere
+// onderkleur (neutral[800]) ontstond er een zichtbare naad onder de kaart.
+const STORY_BOTTOM_COLOR = palette.neutral[950];
 
 export interface ShareResult {
   success: boolean;

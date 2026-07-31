@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Promo story 1080x1920</title>
+<link rel="stylesheet" href="brand.css">
+<style>
+  html, body, .canvas { width: 1080px; height: 1920px; }
+
+  .art { background-image: url('plates/vert.jpg'); background-position: center bottom; }
+  /* Alleen verdonkeren waar tekst staat: bovenin voor de kop, onderin een
+     smalle band voor de CTA. Het middenvlak blijft onaangeroerd zodat de
+     schoen zijn glans houdt. */
+  .scrim {
+    background:
+      linear-gradient(180deg, rgba(10,15,26,0.96) 0%, rgba(10,15,26,0.93) 30%, rgba(10,15,26,0.62) 44%, rgba(10,15,26,0.00) 56%),
+      linear-gradient(0deg,   rgba(10,15,26,0.90) 0%, rgba(10,15,26,0.45) 10%, rgba(10,15,26,0.00) 20%);
+  }
+
+  /* Instagram legt de bovenste ~230px en onderste ~280px af met eigen UI,
+     dus alle inhoud blijft daarbinnen. */
+  .content {
+    position: absolute;
+    left: 90px; right: 90px;
+    top: 250px; bottom: 250px;
+    display: flex; flex-direction: column;
+  }
+
+  .top { display: flex; align-items: center; gap: 20px; }
+  .top .icon { width: 76px; height: 76px; border-radius: 26%; display: block; }
+  .top .name { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; }
+
+  .rule { width: 72px; height: 6px; margin: 96px 0 34px; }
+
+  .eyebrow { font-size: 24px; }
+
+  h1 {
+    margin-top: 26px;
+    font-size: 104px; font-weight: 800;
+    line-height: 0.98; letter-spacing: -0.045em;
+  }
+  h1 em { font-style: normal; color: var(--orange-lite); }
+
+  .sub {
+    margin-top: 36px;
+    font-size: 33px; font-weight: 500; line-height: 1.42;
+    color: var(--muted); max-width: 780px;
+  }
+
+  .feats { margin-top: 44px; display: flex; flex-wrap: wrap; gap: 16px; }
+  .feats .pill { font-size: 25px; padding: 16px 30px; }
+
+  .foot { margin-top: auto; }
+  .cta { font-size: 33px; padding: 30px 54px; }
+  .foot .handle { margin-top: 30px; font-size: 27px; font-weight: 500; color: var(--dim); }
+</style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="art"></div>
+    <div class="scrim"></div>
+
+    <div class="content">
+      <div class="top">
+        <img class="icon" src="../../assets/icon.png" alt="">
+        <span class="name">Lopen te Lopen</span>
+      </div>
+
+      <div class="rule"></div>
+      <div class="eyebrow">Hardloopcoach</div>
+
+      <h1>Jouw coach<br>naar de <em>finish</em>.</h1>
+
+      <p class="sub">Schema's van 5 km en 10 km tot de marathon.<br>Met coaching in je oor tijdens elke run.</p>
+
+      <div class="feats">
+        <span class="pill">Weekschema's</span>
+        <span class="pill">Audiocoaching</span>
+        <span class="pill">Hartslagzones</span>
+      </div>
+
+      <div class="foot">
+        <span class="cta">Nu in de App Store</span>
+        <div class="handle">@lopentelopen</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

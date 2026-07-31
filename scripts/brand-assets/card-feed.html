@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Deelkaart feed 1080x1350</title>
+<link rel="stylesheet" href="brand.css">
+<style>
+  /* 4:5-post die de deelkaart zelf laat zien: de 9:16-kaart zweeft
+     op een navy vlak, zodat meteen duidelijk is dát het een kaart is
+     die je uit de app deelt. */
+  html, body, .canvas { width: 1080px; height: 1350px; }
+
+  .backdrop {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(70% 45% at 50% 62%, rgba(242,80,17,0.20) 0%, rgba(242,80,17,0.00) 100%),
+      linear-gradient(160deg, #111827 0%, #0A0F1A 55%, #05070D 100%);
+  }
+
+  .hdr { position: absolute; top: 72px; left: 84px; right: 84px; display: flex; align-items: center; justify-content: space-between; }
+  .hdr .lockup { display: flex; align-items: center; gap: 18px; }
+  .hdr .icon { width: 62px; height: 62px; border-radius: 26%; display: block; }
+  .hdr .name { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
+  .hdr .kicker { font-size: 21px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--orange-lite); }
+
+  /* De kaart zelf: 9:16 op 0.535 schaal van het 1080x1920-ontwerp. */
+  .card {
+    position: absolute; left: 50%; top: 208px;
+    width: 578px; height: 1027px;
+    margin-left: -289px;
+    border-radius: 40px; overflow: hidden;
+    box-shadow: 0 60px 120px rgba(0,0,0,0.62), 0 0 0 1px rgba(255,255,255,0.06);
+  }
+  .card .art { background-image: url('plates/vert.jpg'); background-position: center bottom; }
+  .card .scrim {
+    background:
+      linear-gradient(180deg, rgba(10,15,26,0.97) 0%, rgba(10,15,26,0.90) 38%, rgba(10,15,26,0.30) 58%, rgba(10,15,26,0.00) 70%),
+      linear-gradient(0deg,   rgba(10,15,26,0.95) 0%, rgba(10,15,26,0.55) 9%, rgba(10,15,26,0.00) 22%);
+  }
+  .card .inner { position: absolute; inset: 0; padding: 45px 42px 39px; display: flex; flex-direction: column; }
+
+  .top { display: flex; align-items: center; justify-content: space-between; }
+  .top .lockup { display: flex; align-items: center; gap: 9px; }
+  .top .icon { width: 32px; height: 32px; border-radius: 26%; display: block; }
+  .top .name { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+  .top .runner { font-size: 14px; font-weight: 600; color: var(--muted); }
+
+  .period { margin-top: 42px; font-size: 18px; letter-spacing: 0.2em; }
+  .delta  { margin-top: 14px; font-size: 14px; padding: 8px 15px; }
+
+  .heroRow { margin-top: 21px; display: flex; align-items: baseline; gap: 10px; }
+  .hero { font-size: 154px; }
+  .heroUnit { font-size: 34px; font-weight: 700; color: var(--muted); letter-spacing: -0.02em; }
+
+  .hair { height: 2px; margin-top: 24px; border-radius: 2px; }
+
+  .stats { margin-top: 24px; display: grid; grid-template-columns: repeat(3, 1fr); row-gap: 24px; }
+  .stat .label { font-size: 11px; }
+  .stat .value { margin-top: 6px; font-size: 28px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+  .stat .value small { font-size: 14px; font-weight: 500; color: var(--dim); margin-left: 3px; letter-spacing: 0; }
+
+  .brandbar { margin-top: auto; align-items: baseline; gap: 9px; }
+  .brandbar .name { font-size: 16px; letter-spacing: -0.01em; }
+  .brandbar .sep { width: 3px; height: 3px; border-radius: 999px; background: var(--orange); align-self: center; }
+  .brandbar .handle { font-size: 14px; }
+
+  .foot { position: absolute; left: 84px; right: 84px; bottom: 66px; display: flex; align-items: center; justify-content: space-between; }
+  .foot .claim { font-size: 28px; font-weight: 600; color: var(--muted); letter-spacing: -0.01em; }
+  .foot .handle { font-size: 24px; font-weight: 500; color: var(--dim); }
+</style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="backdrop"></div>
+
+    <div class="hdr">
+      <div class="lockup">
+        <img class="icon" src="../../assets/icon.png" alt="">
+        <span class="name">Lopen te Lopen</span>
+      </div>
+      <span class="kicker">Deel je week</span>
+    </div>
+
+    <div class="card">
+      <div class="art"></div>
+      <div class="scrim"></div>
+      <div class="inner">
+        <div class="top">
+          <div class="lockup">
+            <img class="icon" src="../../assets/icon.png" alt="">
+            <span class="name">Lopen te Lopen</span>
+          </div>
+          <span class="runner">Anne</span>
+        </div>
+
+        <div class="period eyebrow">Week 29</div>
+        <div><span class="delta pill">+18% t.o.v. vorige week</span></div>
+
+        <div class="heroRow">
+          <span class="hero">6.6</span>
+          <span class="heroUnit">km</span>
+        </div>
+
+        <div class="hair"></div>
+
+        <div class="stats">
+          <div class="stat"><div class="label">Runs</div>          <div class="value">1</div></div>
+          <div class="stat"><div class="label">Tijd</div>          <div class="value">38:18</div></div>
+          <div class="stat"><div class="label">Gem. tempo</div>    <div class="value">5:47<small>/km</small></div></div>
+          <div class="stat"><div class="label">Langste run</div>   <div class="value">6.6<small>km</small></div></div>
+          <div class="stat"><div class="label">Beste tempo</div>   <div class="value">5:47<small>/km</small></div></div>
+          <div class="stat"><div class="label">Actieve dagen</div> <div class="value">1</div></div>
+        </div>
+
+        <div class="brandbar">
+          <span class="name">Lopen te Lopen</span>
+          <i class="sep"></i>
+          <span class="handle">@lopentelopen</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <span class="claim">Zo deelt een loper zijn week.</span>
+      <span class="handle">@lopentelopen</span>
+    </div>
+  </div>
+</body>
+</html>

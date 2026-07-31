@@ -17,7 +17,7 @@
  */
 
 import React, { forwardRef } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, Image, StyleSheet, Platform, Dimensions } from 'react-native';
 import Svg, { Path, Defs, LinearGradient, Stop, Rect, Circle } from 'react-native-svg';
 import { colors, palette, typography, radius, spacing } from '../../theme/tokens';
 import type { CompletedSession } from '../../store/appStore';
@@ -25,6 +25,19 @@ import type { CompletedSession } from '../../store/appStore';
 // ── Formaat: Instagram Stories 9:16 ──────────────────────────────────────────
 const CARD_WIDTH  = 360;
 const CARD_HEIGHT = 640;
+
+// ── Merk-assets ──────────────────────────────────────────────────────────────
+// Dezelfde topografie-plaat als de 'grid'-variant van SharePeriodCard: rustig
+// genoeg om het routetracé niet te storen, maar het haalt de kaart wel uit de
+// vlakke-gradient-look.
+const APP_ICON    = require('../../../assets/icon.png');
+const ART_TEXTURE = require('../../../assets/brand/share-bg-texture.jpg');
+
+const SOCIAL_HANDLE = '@lopentelopen';
+const BRAND_NAME    = 'Lopen te Lopen';
+
+/** Android knijpt regels met negatieve letterSpacing af zonder deze vlag. */
+const NO_FONT_PADDING = Platform.OS === 'android' ? { includeFontPadding: false } : null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -137,7 +150,7 @@ export const ShareRunCard = forwardRef<View, ShareRunCardProps>(function ShareRu
   const hasRoute    = route.length > 1;
 
   const MAP_W = CARD_WIDTH;
-  const MAP_H = 240;
+  const MAP_H = 196;
 
   const svgPath = hasRoute
     ? routeToSvgPath(route, MAP_W, MAP_H)
@@ -146,45 +159,53 @@ export const ShareRunCard = forwardRef<View, ShareRunCardProps>(function ShareRu
   // Voortgangsbalk (weken)
   const weekProgress = Math.min(weekNumber / totalWeeks, 1);
 
-  // Datumstring
-  const dateStr = new Date(session.completedAt).toLocaleDateString('nl-NL', {
+  // Datumstring. Alleen de éérste letter een hoofdletter: in het Nederlands
+  // schrijf je weekdag en maand klein, dus CSS-capitalize (dat elk woord pakt)
+  // zou "Zondag 19 Juli" opleveren.
+  const rawDate = new Date(session.completedAt).toLocaleDateString('nl-NL', {
     weekday: 'long', day: 'numeric', month: 'long',
   });
+  const dateStr = rawDate.charAt(0).toUpperCase() + rawDate.slice(1);
 
   return (
     <View ref={ref} style={styles.card}>
 
-      {/* ── Achtergrond ── */}
+      {/* ── Achtergrond: merk-artwork + leesbaarheidsverloop ── */}
+      <Image source={ART_TEXTURE} style={StyleSheet.absoluteFill} resizeMode="cover" />
       <Svg
         width={CARD_WIDTH}
         height={CARD_HEIGHT}
         style={StyleSheet.absoluteFill}
       >
         <Defs>
-          {/* Hoofd gradient: donker boven → iets lichter onder */}
-          <LinearGradient id="bgGrad" x1="0" y1="0" x2="0.4" y2="1">
-            <Stop offset="0"   stopColor={palette.neutral[950]} stopOpacity="1" />
-            <Stop offset="0.6" stopColor={palette.neutral[900]} stopOpacity="1" />
-            <Stop offset="1"   stopColor={palette.neutral[800]} stopOpacity="1" />
+          {/* Donker bovenin voor de route, donker onderin voor de merkvoet */}
+          <LinearGradient id="scrimTop" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0"    stopColor={palette.neutral[950]} stopOpacity="0.94" />
+            <Stop offset="0.45" stopColor={palette.neutral[950]} stopOpacity="0.86" />
+            <Stop offset="0.72" stopColor={palette.neutral[950]} stopOpacity="0.55" />
+            <Stop offset="1"    stopColor={palette.neutral[950]} stopOpacity="0.88" />
           </LinearGradient>
-          {/* Accent sweep linksboven */}
+          {/* Zone-accent sweep linksboven, kleurt mee met de hartslagzone */}
           <LinearGradient id="sweepGrad" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={accentColor} stopOpacity="0.22" />
+            <Stop offset="0" stopColor={accentColor} stopOpacity="0.20" />
             <Stop offset="1" stopColor={accentColor} stopOpacity="0"    />
-          </LinearGradient>
-          {/* Route gradient: zichtbaar boven, fade naar onder */}
-          <LinearGradient id="routeFade" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0"   stopColor={accentColor} stopOpacity="0.9" />
-            <Stop offset="0.7" stopColor={accentColor} stopOpacity="0.5" />
-            <Stop offset="1"   stopColor={accentColor} stopOpacity="0"   />
           </LinearGradient>
         </Defs>
 
-        {/* Basis */}
-        <Rect width={CARD_WIDTH} height={CARD_HEIGHT} fill="url(#bgGrad)" />
-        {/* Accent sweep */}
+        <Rect width={CARD_WIDTH} height={CARD_HEIGHT} fill="url(#scrimTop)" />
         <Rect width={CARD_WIDTH} height={CARD_HEIGHT} fill="url(#sweepGrad)" />
       </Svg>
+
+      {/* ── Merkbalk boven: app-icoon + naam links, loper rechts ── */}
+      <View style={styles.topBar}>
+        <View style={styles.lockup}>
+          <Image source={APP_ICON} style={styles.topIcon} />
+          <Text style={styles.topName}>{BRAND_NAME}</Text>
+        </View>
+        {runnerName && (
+          <Text style={styles.runnerName} numberOfLines={1}>{runnerName}</Text>
+        )}
+      </View>
 
       {/* ── Route-kaart sectie ── */}
       <View style={styles.routeSection}>
@@ -248,25 +269,20 @@ export const ShareRunCard = forwardRef<View, ShareRunCardProps>(function ShareRu
       {/* ── Content sectie ── */}
       <View style={styles.content}>
 
-        {/* Datum + naam */}
+        {/* Datum + zone-badge op één regel */}
         <View style={styles.headerRow}>
           <Text style={styles.dateText}>{dateStr}</Text>
-          {runnerName && (
-            <Text style={styles.nameText}>{runnerName}</Text>
-          )}
-        </View>
-
-        {/* Zone badge */}
-        <View style={[styles.zoneBadge, { backgroundColor: accentColor + '28', borderColor: accentColor + '60' }]}>
-          <View style={[styles.zoneDot, { backgroundColor: accentColor }]} />
-          <Text style={[styles.zoneText, { color: accentColor }]}>
-            {zoneLabel(session.avgHeartRate, maxHeartRate)}
-          </Text>
+          <View style={[styles.zoneBadge, { backgroundColor: accentColor + '28', borderColor: accentColor + '60' }]}>
+            <View style={[styles.zoneDot, { backgroundColor: accentColor }]} />
+            <Text style={[styles.zoneText, { color: accentColor }]}>
+              {zoneLabel(session.avgHeartRate, maxHeartRate)}
+            </Text>
+          </View>
         </View>
 
         {/* Grote primaire stat: afstand */}
         <View style={styles.primaryStat}>
-          <Text style={styles.primaryValue}>
+          <Text style={styles.primaryValue} {...NO_FONT_PADDING}>
             {session.actualDistanceKm.toFixed(2)}
           </Text>
           <Text style={styles.primaryUnit}>km</Text>
@@ -307,9 +323,11 @@ export const ShareRunCard = forwardRef<View, ShareRunCardProps>(function ShareRu
           </View>
         </View>
 
-        {/* App branding */}
-        <View style={styles.brandRow}>
-          <Text style={styles.brandText}>Lopen te Lopen</Text>
+        {/* Merkvoet: dit is wat een kijker de app laat opzoeken */}
+        <View style={styles.brandFooter}>
+          <Text style={styles.brandName}>{BRAND_NAME}</Text>
+          <View style={styles.brandDot} />
+          <Text style={styles.brandHandle}>{SOCIAL_HANDLE}</Text>
         </View>
 
       </View>
@@ -342,18 +360,51 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
 
-  // Route sectie (bovenste ~37%)
-  routeSection: {
-    width: CARD_WIDTH,
-    height: 240,
+  // Merkbalk boven (gelijk aan SharePeriodCard)
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing[3],
+    paddingTop: 28,
+  },
+  lockup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  topIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+  },
+  topName: {
+    fontFamily: typography.fontFamily.sansBold,
+    fontSize: 8,
+    color: palette.neutral[0],
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  runnerName: {
+    fontFamily: typography.fontFamily.sansSemi,
+    fontSize: 9,
+    color: palette.neutral[400],
+    maxWidth: 110,
   },
 
-  // Content (onderste ~63%)
+  // Route sectie
+  routeSection: {
+    width: CARD_WIDTH,
+    height: 196,
+    marginTop: spacing[1],
+  },
+
+  // Content (onderste helft)
   content: {
     flex: 1,
     paddingHorizontal: spacing[3],
     paddingTop: spacing[1],
-    paddingBottom: spacing[2],
+    paddingBottom: spacing[3],
     gap: spacing[1],
   },
 
@@ -366,53 +417,46 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.sansMedium,
     fontSize: typography.fontSize.sm,
     color: palette.neutral[400],
-    textTransform: 'capitalize',
-  },
-  nameText: {
-    fontFamily: typography.fontFamily.sansSemi,
-    fontSize: typography.fontSize.sm,
-    color: palette.neutral[300],
   },
 
   zoneBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 6,
-    paddingHorizontal: spacing[1],
+    gap: 5,
+    paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: radius.full,
     borderWidth: 1,
   },
   zoneDot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: radius.full,
   },
   zoneText: {
     fontFamily: typography.fontFamily.sansSemi,
-    fontSize: typography.fontSize.sm,
+    fontSize: 9,
     letterSpacing: typography.letterSpacing.wide,
   },
 
   primaryStat: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'baseline',
     gap: 6,
     marginTop: spacing[0.5],
   },
   primaryValue: {
     fontFamily: typography.fontFamily.display,
-    fontSize: 86,
-    color: palette.neutral[50],
-    lineHeight: 86,
-    letterSpacing: -3,
+    fontSize: 90,
+    color: palette.neutral[0],
+    lineHeight: 90,
+    letterSpacing: -4,
   },
   primaryUnit: {
     fontFamily: typography.fontFamily.sansBold,
-    fontSize: typography.fontSize['2xl'],
+    fontSize: 21,
     color: palette.neutral[400],
-    marginBottom: 10,
+    letterSpacing: -0.4,
   },
 
   divider: {
@@ -443,15 +487,15 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontFamily: typography.fontFamily.sansBold,
-    fontSize: typography.fontSize['2xl'],
-    color: palette.neutral[100],
-    lineHeight: typography.fontSize['2xl'] * 1.1,
+    fontSize: 22,
+    lineHeight: 24,
+    letterSpacing: -0.7,
+    color: palette.neutral[0],
   },
   statUnit: {
     fontFamily: typography.fontFamily.sansMedium,
-    fontSize: typography.fontSize.sm,
+    fontSize: 10,
     color: palette.neutral[500],
-    marginBottom: 3,
   },
   statSep: {
     width: 1,
@@ -488,15 +532,28 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
   },
 
-  brandRow: {
+  brandFooter: {
     marginTop: 'auto' as any,
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
-  brandText: {
+  brandName: {
+    fontFamily: typography.fontFamily.sansBold,
+    fontSize: 10,
+    color: palette.neutral[0],
+    letterSpacing: -0.1,
+  },
+  brandDot: {
+    width: 2,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: palette.primary[500],
+  },
+  brandHandle: {
     fontFamily: typography.fontFamily.sansMedium,
-    fontSize: typography.fontSize.xs,
-    color: palette.neutral[600],
-    letterSpacing: typography.letterSpacing.wide,
+    fontSize: 9,
+    color: palette.neutral[400],
   },
 });
 

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Feature graphic 1024x500</title>
+<link rel="stylesheet" href="brand.css">
+<style>
+  html, body, .canvas { width: 1024px; height: 500px; }
+
+  .art { background-image: url('plates/wide.jpg'); background-position: right center; }
+
+  /* Verloop naar links zodat de typografie altijd contrast houdt,
+     ongeacht hoe het artwork uitvalt. */
+  .scrim {
+    background:
+      linear-gradient(90deg,
+        #0A0F1A 0%,
+        #0A0F1A 30%,
+        rgba(10,15,26,0.92) 44%,
+        rgba(10,15,26,0.55) 60%,
+        rgba(10,15,26,0.00) 76%);
+  }
+
+  .content {
+    position: absolute;
+    left: 78px; top: 0; bottom: 0;
+    width: 560px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+
+  .rule { width: 60px; height: 5px; margin-bottom: 28px; }
+
+  .wordmark { font-size: 70px; }
+
+  .tagline {
+    margin-top: 22px;
+    font-size: 25px; font-weight: 500; line-height: 1.42;
+    color: #D1D5DB;
+    max-width: 470px;
+  }
+
+  .meta {
+    margin-top: 30px;
+    display: flex; align-items: center; gap: 14px;
+    font-size: 15px; font-weight: 600;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .dot { width: 4px; height: 4px; border-radius: 999px; background: var(--orange); }
+</style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="art"></div>
+    <div class="scrim"></div>
+
+    <div class="content">
+      <div class="rule"></div>
+      <h1 class="wordmark">Lopen te<br>Lopen</h1>
+      <p class="tagline">Jouw coach van 5 km en 10 km<br>tot de marathon</p>
+      <div class="meta">
+        <span>Schema's</span><i class="dot"></i>
+        <span>Audiocoaching</span><i class="dot"></i>
+        <span>Hartslagzones</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

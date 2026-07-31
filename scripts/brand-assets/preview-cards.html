@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Deelkaarten — layoutcontrole</title>
+<link rel="stylesheet" href="brand.css">
+<style>
+  /* Spiegelt de styles van SharePeriodCard.tsx en ShareRunCard.tsx exact op
+     360x640 na. Bedoeld om te controleren dat er niets overloopt zónder de
+     app te hoeven bouwen: React Native gebruikt Yoga, dat dezelfde flexbox-
+     regels volgt als CSS. Wijzig je de .tsx, werk dan ook dit bestand bij. */
+
+  html, body { width: 1596px; height: 760px; background: #05070D; overflow: hidden; }
+  .row { display: flex; gap: 32px; padding: 48px 32px; }
+  .wrap { position: relative; }
+  .cap { position: absolute; top: -30px; left: 0; font-size: 15px; font-weight: 600; color: #6B7280; letter-spacing: 0.08em; text-transform: uppercase; }
+
+  .card {
+    position: relative; width: 360px; height: 640px;
+    background: #0A0F1A; border-radius: 28px; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .card .art { position: absolute; inset: 0; background-size: cover; background-position: center bottom; }
+  .card .scrim {
+    position: absolute; inset: 0;
+    background:
+      linear-gradient(180deg, rgba(10,15,26,0.97) 0%, rgba(10,15,26,0.90) 38%, rgba(10,15,26,0.30) 58%, rgba(10,15,26,0.00) 70%),
+      linear-gradient(0deg,   rgba(10,15,26,0.95) 0%, rgba(10,15,26,0.55) 9%, rgba(10,15,26,0.00) 22%);
+  }
+  .art-hero { background-image: url('../../assets/brand/share-bg-hero.jpg'); }
+  .art-tex  { background-image: url('../../assets/brand/share-bg-texture.jpg'); }
+
+  .content { position: relative; flex: 1; display: flex; flex-direction: column; padding: 28px 24px 24px; }
+
+  /* ── merkbalk boven ── */
+  .topBar { display: flex; align-items: center; justify-content: space-between; }
+  .lockup { display: flex; align-items: center; gap: 6px; }
+  .topIcon { width: 20px; height: 20px; border-radius: 5px; display: block; }
+  .topName { font-size: 8px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #FFF; }
+  .runner  { font-size: 9px; font-weight: 600; color: #9CA3AF; }
+  .light .topName { color: #111827; }
+  .light .runner  { color: #6B7280; }
+
+  /* ── periode + delta ── */
+  .periodLabel { margin-top: 24px; font-size: 12px; font-weight: 700; letter-spacing: 2.4px; color: #FF9B5A; }
+  .deltaRow { display: flex; margin-top: 8px; }
+  .deltaBadge { padding: 5px 10px; border-radius: 999px; border: 1px solid rgba(242,80,17,0.45); background: rgba(242,80,17,0.16); }
+  .deltaText { font-size: 9px; font-weight: 600; color: #FF9B5A; }
+
+  /* ── hero ── */
+  .heroRow { display: flex; align-items: baseline; gap: 6px; margin-top: 12px; }
+  .heroValue { font-size: 96px; font-weight: 800; line-height: 96px; letter-spacing: -4px; color: #FFF; }
+  .heroUnit  { font-size: 21px; font-weight: 700; letter-spacing: -0.4px; color: #9CA3AF; }
+
+  .hairline { margin-top: 12px; width: 312px; height: 1px; background: linear-gradient(90deg, rgba(242,80,17,0.75), rgba(242,80,17,0.10)); }
+
+  /* ── statistiekraster ── */
+  .statsGrid { display: flex; flex-wrap: wrap; margin-top: 12px; row-gap: 12px; }
+  .statCell { width: 33.33%; }
+  .statLabel { font-size: 7px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.1px; color: #6B7280; }
+  .statValueRow { display: flex; align-items: baseline; gap: 2px; margin-top: 4px; }
+  .statValue { font-size: 17px; font-weight: 700; line-height: 19px; letter-spacing: -0.5px; color: #FFF; }
+  .statUnit  { font-size: 9px; font-weight: 500; color: #6B7280; }
+
+  /* ── merkvoet ── */
+  .brandFooter { margin-top: auto; display: flex; align-items: center; gap: 5px; }
+  .brandName { font-size: 10px; font-weight: 700; letter-spacing: -0.1px; color: #FFF; }
+  .brandDot  { width: 2px; height: 2px; border-radius: 999px; background: #F25011; }
+  .brandHandle { font-size: 9px; font-weight: 500; color: #9CA3AF; }
+  .light .brandName { color: #111827; }
+  .light .brandHandle { color: #6B7280; }
+
+  /* ── grid-variant ── */
+  .grid { display: flex; flex-wrap: wrap; justify-content: space-between; margin-top: 16px; row-gap: 12px; }
+  .tile { width: 150px; background: rgba(17,24,39,0.72); border: 1px solid; border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 5px; }
+  .tileDot { width: 7px; height: 7px; border-radius: 999px; }
+  .tileLabel { font-size: 7px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.1px; color: #6B7280; }
+  .tileValRow { display: flex; align-items: baseline; gap: 2px; }
+  .tileVal { font-size: 22px; font-weight: 700; line-height: 24px; letter-spacing: -0.7px; color: #FFF; }
+  .tileUnit { font-size: 9px; font-weight: 500; color: #6B7280; }
+
+  /* ── minimal-variant ── */
+  .minimal { background: #FFFFFF; }
+  .minHero { margin-top: auto; margin-bottom: auto; }
+  .minPeriod { font-size: 12px; font-weight: 700; letter-spacing: 2.4px; color: #D93A08; margin-bottom: 8px; }
+  .minValue { font-size: 108px; font-weight: 800; line-height: 104px; letter-spacing: -4.5px; color: #111827; }
+  .minUnit  { font-size: 15px; font-weight: 500; letter-spacing: 1px; color: #6B7280; margin-top: 2px; }
+  .minDelta { display: inline-flex; margin-top: 12px; padding: 5px 10px; border-radius: 999px; background: rgba(242,80,17,0.10); font-size: 9px; font-weight: 600; color: #D93A08; }
+  .minRule  { width: 36px; height: 2px; border-radius: 1px; background: #F25011; margin-bottom: 12px; }
+  .minStats { display: flex; margin-bottom: 16px; }
+  .minStat  { flex: 1; }
+  .minStatV { font-size: 20px; font-weight: 700; line-height: 22px; letter-spacing: -0.6px; color: #111827; }
+  .minStatL { font-size: 7px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.1px; color: #6B7280; margin-top: 3px; }
+
+  /* ── ShareRunCard ── */
+  .runTop { display: flex; align-items: center; justify-content: space-between; padding: 28px 24px 0; position: relative; }
+  .route { position: relative; width: 360px; height: 196px; margin-top: 8px; }
+  .runContent { position: relative; flex: 1; display: flex; flex-direction: column; padding: 8px 24px 24px; gap: 8px; }
+  .runHeader { display: flex; align-items: center; justify-content: space-between; }
+  .runDate { font-size: 13px; font-weight: 500; color: #9CA3AF; text-transform: capitalize; }
+  .zone { display: flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px; border: 1px solid rgba(52,211,153,0.38); background: rgba(52,211,153,0.16); }
+  .zoneDot { width: 7px; height: 7px; border-radius: 999px; background: #34D399; }
+  .zoneText { font-size: 9px; font-weight: 600; letter-spacing: 0.5px; color: #34D399; }
+  .runHero { display: flex; align-items: baseline; gap: 6px; margin-top: 4px; }
+  .runHeroV { font-size: 90px; font-weight: 800; line-height: 90px; letter-spacing: -4px; color: #FFF; }
+  .runHeroU { font-size: 21px; font-weight: 700; letter-spacing: -0.4px; color: #9CA3AF; }
+  .runDiv { height: 1px; background: rgba(52,211,153,0.25); margin: 4px 0; }
+  .runStats { display: flex; align-items: center; }
+  .runStat { flex: 1; }
+  .runSep { width: 1px; height: 36px; background: rgba(52,211,153,0.19); margin: 0 16px; }
+  .runStatV { font-size: 22px; font-weight: 700; line-height: 24px; letter-spacing: -0.7px; color: #FFF; }
+  .runStatU { font-size: 10px; font-weight: 500; color: #6B7280; }
+  .prog { margin-top: 8px; }
+  .progHead { display: flex; justify-content: space-between; margin-bottom: 8px; }
+  .progL { font-size: 13px; font-weight: 500; color: #6B7280; }
+  .progW { font-size: 13px; font-weight: 600; color: #D1D5DB; }
+  .progTrack { height: 4px; background: #1F2937; border-radius: 999px; overflow: hidden; }
+  .progFill { height: 100%; width: 33%; background: #34D399; border-radius: 999px; }
+</style>
+</head>
+<body>
+<div class="row">
+
+  <!-- 1. gradient -->
+  <div class="wrap"><div class="cap">gradient</div>
+  <div class="card">
+    <div class="art art-hero"></div><div class="scrim"></div>
+    <div class="content">
+      <div class="topBar">
+        <div class="lockup"><img class="topIcon" src="../../assets/icon.png"><span class="topName">Lopen te Lopen</span></div>
+        <span class="runner">Anne</span>
+      </div>
+      <div class="periodLabel">WEEK 29</div>
+      <div class="deltaRow"><span class="deltaBadge"><span class="deltaText">+18% t.o.v. vorige week</span></span></div>
+      <div class="heroRow"><span class="heroValue">6.6</span><span class="heroUnit">km</span></div>
+      <div class="hairline"></div>
+      <div class="statsGrid">
+        <div class="statCell"><div class="statLabel">Runs</div><div class="statValueRow"><span class="statValue">1</span></div></div>
+        <div class="statCell"><div class="statLabel">Tijd</div><div class="statValueRow"><span class="statValue">38:18</span></div></div>
+        <div class="statCell"><div class="statLabel">Gem. tempo</div><div class="statValueRow"><span class="statValue">5:47</span><span class="statUnit">/km</span></div></div>
+        <div class="statCell"><div class="statLabel">Langste run</div><div class="statValueRow"><span class="statValue">6.6</span><span class="statUnit">km</span></div></div>
+        <div class="statCell"><div class="statLabel">Beste tempo</div><div class="statValueRow"><span class="statValue">5:47</span><span class="statUnit">/km</span></div></div>
+        <div class="statCell"><div class="statLabel">Actieve dagen</div><div class="statValueRow"><span class="statValue">1</span></div></div>
+      </div>
+      <div class="brandFooter"><span class="brandName">Lopen te Lopen</span><i class="brandDot"></i><span class="brandHandle">@lopentelopen</span></div>
+    </div>
+  </div></div>
+
+  <!-- 2. minimal -->
+  <div class="wrap"><div class="cap">minimaal</div>
+  <div class="card minimal light">
+    <div class="content">
+      <div class="topBar">
+        <div class="lockup"><img class="topIcon" src="../../assets/icon.png"><span class="topName">Lopen te Lopen</span></div>
+        <span class="runner">Anne</span>
+      </div>
+      <div class="minHero">
+        <div class="minPeriod">WEEK 29</div>
+        <div class="minValue">6.6</div>
+        <div class="minUnit">kilometer</div>
+        <div><span class="minDelta">+18% t.o.v. vorige week</span></div>
+      </div>
+      <div>
+        <div class="minRule"></div>
+        <div class="minStats">
+          <div class="minStat"><div class="minStatV">1</div><div class="minStatL">Runs</div></div>
+          <div class="minStat"><div class="minStatV">38:18</div><div class="minStatL">Tijd</div></div>
+          <div class="minStat"><div class="minStatV">5:47</div><div class="minStatL">Tempo</div></div>
+        </div>
+      </div>
+      <div class="brandFooter"><span class="brandName">Lopen te Lopen</span><i class="brandDot"></i><span class="brandHandle">@lopentelopen</span></div>
+    </div>
+  </div></div>
+
+  <!-- 3. grid -->
+  <div class="wrap"><div class="cap">grid</div>
+  <div class="card">
+    <div class="art art-tex"></div><div class="scrim"></div>
+    <div class="content">
+      <div class="topBar">
+        <div class="lockup"><img class="topIcon" src="../../assets/icon.png"><span class="topName">Lopen te Lopen</span></div>
+        <span class="runner">Anne</span>
+      </div>
+      <div class="periodLabel">WEEK 29</div>
+      <div class="deltaRow"><span class="deltaBadge"><span class="deltaText">+18% t.o.v. vorige week</span></span></div>
+      <div class="grid">
+        <div class="tile" style="border-color:#F2501140"><i class="tileDot" style="background:#F25011"></i><div class="tileLabel">Runs</div><div class="tileValRow"><span class="tileVal">1</span></div></div>
+        <div class="tile" style="border-color:#34D39940"><i class="tileDot" style="background:#34D399"></i><div class="tileLabel">Kilometers</div><div class="tileValRow"><span class="tileVal">6.6</span><span class="tileUnit">km</span></div></div>
+        <div class="tile" style="border-color:#FBBF2440"><i class="tileDot" style="background:#FBBF24"></i><div class="tileLabel">Totale tijd</div><div class="tileValRow"><span class="tileVal">38:18</span></div></div>
+        <div class="tile" style="border-color:#60A5FA40"><i class="tileDot" style="background:#60A5FA"></i><div class="tileLabel">Gem. tempo</div><div class="tileValRow"><span class="tileVal">5:47</span><span class="tileUnit">/km</span></div></div>
+        <div class="tile" style="border-color:#F59E0B40"><i class="tileDot" style="background:#F59E0B"></i><div class="tileLabel">Actieve dagen</div><div class="tileValRow"><span class="tileVal">1</span></div></div>
+        <div class="tile" style="border-color:#F9731640"><i class="tileDot" style="background:#F97316"></i><div class="tileLabel">Langste run</div><div class="tileValRow"><span class="tileVal">6.6</span><span class="tileUnit">km</span></div></div>
+      </div>
+      <div class="brandFooter"><span class="brandName">Lopen te Lopen</span><i class="brandDot"></i><span class="brandHandle">@lopentelopen</span></div>
+    </div>
+  </div></div>
+
+  <!-- 4. ShareRunCard -->
+  <div class="wrap"><div class="cap">losse run</div>
+  <div class="card">
+    <div class="art art-tex"></div>
+    <div class="scrim" style="background:linear-gradient(180deg,rgba(10,15,26,0.94) 0%,rgba(10,15,26,0.86) 45%,rgba(10,15,26,0.55) 72%,rgba(10,15,26,0.88) 100%)"></div>
+    <div class="runTop">
+      <div class="lockup"><img class="topIcon" src="../../assets/icon.png"><span class="topName">Lopen te Lopen</span></div>
+      <span class="runner">Anne</span>
+    </div>
+    <div class="route">
+      <svg width="360" height="196">
+        <path d="M 43,127 C 65,59 126,29 180,39 C 234,49 281,78 306,108 C 324,133 295,161 234,167 C 173,172 108,161 79,141 C 58,127 43,127 43,127"
+              stroke="#0A0F1A" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.6"/>
+        <path d="M 43,127 C 65,59 126,29 180,39 C 234,49 281,78 306,108 C 324,133 295,161 234,167 C 173,172 108,161 79,141 C 58,127 43,127 43,127"
+              stroke="#34D399" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+        <circle cx="43" cy="127" r="6" fill="#34D399" opacity="0.9"/>
+      </svg>
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,15,26,0) 0%,rgba(10,15,26,0.3) 60%,rgba(10,15,26,1) 100%)"></div>
+    </div>
+    <div class="runContent">
+      <div class="runHeader">
+        <span class="runDate">zondag 19 juli</span>
+        <span class="zone"><i class="zoneDot"></i><span class="zoneText">Zone 2</span></span>
+      </div>
+      <div class="runHero"><span class="runHeroV">6.60</span><span class="runHeroU">km</span></div>
+      <div class="runDiv"></div>
+      <div class="runStats">
+        <div class="runStat"><div class="statLabel">Tijd</div><div class="statValueRow"><span class="runStatV">38:18</span></div></div>
+        <i class="runSep"></i>
+        <div class="runStat"><div class="statLabel">Tempo</div><div class="statValueRow"><span class="runStatV">5:47</span><span class="runStatU">/km</span></div></div>
+        <i class="runSep"></i>
+        <div class="runStat"><div class="statLabel">Hartslag</div><div class="statValueRow"><span class="runStatV">142</span><span class="runStatU">bpm</span></div></div>
+      </div>
+      <div class="prog">
+        <div class="progHead"><span class="progL">Halve Marathon Training</span><span class="progW">Week 4/12</span></div>
+        <div class="progTrack"><div class="progFill"></div></div>
+      </div>
+      <div class="brandFooter"><span class="brandName">Lopen te Lopen</span><i class="brandDot"></i><span class="brandHandle">@lopentelopen</span></div>
+    </div>
+  </div></div>
+
+</div>
+</body>
+</html>
