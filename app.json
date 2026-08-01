@@ -16,7 +16,9 @@
       "usesAppleSignIn": true,
       "infoPlist": {
         "CFBundleDevelopmentRegion": "nl",
-        "CFBundleLocalizations": ["nl"],
+        "CFBundleLocalizations": [
+          "nl"
+        ],
         "NSLocationWhenInUseUsageDescription": "Lopen te Lopen gebruikt je locatie om je route, afstand en tempo bij te houden tijdens het hardlopen, ook als je scherm vergrendeld is.",
         "UIBackgroundModes": [
           "audio",
@@ -27,7 +29,7 @@
           "instagram-stories"
         ]
       },
-      "buildNumber": "22"
+      "buildNumber": "23"
     },
     "android": {
       "adaptiveIcon": {
@@ -35,7 +37,7 @@
         "backgroundColor": "#0A0F1A"
       },
       "package": "com.lopentelopen.app",
-      "versionCode": 22,
+      "versionCode": 23,
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
