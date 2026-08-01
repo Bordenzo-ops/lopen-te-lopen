@@ -70,7 +70,13 @@ export default function VoiceScreen() {
     setSchemaMode(mode);
 
     // Funnelstap: onboarding afgerond (profiel plus schema staan klaar).
-    void trackEvent('onboarding_completed', { schemaMode: mode, goal: goal ?? 'unknown' });
+    // trainingDays: alleen het aantal, nooit de gekozen dagen zelf — zo zien
+    // we hoeveel mensen bij de start al meer dan 3 dagen kiezen.
+    void trackEvent('onboarding_completed', {
+      schemaMode: mode,
+      goal: goal ?? 'unknown',
+      trainingDays: chosenDays.length,
+    });
 
     // Als wedstrijdmodus: zoek de race op en bouw direct het plan
     if (mode === 'race' && raceId) {

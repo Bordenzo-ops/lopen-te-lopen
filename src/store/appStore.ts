@@ -745,9 +745,12 @@ export const useAppStore = create<AppState>()(
 
         // Funnelstap: run afgerond. Afgeronde afstand (op hele km) en bron,
         // zodat we betrokkenheid kunnen meten. Geen route of persoonsgegevens.
+        // isOptional: was dit een bonusloopje (dag 4-7)? Zo zien we of die
+        // bonussessies ook echt gelopen worden, of alleen blijven liggen.
         void trackEvent('run_completed', {
           distanceKm: Math.round(completed.actualDistanceKm),
           source: completed.source,
+          isOptional: activeSession.session.optional === true,
         });
 
         // Best-effort automatische upload naar Strava. Faalt stil en zet de

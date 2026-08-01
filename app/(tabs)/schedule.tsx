@@ -18,6 +18,7 @@ import { useRacePace } from '../../src/hooks/useRacePace';
 import { formatPacePerKm } from '../../src/data/paceModel';
 import { PressableScale } from '../../src/components/motion/PressableScale';
 import { ScaleIn } from '../../src/components/motion/ScaleIn';
+import { trackEvent } from '../../src/services/analyticsService';
 
 // Zachte fade + korte slide (8px) voor het uit-/inklappen van een weekblok.
 // `.reduceMotion` zorgt dat de systeeminstelling voor verminderde beweging
@@ -290,8 +291,21 @@ export default function ScheduleScreen() {
                 setDraftDays(days);
                 // Bewaar zodra er weer minstens 3 dagen gekozen zijn (tot 7).
                 if (days.length >= 3) {
+                  const previousDays = trainingDays.length;
                   updateProfile({ trainingDays: days });
                   setDraftDays(null);
+                  // Funnelstap: trainingsdagen aangepast ná onboarding. Alleen
+                  // het nieuwe en het vorige aantal — nooit de gekozen dagen
+                  // zelf — en alleen als er echt iets veranderd is.
+                  // Zelfde propnaam `trainingDays` als in onboarding_completed,
+                  // zodat één query over beide events het aantal dagen kan
+                  // uitlezen zonder per event een andere sleutel te kennen.
+                  if (days.length !== previousDays) {
+                    void trackEvent('training_days_changed', {
+                      trainingDays: days.length,
+                      previousTrainingDays: previousDays,
+                    });
+                  }
                 }
               }}
             />

@@ -39,6 +39,7 @@ export type AnalyticsEvent =
   | 'run_started'
   | 'run_completed'
   | 'run_card_shared'
+  | 'training_days_changed'
   | 'premium_intro_shown'
   | 'premium_intro_cta';
 
