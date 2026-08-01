@@ -59,3 +59,9 @@ store-assets/Screenshots IOS/
 # website- en marketing-projecten, en losse dev-tools zoals elevenlabs-mcp.
 _workspace/
 .agents/
+
+# Claude Code: persoonlijke machine-instellingen (permissie-allowlist e.d.).
+# Bewust alleen dit bestand: .claude/skills/ blijft juist wel getrackt, want
+# dat zijn projectafspraken (commitstijl, tsc-check, wat Lars zelf doet) die
+# bij de repo horen en niet op een enkele schijf moeten leven.
+.claude/settings.local.json
