@@ -158,6 +158,9 @@ export const COACH_EXPLAINER_SECTIONS: CoachExplainerSection[] = [
       'Gesproken begeleiding kun je helemaal uitzetten in Instellingen, bij "Begeleiding tijdens het lopen".',
       // app/(tabs)/settings.tsx: VOICES-lijst, voiceService.playPreview.
       'Er zijn meerdere stemmen om uit te kiezen; tik op een stem om hem te beluisteren.',
+      // app/(tabs)/settings.tsx: sectie "Begeleiding tijdens het lopen",
+      // Switch routeNotificationsEnabled ("Afslagen op je horloge").
+      'Afslagen kunnen ook als melding naar je horloge gestuurd worden; dat zet je apart aan bij "Afslagen op je horloge".',
       // voiceService.ts: tryPlayPackClips (premium + gedownload pakket →
       // clips) vs. fallbackSpeak (telefoonstem) — geen betaalmuur op de
       // coaching zelf, wel op de stemkwaliteit/offline-gebruik.

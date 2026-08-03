@@ -28,6 +28,17 @@
  * Plus een haptische trilcue (~50 m, ONAFHANKELIJK van de stem — zie
  * sectie 5 hieronder) zodat een loper de afslag ook zonder geluid voelt.
  *
+ * ── Horlogemelding (routeNotificationService.ts) ─────────────────────────
+ * Optioneel, uit `appStore.routeNotificationsEnabled` (default false),
+ * rechtstreeks via `useAppStore.getState()` gelezen — zelfde patroon als
+ * `voiceService.ts` met `isPremium`. Krijgt UITSLUITEND de vooraankondiging
+ * (~150 m), nooit ook de eindaankondiging: twee meldingen zouden twee
+ * trilpulsen op een gekoppeld horloge geven, en dat maakt het signaal juist
+ * waardeloos. Net als de haptische cue ONAFHANKELIJK van `voiceEnabled` —
+ * dit is het stille kanaal. De van-de-route-af-melding deelt de bestaande
+ * tijdscooldown (`OFFROUTE_ANNOUNCE_COOLDOWN_MS`) met de gesproken variant
+ * i.p.v. een eigen cooldown te introduceren.
+ *
  * ── De outAndBack-dubbeling: hoe deze hook ermee omgaat ──────────────────
  * Bij het keerpunt van een outAndBack-route liggen twee instructies (het
  * eind van de heenweg-instructielijst en het begin van de terugweg) op
@@ -92,6 +103,13 @@ import {
   PreparedRoute,
   FollowState,
 } from '../services/routeFollowing';
+import { useAppStore } from '../store/appStore';
+import {
+  prepareRouteNotifications,
+  showTurnNotification,
+  showOffRouteNotification,
+  clearRouteNotification,
+} from '../services/routeNotificationService';
 
 // ── Constanten ────────────────────────────────────────────────────────────────
 
@@ -269,6 +287,12 @@ export function useRouteCoaching(
   const finalAnnouncedRef    = useRef<Set<number>>(new Set());
   const hapticFiredRef       = useRef<Set<number>>(new Set());
   const spokenMilestonesRef  = useRef<Set<25 | 50 | 75>>(new Set());
+  // Losse markering voor de horlogemelding (punt 2 hieronder): ONAFHANKELIJK
+  // van preAnnouncedRef, want die wordt alleen binnen de voiceEnabled-tak
+  // gezet. Zonder eigen set zou een afslag geen melding krijgen zolang de
+  // stem uit staat (of precies andersom: dubbel gemarkeerd raken t.o.v. de
+  // stem-markering, met alle timinggrilligheid van dien).
+  const routeNotifiedRef     = useRef<Set<number>>(new Set());
 
   // ── Off-route: rouleervariant (zelfde opzet als useHeartRateCoaching) +
   // tijd-cooldown voor de MELDING (zie OFFROUTE_ANNOUNCE_COOLDOWN_MS). ─────
@@ -287,6 +311,13 @@ export function useRouteCoaching(
   // gebruiker stopt de app/navigeert weg) — zonder deze cleanup zou een
   // timeout na unmount nog Haptics.impactAsync proberen aan te roepen.
   useEffect(() => () => clearHapticTimeouts(), [clearHapticTimeouts]);
+
+  // Zonder deze cleanup zou een afslag- of van-de-route-af-melding op het
+  // horloge blijven staan nadat de sessie al voorbij is (scherm verlaten
+  // zonder expliciete reset(), bv. terugnavigeren). clearRouteNotification()
+  // faalt zelf altijd stil; de lege .catch is hier alleen voor de vorm, in de
+  // geest van hoe deze hook fire-and-forget-aanroepen behandelt.
+  useEffect(() => () => { clearRouteNotification().catch(() => {}); }, []);
 
   const fireHapticTurnCue = useCallback((kind: TurnKind) => {
     const count = hapticPulseCount(kind);
@@ -332,9 +363,14 @@ export function useRouteCoaching(
     finalAnnouncedRef.current.clear();
     hapticFiredRef.current.clear();
     spokenMilestonesRef.current.clear();
+    routeNotifiedRef.current.clear();
     offRouteVariantRef.current = 0;
     lastOffRouteSpokenAtMsRef.current = null;
     clearHapticTimeouts();
+    // Geen route (meer) actief: haal een eventueel zichtbare afslag- of
+    // van-de-route-af-melding van het horloge weg (punt 2 van de opdracht).
+    // Fire-and-forget, faalt zelf altijd stil.
+    clearRouteNotification().catch(() => {});
 
     lastTurnSnapshotRef.current = null;
     lastRemainingStepRef.current = null;
@@ -371,6 +407,10 @@ export function useRouteCoaching(
     if (preparedRef.current !== prepared) {
       resetInternal();
       preparedRef.current = prepared;
+      // Nieuwe route actief: kanaal voor de horlogemeldingen vast klaarzetten
+      // (punt 2 van de opdracht) — idempotent en fire-and-forget, faalt zelf
+      // altijd stil (zie routeNotificationService.ts).
+      prepareRouteNotifications().catch(() => {});
     }
 
     const update = updateFollowState(prepared, followStateRef.current, lat, lon);
@@ -429,6 +469,23 @@ export function useRouteCoaching(
       fireHapticTurnCue(turnKind);
     }
 
+    // ── Afslagmelding naar het horloge (~150 m) — ONAFHANKELIJK van
+    // voiceEnabled, net als de haptische cue hierboven: dit is het stille
+    // kanaal dat juist moet werken als de stem uit staat. Alleen op het
+    // VOORaankondigingsmoment, nooit ook nog eens bij de eindaankondiging —
+    // twee meldingen (en dus twee trilpulsen op de pols) per afslag zouden
+    // het signaal juist waardeloos maken. Losse markering (routeNotifiedRef)
+    // i.p.v. preAnnouncedRef: die laatste wordt alleen binnen de
+    // voiceEnabled-tak gezet. De instelling wordt hier rechtstreeks uit de
+    // store gelezen (net als voiceService.ts met isPremium doet), zodat de
+    // hooksignatuur niet hoeft te wijzigen.
+    if (hasNext && turnDistM <= PRE_ANNOUNCE_M && !routeNotifiedRef.current.has(nextIdx)) {
+      if (useAppStore.getState().routeNotificationsEnabled) {
+        routeNotifiedRef.current.add(nextIdx);
+        showTurnNotification(turnText, turnDistM, turnKind).catch(() => {});
+      }
+    }
+
     // ── Gesproken afslagaankondigingen (voor/eind) ────────────────────────
     // De "al aangekondigd"-markering gebeurt hier BINNEN de voiceEnabled-tak
     // (samen met het spreken): zie de toelichting bovenaan dit bestand.
@@ -444,14 +501,28 @@ export function useRouteCoaching(
     }
 
     // ── Van-de-route-af / terug-op-route ──────────────────────────────────
-    if (voiceEnabled && update.justWentOffRoute) {
+    // De tijdscooldown (OFFROUTE_ANNOUNCE_COOLDOWN_MS) geldt nu voor BEIDE
+    // kanalen samen — gesproken melding en horlogemelding delen dezelfde
+    // lastOffRouteSpokenAtMsRef, zodat er geen tweede, eigen cooldown komt
+    // (punt 2 van de opdracht: "hergebruik die bestaande cooldown-logica").
+    // De cooldown-klok tikt alleen door als er ook echt iets gemeld wordt op
+    // minstens één kanaal — staan beide uit, dan gebeurt hier niets, ook niet
+    // met de tijdstempel.
+    if (update.justWentOffRoute) {
       const nowMs = Date.now();
       const last  = lastOffRouteSpokenAtMsRef.current;
-      if (last === null || nowMs - last >= OFFROUTE_ANNOUNCE_COOLDOWN_MS) {
-        const variant = offRouteVariantRef.current;
-        offRouteVariantRef.current += 1;
-        voiceService.speakPhrases(offRouteUtterance(variant), voiceType);
+      const cooldownExpired = last === null || nowMs - last >= OFFROUTE_ANNOUNCE_COOLDOWN_MS;
+      const notifyWatch = useAppStore.getState().routeNotificationsEnabled;
+      if (cooldownExpired && (voiceEnabled || notifyWatch)) {
         lastOffRouteSpokenAtMsRef.current = nowMs;
+        if (voiceEnabled) {
+          const variant = offRouteVariantRef.current;
+          offRouteVariantRef.current += 1;
+          voiceService.speakPhrases(offRouteUtterance(variant), voiceType);
+        }
+        if (notifyWatch) {
+          showOffRouteNotification().catch(() => {});
+        }
       }
     }
     if (voiceEnabled && update.justReturnedToRoute) {

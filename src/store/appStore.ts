@@ -283,6 +283,18 @@ interface AppState {
   lastReviewPromptAt: string | null;
   setLastReviewPromptAt: (iso: string) => void;
 
+  // Afslagmeldingen naar het horloge (offline-first, additief)
+  /**
+   * Spiegelt de eerstvolgende afslag van een geplande route als systeem-
+   * melding, zodat een gekoppeld horloge/fitnessbandje hem op de pols laat
+   * verschijnen (zie routeNotificationService.ts). Default false: zonder
+   * horloge levert dit alleen extra meldingen op tijdens het lopen, terwijl
+   * de gebruiker de afslag dan al hoort (gesproken coach) en voelt
+   * (haptische afslagcue) — de gebruiker moet dit dus bewust aanzetten.
+   */
+  routeNotificationsEnabled: boolean;
+  setRouteNotificationsEnabled: (enabled: boolean) => void;
+
   // Backend (offline-first, additief)
   /**
    * Heeft de gebruiker cloudsync expliciet ingeschakeld? Default false.
@@ -518,6 +530,10 @@ export const useAppStore = create<AppState>()(
       setReminderHour: (hour) => set({ reminderHour: hour }),
       lastReviewPromptAt: null,
       setLastReviewPromptAt: (iso) => set({ lastReviewPromptAt: iso }),
+
+      // Afslagmeldingen naar het horloge (offline-first default: uit)
+      routeNotificationsEnabled: false,
+      setRouteNotificationsEnabled: (enabled) => set({ routeNotificationsEnabled: enabled }),
 
       // Backend-status (offline-first defaults)
       cloudSyncEnabled: false,
@@ -1020,6 +1036,7 @@ export const useAppStore = create<AppState>()(
         remindersEnabled:       state.remindersEnabled,
         reminderHour:           state.reminderHour,
         lastReviewPromptAt:     state.lastReviewPromptAt,
+        routeNotificationsEnabled: state.routeNotificationsEnabled,
         // Laatst bekende premium-status: offline-first zodat een betalende
         // gebruiker zonder netwerk niet per ongeluk de gratis laag ziet.
         // RevenueCat blijft de bron van waarheid zodra er weer netwerk is.

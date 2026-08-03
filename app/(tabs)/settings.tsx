@@ -4,7 +4,7 @@ import {
   Alert, TextInput, KeyboardAvoidingView, Platform, Linking, Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone, Cloud, Activity, Bell, HeartPulse, ChevronRight, Mail, LogOut, Crown, Info } from 'lucide-react-native';
+import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone, Cloud, Activity, Bell, HeartPulse, ChevronRight, Mail, LogOut, Crown, Info, Watch } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
@@ -206,6 +206,9 @@ export default function SettingsScreen() {
   const [showCoachExplainer, setShowCoachExplainer] = useState(false);
   const autoPauseEnabled    = useAppStore(s => s.autoPauseEnabled);
   const setAutoPauseEnabled = useAppStore(s => s.setAutoPauseEnabled);
+  const routeNotificationsEnabled    = useAppStore(s => s.routeNotificationsEnabled);
+  const setRouteNotificationsEnabled = useAppStore(s => s.setRouteNotificationsEnabled);
+  const [routeNotificationsBusy, setRouteNotificationsBusy] = useState(false);
   const completedSessions   = useAppStore(s => s.completedSessions);
   const remindersEnabled    = useAppStore(s => s.remindersEnabled);
   const setRemindersEnabled = useAppStore(s => s.setRemindersEnabled);
@@ -477,6 +480,28 @@ export default function SettingsScreen() {
     }
   }
 
+  async function handleToggleRouteNotifications(value: boolean) {
+    if (!value) {
+      setRouteNotificationsEnabled(false);
+      return;
+    }
+    setRouteNotificationsBusy(true);
+    try {
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        setRouteNotificationsEnabled(false);
+        Alert.alert(
+          'Meldingen niet toegestaan',
+          'We konden geen toestemming krijgen voor meldingen. Je kunt dit later alsnog inschakelen via de instellingen van je toestel.',
+        );
+        return;
+      }
+      setRouteNotificationsEnabled(true);
+    } finally {
+      setRouteNotificationsBusy(false);
+    }
+  }
+
   async function handleChangeReminderHour(hour: number) {
     setReminderHour(hour);
     if (remindersEnabled) {
@@ -700,6 +725,24 @@ export default function SettingsScreen() {
                   accessibilityLabel="Auto-pauze"
                   trackColor={{ false: colors.borderDefault, true: colors.brandPrimary + '88' }}
                   thumbColor={autoPauseEnabled ? colors.brandPrimary : colors.textTertiary}
+                />
+              </View>
+              <Divider />
+              <View style={styles.switchRow}>
+                <Watch size={18} color={colors.textSecondary} strokeWidth={2} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.switchLabel}>Afslagen op je horloge</Text>
+                  <Text style={styles.switchSub}>
+                    Stuurt de eerstvolgende afslag als melding van je telefoon, zodat een gekoppeld horloge of bandje hem op je pols laat zien
+                  </Text>
+                </View>
+                <Switch
+                  value={routeNotificationsEnabled}
+                  onValueChange={handleToggleRouteNotifications}
+                  disabled={routeNotificationsBusy}
+                  accessibilityLabel="Afslagen op je horloge"
+                  trackColor={{ false: colors.borderDefault, true: colors.brandPrimary + '88' }}
+                  thumbColor={routeNotificationsEnabled ? colors.brandPrimary : colors.textTertiary}
                 />
               </View>
               {profile.voiceGuidance && (

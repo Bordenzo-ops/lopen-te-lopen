@@ -46,6 +46,23 @@ interface NotificationHandlerResult {
   shouldShowList?: boolean;
 }
 
+/**
+ * Het deel van een binnenkomende melding dat de handler nodig heeft om te
+ * kunnen onderscheiden of het een route-afslagmelding is (zie
+ * routeNotificationService.ts) of een gewone herinnering uit dit bestand.
+ * Alleen `content.data` — meer gebruikt de handler hieronder niet. `data`
+ * kan ontbreken of een willekeurige vorm hebben (een melding van een ander
+ * type, of een toekomstig extra veld), vandaar `unknown` i.p.v. een streng
+ * type.
+ */
+interface IncomingNotification {
+  request?: {
+    content?: {
+      data?: unknown;
+    };
+  };
+}
+
 interface NotificationPermissionResponse {
   status: 'granted' | 'denied' | 'undetermined';
 }
@@ -73,7 +90,7 @@ interface ScheduleNotificationRequest {
 
 interface NotificationsModule {
   setNotificationHandler: (handler: {
-    handleNotification: () => Promise<NotificationHandlerResult>;
+    handleNotification: (notification: IncomingNotification) => Promise<NotificationHandlerResult>;
   }) => void;
   getPermissionsAsync: () => Promise<NotificationPermissionResponse>;
   requestPermissionsAsync: () => Promise<NotificationPermissionResponse>;
@@ -102,24 +119,60 @@ function loadNotificationsModule(): NotificationsModule | null {
 }
 
 /**
- * Stel het gedrag in voor meldingen die binnenkomen terwijl de app open staat
- * (gewoon tonen, met geluid, zonder badge). Wordt hieronder automatisch
- * eenmalig aangeroepen bij het inladen van dit bestand: zo hoeft niemand
- * hiervoor nog iets aan app/_layout.tsx toe te voegen, en blijft de opzet
- * werken zonder de root-layout te hoeven aanraken.
+ * Herkenningswaarde in `content.data.kind` voor route-afslagmeldingen (zie
+ * routeNotificationService.ts, punt 6 van die opdracht). Bewust een losse
+ * letterlijke string i.p.v. een gedeelde export: dit bestand mag
+ * routeNotificationService.ts niet aanraken/importeren, dus beide bestanden
+ * herhalen dezelfde letterlijke waarde zelf.
+ */
+const ROUTE_NOTIFICATION_DATA_KIND = 'route-guidance';
+
+/** Is dit een route-afslagmelding? Defensief: `data` kan ontbreken of alles zijn. */
+function isRouteGuidanceNotification(notification: IncomingNotification): boolean {
+  const data = notification?.request?.content?.data;
+  return !!data && typeof data === 'object' && (data as Record<string, unknown>).kind === ROUTE_NOTIFICATION_DATA_KIND;
+}
+
+/**
+ * Stel het gedrag in voor meldingen die binnenkomen terwijl de app open
+ * staat. Wordt hieronder automatisch eenmalig aangeroepen bij het inladen
+ * van dit bestand: zo hoeft niemand hiervoor nog iets aan app/_layout.tsx
+ * toe te voegen, en blijft de opzet werken zonder de root-layout te hoeven
+ * aanraken.
+ *
+ * Route-afslagmeldingen (herkenbaar aan `data.kind`, zie hierboven) krijgen
+ * bewust een ANDER gedrag dan de rest: tijdens een run staat de app op de
+ * voorgrond met het scherm aan, dus zou een banner over het hardloopscherm
+ * heen schuiven en een geluidje klinken bovenop de sprekende coach — beide
+ * ongewenst. Ze moeten wél in de meldingenlijst belanden: juist DAARDOOR
+ * pikt een gekoppeld horloge/bandje de melding op en spiegelt hem naar de
+ * pols (zie routeNotificationService.ts). Alle overige meldingen (trainings-
+ * herinneringen, streak-bescherming, weekoverzicht) behouden exact het
+ * bestaande gedrag.
  */
 export function setupNotificationHandler(): void {
   const N = loadNotificationsModule();
   if (!N) return;
   try {
     N.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-        shouldShowBanner: true,
-        shouldShowList: true,
-      }),
+      handleNotification: async (notification) => {
+        if (isRouteGuidanceNotification(notification)) {
+          return {
+            shouldShowAlert: false,
+            shouldPlaySound: false,
+            shouldSetBadge: false,
+            shouldShowBanner: false,
+            shouldShowList: true,
+          };
+        }
+        return {
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: false,
+          shouldShowBanner: true,
+          shouldShowList: true,
+        };
+      },
     });
   } catch {
     // Faalt stil: zonder handler tonen meldingen nog steeds, alleen met het
