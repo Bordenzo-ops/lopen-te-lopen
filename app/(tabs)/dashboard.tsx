@@ -218,8 +218,11 @@ export default function DashboardScreen() {
 
         {/* Premium verlopen: eenmalige, vriendelijke melding. Schema en runs
             blijven gewoon werken zonder premium, dus dit is bewust geen
-            waarschuwing maar een neutrale herinnering. */}
-        {premiumExpiredNoticePending && (
+            waarschuwing maar een neutrale herinnering. De extra !hasAccess-
+            controle is een vangnet: zo kan een gebruiker met actief premium
+            deze melding nooit zien, ook niet als er ooit een verouderde
+            gepersisteerde vlag is blijven hangen. */}
+        {premiumExpiredNoticePending && !hasAccess && (
           <View style={styles.expiredCard}>
             <TouchableOpacity
               onPress={dismissPremiumExpiredNotice}

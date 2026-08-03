@@ -319,7 +319,10 @@ interface AppState {
    * Zet de premium-status direct, bijvoorbeeld na een aankoop, herstel of
    * een update van de RevenueCat-listener. Detecteert zelf de overgang van
    * actief naar verlopen (true -> false) en zet dan premiumExpiredNoticePending,
-   * zodat het dashboard dit eenmalig vriendelijk kan melden.
+   * zodat het dashboard dit eenmalig vriendelijk kan melden. Wordt premium
+   * (weer) actief (value === true), dan wist deze functie die vlag juist:
+   * anders zou een gebruiker die opnieuw abonneert of hersteld is de
+   * "verlopen"-melding blijven zien terwijl hij gewoon toegang heeft.
    */
   setPremium: (value: boolean) => void;
   /**
@@ -334,7 +337,10 @@ interface AppState {
    * Staat er een melding klaar dat premium net verlopen is? Wordt gezet
    * zodra setPremium een overgang van true naar false detecteert (via de
    * RevenueCat-listener of een verversing). Het dashboard toont deze
-   * eenmalig en ruimt hem op via dismissPremiumExpiredNotice.
+   * eenmalig en ruimt hem op via dismissPremiumExpiredNotice. Wordt ook
+   * automatisch gewist zodra setPremium premium weer actief meldt, zodat
+   * deze gepersisteerde vlag nooit een betalende gebruiker met een lopend
+   * abonnement kan blijven achtervolgen.
    */
   premiumExpiredNoticePending: boolean;
   /** Ruimt de "premium verlopen"-melding op, bijvoorbeeld na het sluiten ervan. */
@@ -531,10 +537,16 @@ export const useAppStore = create<AppState>()(
         const wasPremium = get().isPremium;
         set({
           isPremium: value,
-          // Alleen een echte overgang van actief naar verlopen triggert de melding
-          premiumExpiredNoticePending: wasPremium && !value
-            ? true
-            : get().premiumExpiredNoticePending,
+          // Premium (weer) actief: de "verlopen"-melding is niet meer relevant
+          // en wordt altijd gewist, ook als hij nog gepersisteerd stond van
+          // een eerdere sessie. Een echte overgang van actief naar verlopen
+          // zet de melding juist aan. In alle andere gevallen (nog steeds
+          // geen premium) blijft de bestaande waarde staan.
+          premiumExpiredNoticePending: value
+            ? false
+            : wasPremium
+              ? true
+              : get().premiumExpiredNoticePending,
         });
       },
 
