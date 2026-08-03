@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Pause, Play, Square, ChevronDown, MapPin, Map, Info, Lock } from 'lucide-react-native';
+import { Pause, Play, Square, ChevronDown, MapPin, Map, Info, Lock, Bookmark } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -26,6 +26,7 @@ import * as voiceService from '../../src/services/voiceService';
 import { sessionIntroUtterance, intervalIntroUtterance, raceFinishUtterance } from '../../src/config/voicePhrases';
 import { buildIntervalSegments, intervalStateAt } from '../../src/data/intervals';
 import { RoutePreviewSheet } from '../../src/components/ui/RoutePreviewSheet';
+import { SavedRoutesSheet } from '../../src/components/ui/SavedRoutesSheet';
 import { SessionTypeSheet } from '../../src/components/ui/SessionTypeSheet';
 import { CoachExplainerSheet } from '../../src/components/ui/CoachExplainerSheet';
 import { Button } from '../../src/components/ui/Button';
@@ -36,9 +37,9 @@ import { PREMIUM_CONFIG } from '../../src/config/premiumConfig';
 import { usePremium } from '../../src/hooks/usePremium';
 import { useRacePace } from '../../src/hooks/useRacePace';
 import { formatPacePerKm } from '../../src/data/paceModel';
-import { selectRoutePlansThisWeek } from '../../src/store/appStore';
+import { selectRoutePlansThisWeek, selectSavedRoutes } from '../../src/store/appStore';
 import type { PlannedRoute } from '../../src/services/routeService';
-import type { KmSplit } from '../../src/store/appStore';
+import type { KmSplit, SavedRoute } from '../../src/store/appStore';
 import {
   startBackgroundTracking,
   stopBackgroundTracking,
@@ -179,6 +180,7 @@ export default function ActiveSessionScreen() {
   const updateProfile   = useAppStore(s => s.updateProfile);
   const registerRoutePlan = useAppStore(s => s.registerRoutePlan);
   const routePlansThisWeek = useAppStore(selectRoutePlansThisWeek);
+  const savedRoutes = useAppStore(selectSavedRoutes);
   const autoPauseEnabled = useAppStore(s => s.autoPauseEnabled);
   const hrMonitorDeviceId = useAppStore(s => s.hrMonitorDeviceId);
   const { hasAccess, promptUpgrade } = usePremium();
@@ -244,6 +246,8 @@ export default function ActiveSessionScreen() {
   // en niet bij de andere sheets verderop in dit bestand.
   const [showCoachExplainer, setShowCoachExplainer] = useState(false);
   const [showRoutePreview, setShowRoutePreview]   = useState(false);
+  // Kiezen uit bewaarde routes: eigen, subtielere sheet naast de routevraag.
+  const [showSavedRoutes, setShowSavedRoutes]     = useState(false);
   const [activePlannedRoute, setActivePlannedRoute] = useState<PlannedRoute | null>(null);
   const routePlanTriggered = useRef(false);
   const firstGpsRef = useRef<{ lat: number; lon: number } | null>(null);
@@ -801,6 +805,33 @@ export default function ActiveSessionScreen() {
     startSessionNow(null);
   }, [startSessionNow, updateProfile]);
 
+  // ── Bewaarde route kiezen ──────────────────────────────────────────────────
+  // Geen registerRoutePlan() hier: er gaat geen aanvraag naar OpenRouteService
+  // (de route ligt al klaar in de store), dus dit hoort NIET mee te tellen
+  // voor de gratis weeklimiet van de live routeplanner. Bewuste keuze, en
+  // meteen een echt voordeel: een bewaarde route werkt ook zonder netwerk.
+  const handleSelectSavedRoute = useCallback((route: SavedRoute) => {
+    setShowSavedRoutes(false);
+    setShowRouteQuestion(false);
+    updateProfile({ routePlannerEnabled: true });
+
+    // Defensief: een bewaarde route zonder waypoints (zou niet moeten kunnen
+    // ontstaan, saveRoute() in de store weigert dat al bij het opslaan) mag
+    // hier nooit crashen. Val dan gewoon terug op starten zonder route.
+    if (!route.waypoints || route.waypoints.length === 0) {
+      startSessionNow(null);
+      return;
+    }
+
+    const plannedRoute: PlannedRoute = {
+      type:            route.type,
+      waypoints:       route.waypoints,
+      instructions:    route.instructions,
+      totalDistanceKm: route.distanceKm,
+    };
+    startSessionNow(plannedRoute);
+  }, [startSessionNow, updateProfile]);
+
   // Pas na alle hooks: zonder profiel valt er niets te tonen
   if (!profile) return null;
 
@@ -1015,6 +1046,20 @@ export default function ActiveSessionScreen() {
               )}
               <Button label="Plan mijn route" onPress={handlePlanRoute} fullWidth />
               <Button label="Start zonder route" onPress={handleSkipRoute} variant="secondary" fullWidth />
+              {/* Derde, subtielere keuze: alleen zichtbaar met bewaarde routes,
+                  en bewust minder prominent dan de twee hoofdknoppen hierboven. */}
+              {savedRoutes.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setShowSavedRoutes(true)}
+                  style={styles.savedRoutesLink}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Kies uit je ${savedRoutes.length} bewaarde routes`}
+                >
+                  <Bookmark size={13} color={colors.textSecondary} strokeWidth={2} />
+                  <Text style={styles.savedRoutesLinkText}>Of kies een bewaarde route</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 onPress={() => setShowCoachExplainer(true)}
                 style={styles.coachExplainerLink}
@@ -1068,6 +1113,13 @@ export default function ActiveSessionScreen() {
         <CoachExplainerSheet
           visible={showCoachExplainer}
           onClose={() => setShowCoachExplainer(false)}
+        />
+
+        <SavedRoutesSheet
+          visible={showSavedRoutes}
+          currentPosition={firstGpsRef.current}
+          onSelect={handleSelectSavedRoute}
+          onClose={() => setShowSavedRoutes(false)}
         />
       </View>
     );
@@ -1463,6 +1515,19 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.xs,
     color: colors.textTertiary,
     marginBottom: spacing[0.5],
+  },
+
+  // Subtiele link naar SavedRoutesSheet, alleen zichtbaar met bewaarde
+  // routes. Minder nadrukkelijk dan de twee hoofdknoppen ("Plan mijn route",
+  // "Start zonder route"), maar wel duidelijker dan coachExplainerLink
+  // hieronder — dit is een echte derde keuze, geen losse uitlegtekst.
+  savedRoutesLink: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: spacing[1],
+  },
+  savedRoutesLinkText: {
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
   },
 
   skipGpsBtn: {

@@ -21,7 +21,7 @@
  *   />
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -31,6 +31,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import MapView, {
   Polyline,
@@ -38,10 +40,13 @@ import MapView, {
   PROVIDER_DEFAULT,
   PROVIDER_GOOGLE,
 } from 'react-native-maps';
-import { X, RefreshCw, Navigation, ArrowRight, MapPin } from 'lucide-react-native';
+import { X, RefreshCw, Navigation, ArrowRight, MapPin, Bookmark, Check } from 'lucide-react-native';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors, useIsLightTheme } from '../../theme/useTheme';
 import { PremiumBadge } from './PremiumBadge';
+import { useAppStore } from '../../store/appStore';
+import { usePremium } from '../../hooks/usePremium';
+import { PREMIUM_CONFIG } from '../../config/premiumConfig';
 import type { PlannedRoute } from '../../services/routeService';
 import type { RouteType } from '../../hooks/useRoutePlanner';
 
@@ -62,6 +67,19 @@ interface RoutePreviewSheetProps {
 }
 
 // ── Kaart-helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Stelt een naam voor in EXACT dezelfde vorm als de store zelf zou kiezen
+ * (zie suggestRouteName in appStore.ts): "Rondje 8,2 km" / "Heen-en-terug
+ * 8,2 km", met Nederlandse decimale komma. Alleen voor de vooraf ingevulde
+ * naamveld-waarde hier — saveRoute() in de store valt hier zelf ook op
+ * terug bij een lege naam, dus de twee mogen nooit uit elkaar lopen.
+ */
+function suggestRouteName(type: PlannedRoute['type'], distanceKm: number): string {
+  const typeLabel = type === 'loop' ? 'Rondje' : 'Heen-en-terug';
+  const distanceLabel = distanceKm.toFixed(1).replace('.', ',');
+  return `${typeLabel} ${distanceLabel} km`;
+}
 
 /** Berekent het middelpunt van alle waypoints voor de initiële kaartregio */
 function routeCenter(route: PlannedRoute) {
@@ -106,6 +124,45 @@ export function RoutePreviewSheet({
     ? Math.round((plannedRoute.totalDistanceKm / 9) * 60)
     : Math.round((targetDistanceKm / 9) * 60);
 
+  // ── Route bewaren ──────────────────────────────────────────────────────────
+  const saveRoute = useAppStore(s => s.saveRoute);
+  const { promptUpgrade } = usePremium();
+  const [showSaveInput, setShowSaveInput] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [savedThisRoute, setSavedThisRoute] = useState(false);
+
+  // Reset de opslaan-flow zodra dit een ANDERE route is (nieuwe object-
+  // referentie: alleen replannen levert die op, zie useRoutePlanner.planRoute).
+  // Zo mag bewaren precies één keer per getoonde route, en weer opnieuw na
+  // herplannen. Sluiten/heropenen van de sheet met dezelfde route (geen
+  // herplan) laat "al bewaard" bewust intact.
+  useEffect(() => {
+    setShowSaveInput(false);
+    setSavedThisRoute(false);
+    if (plannedRoute) {
+      setSaveName(suggestRouteName(plannedRoute.type, plannedRoute.totalDistanceKm));
+    }
+  }, [plannedRoute]);
+
+  const handleConfirmSave = useCallback(() => {
+    if (!plannedRoute) return;
+    const result = saveRoute(plannedRoute, saveName);
+    if (result) {
+      setSaveName(result.name);
+      setSavedThisRoute(true);
+      setShowSaveInput(false);
+      return;
+    }
+    // null van saveRoute() betekent hier de gratis limiet (ongeldige
+    // waypoints/afstand kan niet: dit is een net opgehaalde, geldige
+    // PlannedRoute). De store beslist over de limiet, wij tonen alleen de
+    // bijpassende upgrade-uitnodiging. Sheet en naamveld blijven intact.
+    promptUpgrade(
+      'Bewaarde routes vol',
+      `Met gratis kun je ${PREMIUM_CONFIG.FREE_SAVED_ROUTES} routes bewaren. Met premium bewaar je onbeperkt.`,
+    );
+  }, [plannedRoute, saveName, saveRoute, promptUpgrade]);
+
   return (
     <Modal
       visible={visible}
@@ -118,6 +175,16 @@ export function RoutePreviewSheet({
         <View style={styles.backdrop} />
       </TouchableWithoutFeedback>
 
+      {/* KeyboardAvoidingView rond de sheet (i.p.v. erin): het naamveld bij
+          "Bewaar deze route" hieronder zit onderin deze bottom sheet en zou
+          zonder dit anders onder het toetsenbord verdwijnen. Zelfde patroon
+          als app/(tabs)/settings.tsx. De sheet zelf is niet meer losstaand
+          position:'absolute' (dat verhuisde naar deze wrapper), zodat de
+          'padding'-behavior op iOS hem ook echt omhoog kan duwen. */}
+      <KeyboardAvoidingView
+        style={styles.sheetKeyboardWrap}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
       <View style={styles.sheet}>
         {/* Handle + sluitknop */}
         <View style={styles.sheetHeader}>
@@ -276,8 +343,62 @@ export function RoutePreviewSheet({
             <ArrowRight size={16} color={colors.textSecondary} strokeWidth={2} />
             <Text style={styles.secondaryBtnText}>Start zonder route</Text>
           </TouchableOpacity>
+
+          {/* Route bewaren: alleen zinvol met een geldige, geladen route.
+              Zonder naamveld krijg je later drie regels "Rondje 8,2 km" die
+              niet uit elkaar te houden zijn, dus staat het veld al ingevuld
+              met de voorgestelde naam en hoeft één tik op bevestigen te
+              volstaan. Sluit de sheet NIET automatisch na bewaren: de
+              gebruiker was nog aan het beslissen of hij deze route gaat
+              lopen, dat beslismoment mag niet wegklappen. */}
+          {plannedRoute && (
+            savedThisRoute ? (
+              <View style={styles.savedConfirm} accessibilityRole="text">
+                <Check size={16} color={colors.success} strokeWidth={2.5} />
+                <Text style={styles.savedConfirmText} numberOfLines={1}>
+                  Bewaard als "{saveName}"
+                </Text>
+              </View>
+            ) : showSaveInput ? (
+              <View style={styles.saveInputRow}>
+                <TextInput
+                  style={styles.saveInput}
+                  value={saveName}
+                  onChangeText={setSaveName}
+                  placeholder="Naam van deze route"
+                  placeholderTextColor={colors.textTertiary}
+                  maxLength={40}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={handleConfirmSave}
+                  accessibilityLabel="Naam van de route"
+                />
+                <TouchableOpacity
+                  style={styles.saveConfirmBtn}
+                  onPress={handleConfirmSave}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Bevestig route bewaren"
+                >
+                  <Check size={18} color="#fff" strokeWidth={2.5} />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.saveLinkBtn}
+                onPress={() => setShowSaveInput(true)}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityLabel="Bewaar deze route"
+              >
+                <Bookmark size={15} color={colors.textSecondary} strokeWidth={2} />
+                <Text style={styles.saveLinkText}>Bewaar deze route</Text>
+              </TouchableOpacity>
+            )
+          )}
         </View>
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -290,11 +411,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
 
+  // Absolute positionering verhuisd naar de KeyboardAvoidingView-wrapper
+  // eromheen (zie hierboven in de render): zo kan de 'padding'-behavior op
+  // iOS de hele sheet omhoog duwen zodra het naamveld bij "Bewaar deze
+  // route" de aandacht (en het toetsenbord) krijgt.
+  sheetKeyboardWrap: {
+    position: 'absolute',
+    bottom:    0,
+    left:      0,
+    right:     0,
+  },
+
   sheet: {
-    position:             'absolute',
-    bottom:                0,
-    left:                  0,
-    right:                 0,
     backgroundColor:      colors.bgSurface,
     borderTopLeftRadius:  radius['2xl'],
     borderTopRightRadius: radius['2xl'],
@@ -534,5 +662,59 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: typography.fontFamily.sansMedium,
     fontSize:   typography.fontSize.sm,
     color:      colors.textSecondary,
+  },
+
+  // Route bewaren
+  saveLinkBtn: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    justifyContent: 'center',
+    gap:             6,
+    paddingVertical: spacing[1],
+  },
+  saveLinkText: {
+    fontFamily: typography.fontFamily.sansMedium,
+    fontSize:   typography.fontSize.sm,
+    color:      colors.textSecondary,
+    textDecorationLine: 'underline',
+  },
+  saveInputRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:            spacing[1],
+  },
+  saveInput: {
+    flex:              1,
+    fontFamily:        typography.fontFamily.sans,
+    fontSize:          typography.fontSize.base,
+    color:             colors.textPrimary,
+    backgroundColor:   colors.bgCard,
+    borderRadius:      radius.lg,
+    borderWidth:        1,
+    borderColor:       colors.borderDefault,
+    paddingHorizontal: spacing[1.5],
+    paddingVertical:   spacing[1],
+    minHeight:          44,
+  },
+  saveConfirmBtn: {
+    width:           44,
+    height:          44,
+    borderRadius:    radius.lg,
+    backgroundColor: colors.brandPrimary,
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  savedConfirm: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    justifyContent: 'center',
+    gap:             6,
+    paddingVertical: spacing[1],
+  },
+  savedConfirmText: {
+    fontFamily: typography.fontFamily.sansMedium,
+    fontSize:   typography.fontSize.sm,
+    color:      colors.success,
+    flexShrink: 1,
   },
 });
