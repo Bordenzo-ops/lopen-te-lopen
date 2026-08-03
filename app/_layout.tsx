@@ -24,6 +24,7 @@ import {
 } from '../src/services/purchaseService';
 import { onAuthChange } from '../src/services/authService';
 import { retryStravaQueue } from '../src/services/stravaService';
+import { maybeAutoUpdatePack } from '../src/services/voicePackService';
 import { flushEvents } from '../src/services/analyticsService';
 import { initCrashReporting, CrashReportingBoundary } from '../src/services/crashReporting';
 import { AnimatedSplash } from '../src/components/AnimatedSplash';
@@ -72,6 +73,27 @@ export default function RootLayout() {
   useEffect(() => {
     void retryStravaQueue();
   }, []);
+
+  // Werkt het stempakket van de gekozen stem stil bij (klein verschil, geen
+  // actieve sessie, wel al premium + een gedownload pakket) bij app-start en
+  // telkens als de app naar de voorgrond komt. maybeAutoUpdatePack bewaakt
+  // zelf al zijn voorwaarden en gooit nooit, dus hier alleen niet-blokkerend
+  // afvuren, zelfde filosofie als flushEvents hieronder.
+  // Bewust geabonneerd op de stem in plaats van hem alleen bij mount uit de
+  // store te lezen: bij een koude start is het profiel nog niet uit
+  // AsyncStorage teruggehaald, dus zou de eerste controle altijd de
+  // standaardstem pakken en die van de gebruiker pas na een keer
+  // achtergrond/voorgrond aan bod komen. Nu draait de controle opnieuw zodra
+  // het profiel binnen is — en meteen ook als iemand in Instellingen van stem
+  // wisselt, wat precies het moment is waarop je dat pakket wilt controleren.
+  const activeVoiceType = useAppStore(s => s.profile?.voiceType) ?? 'female';
+  useEffect(() => {
+    void maybeAutoUpdatePack(activeVoiceType).catch(() => {});
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void maybeAutoUpdatePack(activeVoiceType).catch(() => {});
+    });
+    return () => sub.remove();
+  }, [activeVoiceType]);
 
   // Best-effort flush van gebufferde analytics-events: bij app-start en
   // telkens als de app naar de voorgrond komt (dan is er vaak weer netwerk en
