@@ -120,6 +120,42 @@ function toNl(text: string): string {
     .trim();
 }
 
+/**
+ * Draait de afslagrichting in een reeds naar het Nederlands vertaalde
+ * instructietekst om (links↔rechts, ook in "...kant"-vorm).
+ *
+ * Nodig voor de terugweg van een heen-en-terug-route (zie
+ * generateOutAndBackRoute): de terugweg-instructies worden letterlijk
+ * gekopieerd van de heenweg, maar waar je op de heenweg links afsloeg,
+ * sla je op de terugweg juist rechts af (en omgekeerd).
+ *
+ * Eén enkele regex-pass met een callback i.p.v. twee opeenvolgende
+ * .replace()-aanroepen (links→rechts, dan rechts→links) — dat laatste zou
+ * alles weer terugdraaien omdat de tweede vervanging ook de zojuist
+ * geschreven resultaten van de eerste zou raken. Vergelijkbaar met de
+ * volgorde-gevoeligheid in toNl() hierboven, maar hier opgelost door alle
+ * matches in één keer en onafhankelijk van elkaar te beoordelen.
+ *
+ * \b op "links"/"rechts" voorkomt dat "rechtdoor" (Continue straight) of
+ * "linkerkant"/"rechterkant" als los woord worden geraakt; die twee laatste
+ * staan apart in de alternatie zodat ze wél correct mee omdraaien.
+ */
+function mirrorTurnText(text: string): string {
+  const MIRROR: Record<string, string> = {
+    links:       'rechts',
+    rechts:      'links',
+    linkerkant:  'rechterkant',
+    rechterkant: 'linkerkant',
+  };
+  return text.replace(/\b(links|rechts|linkerkant|rechterkant)\b/gi, (match) => {
+    const mirrored = MIRROR[match.toLowerCase()];
+    // Hoofdletter van het origineel behouden (bv. begin van de zin)
+    return match[0] === match[0].toUpperCase()
+      ? mirrored[0].toUpperCase() + mirrored.slice(1)
+      : mirrored;
+  });
+}
+
 /** Verwerkt een ORS GeoJSON FeatureCollection naar PlannedRoute */
 function parseOrsGeoJson(data: any, type: 'loop' | 'outAndBack'): PlannedRoute {
   const feature = data.features?.[0];
@@ -278,7 +314,8 @@ export async function generateOutAndBackRoute(
   });
 
   const outRoute = parseOrsGeoJson(data, 'outAndBack');
-  const offset   = outRoute.waypoints.length;
+  const N        = outRoute.waypoints.length;
+  const offset   = N;
 
   // Keerpunt-instructie
   const turnAround: RouteInstruction = {
@@ -287,15 +324,53 @@ export async function generateOutAndBackRoute(
     waypointIndex:    offset - 1,
   };
 
-  // Terugweg: omgekeerde waypoints + instructies
+  // Terugweg: omgekeerde waypoints + instructies.
+  //
+  // returnWaypoints is de omgekeerde heenweg, dus voor elke k geldt
+  // returnWaypoints[k] === outRoute.waypoints[N - 1 - k]. Een heenweg-
+  // instructie die bij waypoint w hoort (inst.waypointIndex === w) hoort op
+  // de terugweg dus bij relatieve positie (N - 1 - w), en dat in de
+  // samengevoegde waypoints-array ([...outRoute.waypoints, ...returnWaypoints])
+  // op absolute index offset + (N - 1 - w).
+  //
+  // (Vroegere bug: hier stond `offset + i` met i de instructie-teller i.p.v.
+  // een waypoint-index. Bij bv. 200 waypoints maar 8 instructies duwde dat
+  // alle acht terugweg-instructies in de eerste acht waypoints ná het
+  // keerpunt — ze hoorden dan vrijwel allemaal bij hetzelfde punt, en de rest
+  // van de terugweg had geen enkele instructie meer.)
+  //
+  // Omdat w oploopt over de (al op waypointIndex gesorteerde) heenweg-
+  // instructies, loopt (N - 1 - w) daarentegen af. Het .reverse() hieronder
+  // keert de iteratie-volgorde om, waardoor de resulterende waypointIndex-
+  // waarden weer oplopend zijn — dezelfde truc die het bestaande .reverse()
+  // hier al toepaste, nu gecombineerd met de juiste formule.
+  //
+  // Tweede bug: de instructietekst werd 1-op-1 gekopieerd, terwijl een
+  // linkerafslag op de heenweg op de terugweg een rechterafslag is (en
+  // omgekeerd). mirrorTurnText() draait dat om.
   const returnWaypoints: RouteWaypoint[] = [...outRoute.waypoints].reverse();
   const returnInstructions: RouteInstruction[] = [...outRoute.instructions]
     .reverse()
-    .map((inst, i) => ({
-      text:             inst.text,
+    .map((inst) => ({
+      text:             mirrorTurnText(inst.text),
       distanceToPointM: inst.distanceToPointM,
-      waypointIndex:    offset + i,
+      waypointIndex:    offset + (N - 1 - inst.waypointIndex),
     }));
+
+  // De eerste heenweg-instructie is een startinstructie ("Loop naar het
+  // noorden" e.d., zie de Head-vervangingen in toNl()). Na omkering staat
+  // die als LAATSTE terugweg-instructie, precies bij aankomst op het
+  // startpunt — waar een windrichting geen zin heeft. Vervang die door een
+  // aankomstmelding. "Doel bereikt." wordt letterlijk herkend door
+  // TURN_PATTERNS in src/config/voicePhrases.ts (patroon 'doel bereikt' →
+  // clip turn_arrive), dus exact zo schrijven.
+  if (returnInstructions.length > 0) {
+    const lastIndex = returnInstructions.length - 1;
+    returnInstructions[lastIndex] = {
+      ...returnInstructions[lastIndex],
+      text: 'Doel bereikt.',
+    };
+  }
 
   return {
     type:             'outAndBack',
