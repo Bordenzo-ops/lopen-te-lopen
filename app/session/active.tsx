@@ -551,10 +551,20 @@ export default function ActiveSessionScreen() {
       if (!isRunningRef.current) return;
 
       const prev = routeRef.current[routeRef.current.length - 1];
-      routeRef.current = [
-        ...routeRef.current,
-        { lat: latitude, lon: longitude, timestamp: now },
-      ];
+      // Aanvullen, niet kopiëren. Dit stond eerder als een spread naar een
+      // nieuwe array, en dat is O(n²) over een hele run: bij ongeveer één punt
+      // per seconde zit een marathonloper na vier uur op ~14.000 punten, wat
+      // neerkomt op ~14.000 nieuwe arrays en in totaal ruim honderd miljoen
+      // gekopieerde verwijzingen — precies het soort geheugendruk waar iOS een
+      // app om afschiet (zie de WatchdogTermination in Sentry).
+      //
+      // Let op bij toekomstige wijzigingen: routeRef.current gaat als prop
+      // `coveredRoute` naar LiveRouteMap en houdt nu dus zijn identiteit. Dat
+      // is veilig omdat die component niet gememoïseerd is en zijn camera-
+      // effect ook aan currentLat/currentLon hangt (die wél per punt wijzigen).
+      // Zet er dus geen React.memo op en memoïseer daar niets op `coveredRoute`
+      // alleen, want dan bevriest de kaart.
+      routeRef.current.push({ lat: latitude, lon: longitude, timestamp: now });
 
       if (prev) {
         const meters = haversineMeters(prev.lat, prev.lon, latitude, longitude);

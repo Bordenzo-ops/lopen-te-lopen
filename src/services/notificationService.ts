@@ -155,10 +155,14 @@ export function setupNotificationHandler(): void {
   if (!N) return;
   try {
     N.setNotificationHandler({
+      // shouldShowAlert bewust weggelaten: die vlag is in expo-notifications 56
+      // vervangen door shouldShowBanner + shouldShowList en doet zelf niets
+      // meer, behalve een console-waarschuwing loggen zodra hij op true staat
+      // (zie NotificationsHandler in het pakket). Dat gebeurde tot nu toe bij
+      // elke trainingsherinnering.
       handleNotification: async (notification) => {
         if (isRouteGuidanceNotification(notification)) {
           return {
-            shouldShowAlert: false,
             shouldPlaySound: false,
             shouldSetBadge: false,
             shouldShowBanner: false,
@@ -166,7 +170,6 @@ export function setupNotificationHandler(): void {
           };
         }
         return {
-          shouldShowAlert: true,
           shouldPlaySound: true,
           shouldSetBadge: false,
           shouldShowBanner: true,
