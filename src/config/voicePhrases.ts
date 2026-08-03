@@ -364,7 +364,7 @@ const CD_DONE_TEXT = 'Goed gedaan. Je spieren komen weer tot rust.';
 // vijftien seconden. Zonder die zin zou een loper die de stem letterlijk
 // volgt maar één been rekken.
 const CD_STEP_TEXTS: string[] = [
-  'Loop nog een minuut rustig uit en laat je hartslag geleidelijk zakken.',
+  'Loop nog drie minuten rustig uit en laat je hartslag geleidelijk zakken.',
   'Rek je kuiten: duw een hiel in de grond en leun rustig naar voren. Wissel na vijftien seconden van been.',
   'Rek je hamstrings: strek een been en buig langzaam voorover. Wissel na vijftien seconden van been.',
   'Rek je quadriceps: pak je enkel vast en trek je hiel richting je bil. Wissel na vijftien seconden van been.',
