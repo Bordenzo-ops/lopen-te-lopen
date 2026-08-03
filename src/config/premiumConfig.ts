@@ -42,6 +42,15 @@ export const PREMIUM_CONFIG = {
    * en later de geavanceerde statistieken, niet in de basis-schema's.
    */
   FREE_RACE_DISTANCES: ['5km', '10km', '15km', 'half_marathon', 'marathon'] as RaceDistance[],
+
+  /**
+   * Bewaarde routes: hoeveel routes mag een gratis gebruiker bewaren?
+   * Genoeg voor het vaste rondje plus wat variatie (bijvoorbeeld een korte en
+   * een lange versie), zodat de gratis laag volwaardig blijft. Premium maakt
+   * dit onbeperkt. Bewust gelijk aan FREE_ROUTE_PLANS_PER_WEEK, zodat "3
+   * gratis" overal in de app hetzelfde, makkelijk te onthouden getal is.
+   */
+  FREE_SAVED_ROUTES: 3,
 } as const;
 
 /**
@@ -60,4 +69,13 @@ export function hasPremiumAccess(isPremium: boolean | undefined | null): boolean
 /** Mag deze wedstrijdafstand zonder premium gekozen worden? */
 export function isRaceDistanceFree(distance: RaceDistance): boolean {
   return PREMIUM_CONFIG.FREE_RACE_DISTANCES.includes(distance);
+}
+
+/** Mag er nog een route bewaard worden, gegeven het huidige aantal en de premium-status? */
+export function canSaveAnotherRoute(
+  currentSavedCount: number,
+  isPremium: boolean | undefined | null,
+): boolean {
+  if (hasPremiumAccess(isPremium)) return true;
+  return currentSavedCount < PREMIUM_CONFIG.FREE_SAVED_ROUTES;
 }

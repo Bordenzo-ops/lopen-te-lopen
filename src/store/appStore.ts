@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 import { getTrainingPlan, remapWeekDays } from '../data/trainingPlans';
 import type { GoalType, Session, TrainingWeek } from '../data/trainingPlans';
 import type { RacePlan } from '../data/buildRacePlan';
@@ -10,6 +11,8 @@ import { syncAll } from '../services/syncService';
 import { isPremiumActive as fetchPremiumActive } from '../services/purchaseService';
 import { trackEvent } from '../services/analyticsService';
 import type { VoiceType } from '../config/voiceConfig';
+import type { PlannedRoute, RouteWaypoint, RouteInstruction } from '../services/routeService';
+import { canSaveAnotherRoute } from '../config/premiumConfig';
 
 // ── Hulpfuncties voor het vrije schema ────────
 /**
@@ -18,6 +21,42 @@ import type { VoiceType } from '../config/voiceConfig';
  */
 function generateCustomSessionId(): string {
   return `custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// ── Hulpfuncties voor bewaarde routes ─────────
+/**
+ * Genereert een stabiele, unieke id voor een bewaarde route. Eén tijdstempel
+ * alleen is niet genoeg: wie twee routes vlak na elkaar bewaart (dezelfde
+ * milliseconde) zou anders een botsende id krijgen. Zelfde patroon als
+ * newClientEventId in analyticsService.ts.
+ */
+function generateSavedRouteId(): string {
+  try {
+    if (typeof Crypto.randomUUID === 'function') return `route-${Crypto.randomUUID()}`;
+  } catch {
+    // val terug op de simpele variant hieronder
+  }
+  return `route-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Rondt een coördinaat af op 5 decimalen (~1 meter nauwkeurig). De volledige
+ * ORS-precisie is voor een hardlooproute zinloos, en de hele store wordt bij
+ * elke wijziging als JSON weggeschreven — een route van 10 km heeft al snel
+ * honderden waypoints, dus dit scheelt merkbaar in opslaggrootte.
+ */
+function roundWaypoint(w: RouteWaypoint): RouteWaypoint {
+  return {
+    lat: Math.round(w.lat * 100000) / 100000,
+    lon: Math.round(w.lon * 100000) / 100000,
+  };
+}
+
+/** Verzint een bruikbare naam op basis van type en afstand, bv. "Rondje 8,2 km". */
+function suggestRouteName(type: 'loop' | 'outAndBack', distanceKm: number): string {
+  const typeLabel = type === 'loop' ? 'Rondje' : 'Heen-en-terug';
+  const distanceLabel = distanceKm.toFixed(1).replace('.', ',');
+  return `${typeLabel} ${distanceLabel} km`;
 }
 
 /** Herberekent totalKm van een week op basis van de actuele sessies. */
@@ -126,6 +165,22 @@ export interface SkippedSession {
   skippedAt: string;       // ISO date string
 }
 
+/** Een door de gebruiker bewaarde route, om later opnieuw te lopen. */
+export interface SavedRoute {
+  /** Stabiele id, ook de sleutel in lijsten. */
+  id: string;
+  /** Door de gebruiker te kiezen naam; bij opslaan automatisch voorgesteld. */
+  name: string;
+  createdAt: number;
+  type: 'loop' | 'outAndBack';
+  distanceKm: number;
+  waypoints: RouteWaypoint[];
+  instructions: RouteInstruction[];
+  /** Startpunt, zodat de app kan tonen hoe ver deze route van je vandaan begint. */
+  startLat: number;
+  startLon: number;
+}
+
 export interface ActiveSession {
   session: Session;
   weekNumber: number;
@@ -201,6 +256,23 @@ interface AppState {
   routePlanCount: number;
   /** ISO-datum (maandag) van de week waarin geteld wordt */
   routePlanWeekStart: string | null;
+
+  // Bewaarde routes (gratis limiet op het totale aantal, gepersisteerd)
+  /** Routes die de gebruiker expliciet bewaard heeft, om later opnieuw te lopen. */
+  savedRoutes: SavedRoute[];
+  /**
+   * Bewaart een geplande route onder de opgegeven naam en geeft het bewaarde
+   * object terug. Een lege (of alleen-spaties) naam wordt automatisch
+   * ingevuld op basis van type en afstand. Geeft null terug als de route
+   * geen geldige waypoints/afstand heeft, of als de gratis limiet
+   * (PREMIUM_CONFIG.FREE_SAVED_ROUTES) bereikt is en er geen premium is — de
+   * UI mag dus nooit zelf vooruitlopen op de limiet.
+   */
+  saveRoute: (route: PlannedRoute, name: string) => SavedRoute | null;
+  /** Hernoemt een bewaarde route. Doet niets als het id niet bestaat. */
+  renameSavedRoute: (id: string, name: string) => void;
+  /** Verwijdert een bewaarde route. Doet niets als het id niet bestaat. */
+  deleteSavedRoute: (id: string) => void;
 
   // Hydration: true zodra AsyncStorage geladen is
   _hasHydrated: boolean;
@@ -480,6 +552,7 @@ export const useAppStore = create<AppState>()(
       themePreference: 'system',
       routePlanCount: 0,
       routePlanWeekStart: null,
+      savedRoutes: [],
       _hasHydrated: false,
 
       // Strava-koppeling (offline-first defaults)
@@ -649,6 +722,53 @@ export const useAppStore = create<AppState>()(
         } else {
           set({ routePlanCount: routePlanCount + 1 });
         }
+      },
+
+      saveRoute: (route, name) => {
+        // Zonder waypoints of met een onzinnige afstand is er niets zinnigs
+        // om te bewaren.
+        if (!route.waypoints || route.waypoints.length === 0) return null;
+        if (!Number.isFinite(route.totalDistanceKm) || route.totalDistanceKm <= 0) return null;
+
+        const { savedRoutes, isPremium } = get();
+        if (!canSaveAnotherRoute(savedRoutes.length, isPremium)) return null;
+
+        const trimmedName = name.trim();
+        const start = roundWaypoint(route.waypoints[0]);
+        const saved: SavedRoute = {
+          id:          generateSavedRouteId(),
+          name:        trimmedName.length > 0 ? trimmedName : suggestRouteName(route.type, route.totalDistanceKm),
+          createdAt:   Date.now(),
+          type:        route.type,
+          distanceKm:  route.totalDistanceKm,
+          // Kopie met afgeronde coördinaten (zie roundWaypoint) — de
+          // originele PlannedRoute blijft ongewijzigd, die is nog in gebruik
+          // door de actieve sessie/kaart.
+          waypoints:    route.waypoints.map(roundWaypoint),
+          instructions: route.instructions.map(i => ({ ...i })),
+          startLat:    start.lat,
+          startLon:    start.lon,
+        };
+
+        set({ savedRoutes: [...savedRoutes, saved] });
+        return saved;
+      },
+
+      renameSavedRoute: (id, name) => {
+        const trimmedName = name.trim();
+        set(state => ({
+          savedRoutes: state.savedRoutes.map(r =>
+            r.id === id
+              ? { ...r, name: trimmedName.length > 0 ? trimmedName : suggestRouteName(r.type, r.distanceKm) }
+              : r,
+          ),
+        }));
+      },
+
+      deleteSavedRoute: (id) => {
+        set(state => ({
+          savedRoutes: state.savedRoutes.filter(r => r.id !== id),
+        }));
       },
 
       setHasHydrated: (v) => set({ _hasHydrated: v }),
@@ -1023,6 +1143,7 @@ export const useAppStore = create<AppState>()(
         themePreference:        state.themePreference,
         routePlanCount:         state.routePlanCount,
         routePlanWeekStart:     state.routePlanWeekStart,
+        savedRoutes:            state.savedRoutes,
         stravaConnected:        state.stravaConnected,
         stravaAthleteName:      state.stravaAthleteName,
         stravaAutoUpload:       state.stravaAutoUpload,
@@ -1087,6 +1208,10 @@ export const selectRoutePlansThisWeek = (state: AppState): number => {
   if (state.routePlanWeekStart !== weekStartISO()) return 0;
   return state.routePlanCount;
 };
+
+/** Bewaarde routes, nieuwste eerst. */
+export const selectSavedRoutes = (state: AppState): SavedRoute[] =>
+  [...state.savedRoutes].sort((a, b) => b.createdAt - a.createdAt);
 
 export const selectWeeklyKm = (state: AppState, weekNumber: number): number =>
   state.completedSessions
