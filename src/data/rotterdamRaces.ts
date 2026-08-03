@@ -5,7 +5,13 @@
  * Voeg een nieuwe stad toe door een nieuw object in de juiste provincie te plaatsen.
  * Voeg een nieuwe provincie toe door een nieuw object in de provincies-array van
  * het juiste land te plaatsen.
- * Voeg een nieuw land toe door een nieuw object in COUNTRIES te plaatsen.
+ * Voeg een nieuw land toe door een nieuw object in BUNDLED_COUNTRIES te plaatsen.
+ *
+ * Dit gebundelde bestand is niet meer de enige bron: `raceDataService.ts`
+ * kan een actuelere lijst van een server ophalen en die hier via
+ * `setRaceCountriesOverride()` actief maken (zie dat registratiepatroon
+ * verderop in dit bestand). Wijzigingen hieronder blijven wel altijd het
+ * vangnet voor gebruikers zonder netwerk bij de eerste app-start.
  */
 
 export type RaceDistance = '5km' | '10km' | '15km' | 'half_marathon' | 'marathon';
@@ -1202,24 +1208,79 @@ const BE_PROVINCES: RaceProvince[] = [
   },
 ];
 
-export const COUNTRIES: RaceCountry[] = [
+const BUNDLED_COUNTRIES: RaceCountry[] = [
   { id: 'nederland', name: 'Nederland', provinces: NL_PROVINCES },
   { id: 'belgie', name: 'België', provinces: BE_PROVINCES },
 ];
 
 /**
+ * Backwards-compat export van de gebundelde noodvoorraad. `raceDataService.ts`
+ * (buiten deze werkopdracht, niet aangepast) importeert dit als trap 3 van
+ * zijn drietrapsraket (server > lokale cache > gebundeld) — dat moet ALTIJD
+ * de letterlijke, met de app uitgeleverde lijst zijn, nooit de eventueel
+ * overschreven "geldige" lijst hieronder (dat zou circulair/onjuist zijn: het
+ * definitieve vangnet mag niet zelf van een eerdere serveroverschrijving
+ * afhangen). Nieuwe code gebruikt hiervoor getCountries(), niet dit.
+ */
+export const COUNTRIES: RaceCountry[] = BUNDLED_COUNTRIES;
+
+/**
  * Backwards-compat: PROVINCES bevat alleen de Nederlandse provincies.
  * Bestaande UI (o.a. RacePickerScreen) is oorspronkelijk gebouwd op een
  * provincie > stad-hiërarchie zonder landniveau; deze alias houdt die code
- * werkend. Nieuwe schermen die het landniveau tonen, gebruiken COUNTRIES.
+ * werkend. Nieuwe schermen die het landniveau tonen, gebruiken getCountries().
  */
 export const PROVINCES: RaceProvince[] = NL_PROVINCES;
+
+// ── Overschrijfbare "geldige" lijst (registratiepatroon) ───────────────────
+//
+// raceDataService.ts wil de app een door de server opgehaalde racelijst laten
+// gebruiken in plaats van (of zodra beschikbaar: in aanvulling op) de
+// gebundelde lijst hierboven. Dit bestand mag daarvoor NIETS uit
+// raceDataService.ts importeren: raceDataService importeert zelf al COUNTRIES
+// hierboven, en een import de andere kant op zou een circulaire import
+// opleveren. In React Native/Metro levert zo'n cirkel geen nette foutmelding
+// op tijdens het bundelen, maar een module-binding die op het moment van
+// laden nog `undefined` is — een bug die pas losbarst zodra de code ergens
+// diep in een render aangeroepen wordt, ver weg van de eigenlijke oorzaak.
+// Vandaar dit registratiepatroon: dit bestand houdt zelf een overschrijfbare
+// module-variabele bij en biedt een setter aan; raceDataService roept die
+// setter aan zodra hij een gevalideerd document heeft (server of cache). De
+// afhankelijkheid loopt zo altijd maar één kant op: raceDataService →
+// rotterdamRaces, nooit andersom. Verander dit niet terug naar een directe
+// import, ook niet als dat op het eerste gezicht simpeler lijkt.
+let currentCountries: RaceCountry[] = BUNDLED_COUNTRIES;
+
+/**
+ * Overschrijft de "geldige" racelijst die getAllRaces/getUpcomingRaces/
+ * getRaceById/getCountries teruggeven. `null` zet terug naar de gebundelde
+ * lijst (BUNDLED_COUNTRIES). Bedoeld om uitsluitend door raceDataService.ts
+ * aangeroepen te worden, nooit rechtstreeks door een scherm.
+ *
+ * BEKENDE BEPERKING (bewust, niet vergeten): dit is een kale module-variabele
+ * zonder React-state of subscriptie. Schermen die de lijst tijdens het
+ * RENDEREN ophalen, hertekenen dus niet vanzelf als deze override halverwege
+ * een lopende sessie verandert. In de praktijk wordt deze override alleen bij
+ * app-start gezet (zie refreshRaceData()/reloadRaceDataCache() in
+ * raceDataService.ts, aangeroepen vanuit app/_layout.tsx) en racedata
+ * verandert hooguit wekelijks — dus is dit onzichtbaar: een gebruiker die de
+ * app al open had staan terwijl er toevallig een verse lijst binnenkwam, ziet
+ * de update pas bij de eerstvolgende app-start.
+ */
+export function setRaceCountriesOverride(countries: RaceCountry[] | null): void {
+  currentCountries = countries ?? BUNDLED_COUNTRIES;
+}
+
+/** De op dit moment geldige racelijst: serveroverschrijving indien actief, anders de gebundelde lijst. */
+export function getCountries(): RaceCountry[] {
+  return currentCountries;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Alle wedstrijden plat als array (inclusief sub-races), over alle landen */
 export function getAllRaces(): Race[] {
-  return COUNTRIES.flatMap(country =>
+  return getCountries().flatMap(country =>
     country.provinces.flatMap(p =>
       p.cities.flatMap(c =>
         c.races.flatMap(r => r.subRaces ? r.subRaces : [r]),
@@ -1273,4 +1334,13 @@ export function schemaStartDate(raceDate: string, totalWeeks: number): Date {
 
 // Backwards-compat alias voor buildRacePlan
 export type RotterdamRace = Race;
-export const ROTTERDAM_RACES = getAllRaces();
+
+// LET OP: hier stond eerder ook `export const ROTTERDAM_RACES = getAllRaces();`
+// — een momentopname op moduleniveau die precies één keer wordt uitgerekend
+// bij het laden van de module en daarna nooit meer meebeweegt, ook niet als
+// setRaceCountriesOverride() later een serverlijst actief maakt. De enige
+// consument (app/(onboarding)/voice.tsx) is omgezet naar getRaceById(), dus
+// deze export is verwijderd in plaats van van een waarschuwing voorzien: een
+// bevroren snapshot-export laten staan zou de volgende lezer alsnog kunnen
+// verleiden hem opnieuw te gebruiken en zo precies de bug terug te halen die
+// deze werkopdracht oplost.

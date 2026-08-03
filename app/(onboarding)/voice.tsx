@@ -11,7 +11,7 @@ import * as voiceService from '../../src/services/voiceService';
 import { VOICES, type VoiceType } from '../../src/config/voiceConfig';
 import type { GoalType } from '../../src/data/trainingPlans';
 import { DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
-import { ROTTERDAM_RACES } from '../../src/data/rotterdamRaces';
+import { getRaceById } from '../../src/data/rotterdamRaces';
 import { buildRacePlan } from '../../src/data/buildRacePlan';
 import { usePremium } from '../../src/hooks/usePremium';
 import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
@@ -80,7 +80,7 @@ export default function VoiceScreen() {
 
     // Als wedstrijdmodus: zoek de race op en bouw direct het plan
     if (mode === 'race' && raceId) {
-      const race = ROTTERDAM_RACES.find(r => r.id === raceId);
+      const race = getRaceById(raceId);
       if (race) {
         const plan = buildRacePlan(race);
         if (plan) setRacePlan(plan);

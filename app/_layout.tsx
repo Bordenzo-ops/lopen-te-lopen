@@ -25,6 +25,7 @@ import {
 import { onAuthChange } from '../src/services/authService';
 import { retryStravaQueue } from '../src/services/stravaService';
 import { maybeAutoUpdatePack } from '../src/services/voicePackService';
+import { refreshRaceData } from '../src/services/raceDataService';
 import { flushEvents } from '../src/services/analyticsService';
 import { initCrashReporting, CrashReportingBoundary } from '../src/services/crashReporting';
 import { AnimatedSplash } from '../src/components/AnimatedSplash';
@@ -94,6 +95,15 @@ export default function RootLayout() {
     });
     return () => sub.remove();
   }, [activeVoiceType]);
+
+  // Ververst de racelijst stil op de achtergrond bij app-start (de service
+  // bewaakt zelf zijn eigen ophaalinterval, dus hier geen extra logica nodig
+  // — hooguit één keer per dag gaat dit ook echt het netwerk op). Faalt stil
+  // naar de bestaande cache of de gebundelde lijst, blokkeert de UI nooit,
+  // zelfde filosofie als maybeAutoUpdatePack hierboven.
+  useEffect(() => {
+    void refreshRaceData().catch(() => {});
+  }, []);
 
   // Best-effort flush van gebufferde analytics-events: bij app-start en
   // telkens als de app naar de voorgrond komt (dan is er vaak weer netwerk en

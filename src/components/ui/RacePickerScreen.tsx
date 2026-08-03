@@ -19,7 +19,7 @@ import {
 import { palette, typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
 import {
-  COUNTRIES, weeksUntilRace, weeksUntilLabel, formatRaceDate,
+  getCountries, weeksUntilRace, weeksUntilLabel, formatRaceDate,
   type Race, type RaceCity, type RaceProvince, type RaceCountry, type RaceDistance,
 } from '../../data/rotterdamRaces';
 import { buildRacePlan, canTrainForRace, type RacePlan } from '../../data/buildRacePlan';
@@ -741,7 +741,7 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
   // filters blijft de volledige (ook nog lege) hiërarchie zichtbaar, zoals de
   // voorbereide Belgische steden.
   const filteredCountries = useMemo(() => {
-    return COUNTRIES
+    return getCountries()
       .filter(country => selectedCountries.size === 0 || selectedCountries.has(country.id))
       .map(country => ({
         ...country,
@@ -997,7 +997,7 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
             </View>
 
             <View style={styles.filterChipsRow}>
-              {COUNTRIES.map(country => {
+              {getCountries().map(country => {
                 const selected = selectedCountries.has(country.id);
                 return (
                   <TouchableOpacity
