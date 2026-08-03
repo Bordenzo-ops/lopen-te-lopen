@@ -20,7 +20,7 @@ export const PREMIUM_INTRO_CAMPAIGN_LABEL = 'ROAD TO ROTTERDAM';
 export const PREMIUM_INTRO_TITLE = 'Jij over de finish op de Coolsingel.';
 
 export const PREMIUM_INTRO_SUBTITLE =
-  '11 april 2027 — het complete marathonprogramma dat je erheen brengt.';
+  '11 april 2027: het complete marathonprogramma dat je erheen brengt.';
 
 /** Icoon-key per voordeel-tegel; wordt in het scherm gemapt naar de lucide-component. */
 export type PremiumIntroIcon = 'target' | 'headphones' | 'map' | 'trending-up';
@@ -62,7 +62,7 @@ export const PREMIUM_INTRO_GUARANTEE_TEXT =
 export const PREMIUM_INTRO_PRICE_LINE = '14 dagen gratis, daarna €49 per jaar';
 
 export const PREMIUM_INTRO_PRICE_SUBLINE =
-  'Dat is €4,08 per maand — minder dan één paar sokken.';
+  'Dat is €4,08 per maand, minder dan één paar sokken.';
 
 export const PREMIUM_INTRO_CTA_PRIMARY = 'Probeer 14 dagen gratis';
 

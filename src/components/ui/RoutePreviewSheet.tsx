@@ -122,7 +122,13 @@ export function RoutePreviewSheet({
         {/* Handle + sluitknop */}
         <View style={styles.sheetHeader}>
           <View style={styles.handle} />
-          <TouchableOpacity style={styles.closeBtn} onPress={onClose} hitSlop={12}>
+          <TouchableOpacity
+            style={styles.closeBtn}
+            onPress={onClose}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Sluiten"
+          >
             <X size={20} color={colors.textSecondary} strokeWidth={2} />
           </TouchableOpacity>
         </View>

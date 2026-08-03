@@ -148,7 +148,7 @@ export function HeartRateMonitorSheet({
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.pairedName}>{deviceName ?? 'Gekoppelde hartslagmeter'}</Text>
-                <Text style={styles.pairedSub}>Gekoppeld — wordt verbonden bij de start van een run</Text>
+                <Text style={styles.pairedSub}>Gekoppeld, wordt verbonden bij de start van een run</Text>
               </View>
             </View>
           ) : (
@@ -169,7 +169,7 @@ export function HeartRateMonitorSheet({
             <View style={styles.testRow}>
               <ActivityIndicator size="small" color={colors.brandPrimary} />
               <Text style={styles.testText}>
-                {testBpm != null ? `Verbonden — ${testBpm} bpm` : 'Verbinden...'}
+                {testBpm != null ? `Verbonden, ${testBpm} bpm` : 'Verbinden...'}
               </Text>
             </View>
           )}

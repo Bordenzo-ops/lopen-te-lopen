@@ -369,7 +369,7 @@ const planHalfMarathon: TrainingWeek[] = [
   { weekNumber: 19, totalKm: 12, focus: 'Race-week voorbereiding', sessions: [
     s('hm-19-1', 1, 'easy',  5, 'Z2', 'Duurloop', 'Vijf km. Helemaal ontspannen.'),
     s('hm-19-2', 3, 'easy',  4, 'Z1', 'Activeringsloop', 'Vier km heel rustig. Benen losmaken.'),
-    s('hm-19-3', 6, 'easy',  3, 'Z2', 'Dag-voor-race loopje', 'Drie km makkelijk. Volgende week is het zover — fris blijven.'),
+    s('hm-19-3', 6, 'easy',  3, 'Z2', 'Dag-voor-race loopje', 'Drie km makkelijk. Volgende week is het zover, fris blijven.'),
   ]},
   { weekNumber: 20, totalKm: 27, focus: 'RACE WEEK', sessions: [
     s('hm-20-1', 1, 'easy',  3, 'Z1', 'Rustig loopje', 'Drie km heel rustig. Race is zondag.'),
@@ -495,7 +495,7 @@ const planMarathon: TrainingWeek[] = [
   { weekNumber: 23, totalKm: 14, focus: 'Race-week voorbereiding', sessions: [
     s('m-23-1', 1, 'easy',  6, 'Z2', 'Duurloop', 'Zes km. Helemaal ontspannen.'),
     s('m-23-2', 3, 'easy',  5, 'Z1', 'Activeringsloop', 'Vijf km heel rustig. Benen losmaken.'),
-    s('m-23-3', 6, 'easy',  3, 'Z2', 'Dag-voor-race loopje', 'Drie km makkelijk. Volgende week is het zover — fris blijven.'),
+    s('m-23-3', 6, 'easy',  3, 'Z2', 'Dag-voor-race loopje', 'Drie km makkelijk. Volgende week is het zover, fris blijven.'),
   ]},
   { weekNumber: 24, totalKm: 48, focus: 'RACE WEEK', sessions: [
     s('m-24-1', 1, 'easy',  3, 'Z1', 'Rustig loopje', 'Drie km heel rustig. Race is zondag.'),

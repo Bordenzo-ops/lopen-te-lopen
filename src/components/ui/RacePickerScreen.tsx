@@ -516,7 +516,13 @@ function ConfirmModal({
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.modalSheet}>
-            <TouchableOpacity style={styles.modalClose} onPress={onCancel} hitSlop={12}>
+            <TouchableOpacity
+              style={styles.modalClose}
+              onPress={onCancel}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Sluiten"
+            >
               <X size={20} color={colors.textSecondary} strokeWidth={2} />
             </TouchableOpacity>
 
@@ -889,7 +895,13 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
       {/* Header */}
       <View style={styles.header}>
         {onBack && (
-          <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={12}>
+          <TouchableOpacity
+            onPress={onBack}
+            style={styles.backBtn}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Terug"
+          >
             <ChevronLeft size={22} color={colors.textSecondary} strokeWidth={2} />
           </TouchableOpacity>
         )}

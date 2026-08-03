@@ -69,7 +69,11 @@ export const colors = {
   // Text
   textPrimary:   palette.neutral[50],
   textSecondary: palette.neutral[400],
-  textTertiary:  palette.neutral[500],
+  // Losse waarde i.p.v. palette.neutral[500]: die laatste geeft slechts 3,04:1
+  // contrast op bgCard (WCAG AA vereist 4,5:1 voor gewone tekst). Bewust niet
+  // palette.neutral[500] zelf aangepast, want die wordt ook los gebruikt in de
+  // vaste (niet-thema) merkkleuren van de deelkaarten en het premium-intro-scherm.
+  textTertiary:  '#8B95A4',
   textInverse:   palette.neutral[950],
 
   // Brand

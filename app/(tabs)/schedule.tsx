@@ -311,7 +311,7 @@ export default function ScheduleScreen() {
             />
             <Text style={styles.daysPickerNote}>
               De lange duurloop komt op je laatste trainingsdag. Kies je meer dagen,
-              dan vullen we de rest met rustige bonusloopjes — die mag je zonder
+              dan vullen we de rest met rustige bonusloopjes, die mag je zonder
               gevolgen overslaan.
             </Text>
           </View>
