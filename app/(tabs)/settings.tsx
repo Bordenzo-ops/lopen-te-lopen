@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, Switch, TouchableOpacity, StyleSheet, ScrollView,
-  Alert, TextInput, KeyboardAvoidingView, Platform, Linking,
+  Alert, TextInput, KeyboardAvoidingView, Platform, Linking, Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone, Cloud, Activity, Bell, HeartPulse, ChevronRight, Mail, LogOut, Crown } from 'lucide-react-native';
@@ -216,15 +216,23 @@ export default function SettingsScreen() {
   // null e-mailadres betekent: geen sessie of nog anoniem.
   const [accountEmail, setAccountEmail] = useState<string | null>(null);
   const [accountBusy, setAccountBusy] = useState(false);
+  // Support-ID: dezelfde id als de Supabase-user-id, die purchaseService
+  // (identifyUser/init) als RevenueCat App User ID gebruikt. Alleen gevuld
+  // zodra er een echte, ingelogde sessie is (niet anoniem).
+  const [accountUserId, setAccountUserId] = useState<string | null>(null);
 
   const refreshAccountStatus = useCallback(async () => {
     try {
       const session = await getCurrentSession();
       const anon = await checkIsAnonymous();
-      setAccountEmail(session && !anon ? (session.user.email ?? null) : null);
+      // Eén keer afleiden wie er ingelogd is; een anonieme sessie telt niet mee.
+      const user = session && !anon ? session.user : null;
+      setAccountEmail(user?.email ?? null);
+      setAccountUserId(user?.id ?? null);
     } catch {
       // Stil falen: laat het scherm gewoon "niet ingelogd" tonen
       setAccountEmail(null);
+      setAccountUserId(null);
     }
   }, []);
 
@@ -270,6 +278,19 @@ export default function SettingsScreen() {
         },
       ],
     );
+  }
+
+  // Support-ID delen: puur een gemaksknop rond het OS-deelvenster. Delen is
+  // optioneel, dus bij een fout (bijv. gebruiker annuleert) niets melden.
+  async function handleShareSupportId() {
+    if (!accountUserId) return;
+    try {
+      await Share.share({
+        message: `Mijn support-ID voor Lopen te Lopen: ${accountUserId}`,
+      });
+    } catch {
+      // Stil falen, net als de rest van dit scherm
+    }
   }
 
   // Open de store-beheerpagina om van plan te wisselen of op te zeggen. Van
@@ -706,7 +727,7 @@ export default function SettingsScreen() {
                         ? 'Premium vereist voor de coachstem'
                         : voicePackInfo.downloaded
                           ? `Coachstem: gedownload ✓ (${voiceDefinition(activeVoiceType).name}, ${getRemotePackSizeLabel()})`
-                          : 'Telefoonstem — stempakket nog niet gedownload'}
+                          : 'Telefoonstem, stempakket nog niet gedownload'}
                     </Text>
                     {hasAccess && (
                       voicePackInfo.downloaded ? (
@@ -723,7 +744,7 @@ export default function SettingsScreen() {
                               <Text style={styles.voicePackDownloadBtnText}>
                                 {voicePackBusy
                                   ? `Bijwerken... ${voicePackProgressPct ?? 0}%`
-                                  : 'Nieuwe zinnen beschikbaar — bijwerken'}
+                                  : 'Nieuwe zinnen beschikbaar, bijwerken'}
                               </Text>
                             </TouchableOpacity>
                           )}
@@ -1019,6 +1040,38 @@ export default function SettingsScreen() {
                     </View>
                   </View>
                   <Divider />
+                  {accountUserId ? (
+                    <>
+                      {/* Support-ID: dit is dezelfde id die purchaseService als
+                          RevenueCat App User ID gebruikt (identifyUser/init roepen
+                          Purchases.logIn/Purchases.configure hiermee aan). Zo kan
+                          de maker in het RevenueCat-dashboard handmatig een
+                          gratis premium-licentie toekennen aan een supporter,
+                          ook als het e-mailadres (bijv. bij Aanmelden met Apple)
+                          niets zegt. */}
+                      <View style={styles.supportIdBlock}>
+                        <Text style={styles.fieldNote}>
+                          Wil de maker je een keer bedanken met gratis premium? Stuur hem dit
+                          nummer — hij kan er verder niets mee zonder dat jij het deelt.
+                        </Text>
+                        <View style={styles.supportIdBox}>
+                          <Text style={styles.supportIdText} selectable>
+                            {accountUserId}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          onPress={handleShareSupportId}
+                          style={styles.supportIdShareBtn}
+                          activeOpacity={0.85}
+                          accessibilityRole="button"
+                          accessibilityLabel="Support-ID delen"
+                        >
+                          <Text style={styles.accountLoginBtnText}>Support-ID delen</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Divider />
+                    </>
+                  ) : null}
                   <TouchableOpacity
                     onPress={handleSignOut}
                     style={styles.dangerRow}
@@ -1294,6 +1347,25 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing[2], paddingVertical: spacing[1.5],
   },
   accountBtnFlex: { flex: 1, alignItems: 'center' },
+  supportIdBlock: {
+    gap: spacing[1],
+    paddingHorizontal: spacing[2], paddingVertical: spacing[1.5],
+  },
+  supportIdBox: {
+    backgroundColor: colors.bgCard, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+    padding: spacing[1.5],
+  },
+  supportIdText: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
+    color: colors.textSecondary, lineHeight: typography.fontSize.xs * 1.5,
+  },
+  supportIdShareBtn: {
+    borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderDefault,
+    backgroundColor: colors.bgSurface,
+    paddingHorizontal: spacing[1.5], paddingVertical: spacing[1],
+    alignItems: 'center', justifyContent: 'center',
+  },
   accountLoginBtn: {
     borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderDefault,
     backgroundColor: colors.bgSurface,
