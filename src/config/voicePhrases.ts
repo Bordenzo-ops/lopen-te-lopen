@@ -110,6 +110,23 @@ const ENC_MESSAGES = [
   'Blijf ademen, blijf lopen, goed bezig.',
   'Kanjer! Nog even volhouden.',
   'Mooi ritme, ga zo verder.',
+  // Index 24-39: fase F-uitbreiding (CP6, creditplan aug 2026).
+  'Heerlijk om te zien, ga zo door.',
+  'Je haalt dit met gemak.',
+  'Lekker bezig, blijf ontspannen lopen.',
+  'Dit is precies je ritme, vasthouden.',
+  'Sterk! Je hebt dit helemaal onder controle.',
+  'Mooi werk, je wordt met elke stap sterker.',
+  'Blijf geloven in jezelf, het gaat prima.',
+  'Wat een doorzettingsvermogen, ga zo verder.',
+  'Je bent goed op weg, hou dit tempo vast.',
+  'Fijn gelopen tot nu toe, blijf zo.',
+  'Elke stap brengt je dichterbij, sterk!',
+  'Je maakt indruk, hou dit vol.',
+  'Rustig en sterk, precies goed.',
+  'Vertrouw op je benen, het gaat goed.',
+  'Je loopt met gemak, blijf zo lekker bezig.',
+  'Genieten van dit tempo, hou het erin.',
 ];
 
 // ── 4/5. Resterend / afgelegd — stappen van 0,5 km, 0,5..42 km ──────────────
@@ -134,29 +151,37 @@ const ZONE_DESCRIPTIONS: Record<string, string> = {
 };
 const ZONE_IDS = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5'] as const;
 
-// ── 8. Hartslagcoaching — drie varianten per type (useHeartRateCoaching) ───
+// ── 8. Hartslagcoaching — varianten per type (useHeartRateCoaching) ────────
 // Variant 0 van elk type is de OORSPRONKELIJKE tekst en blijft letterlijk
 // staan (clip al gegenereerd als hr_high/hr_low/hr_ok — wordt bij de
 // hernummering naar hr_{type}_0 opnieuw aangemaakt, zie generatiescript).
-// Varianten 1/2 zijn de fase E-uitbreiding: zelfde strekking, andere
-// woorden, zodat een gebruiker die vaker dezelfde coaching-melding hoort
-// niet steeds identieke zinnen krijgt. useHeartRateCoaching.ts rouleert
-// hierdoor per type met een eigen teller.
-const HR_TEXTS: Record<'high' | 'low' | 'ok', [string, string, string]> = {
+// Varianten 1/2 zijn de fase E-uitbreiding, 3/4 de fase F-uitbreiding (CP6):
+// zelfde strekking, andere woorden, zodat een gebruiker die vaker dezelfde
+// coaching-melding hoort niet steeds identieke zinnen krijgt.
+// useHeartRateCoaching.ts rouleert hierdoor per type met een eigen teller;
+// hrUtterance hieronder klemt modulo de daadwerkelijke lijstlengte, dus een
+// lijst verlengen vergt verder geen codewijziging.
+const HR_TEXTS: Record<'high' | 'low' | 'ok', string[]> = {
   high: [
     'Je hartslag is wat hoog voor deze training. Doe een stapje terug.',
     'Je zit boven je doelzone. Rustig aan, bouw het tempo af.',
     'Even gas terugnemen, je hartslag loopt op. Zoek je ritme weer.',
+    'Je hartslag piekt net iets te veel. Haal de vaart er even uit.',
+    'Bouw het rustig af, je hartslag mag wat zakken.',
   ],
   low: [
     'Je hebt nog ruimte. Je mag iets versnellen.',
     'Je hartslag is nog laag. Je kunt best wat sneller.',
     'Er zit meer in. Voel je vrij om te versnellen.',
+    'Je zit ruim onder je zone. Zet er gerust een tandje bij.',
+    'Nog volop energie over, je mag best wat harder.',
   ],
   ok: [
     'Mooi zo, precies goed.',
     'Prima tempo, dit is precies je zone.',
     'Goed zo, je zit weer helemaal in het juiste ritme.',
+    'Precies goed zo, hou deze zone vast.',
+    'Dit is je zone, blijf lekker zo lopen.',
   ],
 };
 
@@ -246,26 +271,47 @@ const INTRO_TEXTS: Record<'easy' | 'tempo' | 'long' | 'cross', string> = {
 // KM_RANGE_MAX, stappen van 0,5 km) — vergt dus geen eigen grenzen/helpers.
 
 // ── 15b. Dagdeel-begroeting bij sessiestart — fase E-uitbreiding (CP4) ──────
-// Twee tekstvarianten per dagdeel zodat de begroeting niet elke run identiek
-// klinkt (zelfde rouleeropzet als ENC_MESSAGES/HR_TEXTS). Het dagdeel zelf
-// wordt bepaald door de aanroeper (new Date().getHours(), zie active.tsx) —
-// hier alleen de teksten en de grenzen in greetingForSessionStart hieronder.
-const GREET_TEXTS: Record<'morning' | 'afternoon' | 'evening', [string, string]> = {
-  morning:   ['Goedemorgen! Klaar voor je ochtendrun?', 'Goedemorgen! Tijd om de dag sportief te beginnen.'],
-  afternoon: ['Goedemiddag! Klaar voor je training?', 'Goedemiddag! Mooi moment voor een run.'],
-  evening:   ['Goedenavond! Klaar om nog even te lopen?', 'Goedenavond! Laten we deze dag sportief afsluiten.'],
+// Tekstvarianten per dagdeel zodat de begroeting niet elke run identiek
+// klinkt (zelfde rouleeropzet als ENC_MESSAGES/HR_TEXTS). Index 0/1 zijn de
+// fase E-uitbreiding, 2/3 de fase F-uitbreiding (CP6). Het dagdeel zelf wordt
+// bepaald door de aanroeper (new Date().getHours(), zie active.tsx) — hier
+// alleen de teksten en de grenzen in greetingForSessionStart hieronder, die
+// modulo de daadwerkelijke lijstlengte klemt.
+const GREET_TEXTS: Record<'morning' | 'afternoon' | 'evening', string[]> = {
+  morning: [
+    'Goedemorgen! Klaar voor je ochtendrun?',
+    'Goedemorgen! Tijd om de dag sportief te beginnen.',
+    'Goedemorgen! Mooi begin van de dag, deze training.',
+    'Goedemorgen! Frisse lucht en een goede loop, daar gaan we.',
+  ],
+  afternoon: [
+    'Goedemiddag! Klaar voor je training?',
+    'Goedemiddag! Mooi moment voor een run.',
+    'Goedemiddag! Even je hoofd leegmaken met een training.',
+    'Goedemiddag! Tijd voor een frisse onderbreking van de dag.',
+  ],
+  evening: [
+    'Goedenavond! Klaar om nog even te lopen?',
+    'Goedenavond! Laten we deze dag sportief afsluiten.',
+    'Goedenavond! Mooi moment om de dag uit te lopen.',
+    'Goedenavond! Nog even bewegen voor het rustig wordt.',
+  ],
 };
 
-// ── 15c. Finish-afsluiters — fase E-uitbreiding (CP4) ───────────────────────
+// ── 15c. Finish-afsluiters — fase E-uitbreiding (CP4) + fase F (CP6) ───────
 // Index 0 ("Geweldig gedaan!") is de OORSPRONKELIJKE tekst en blijft
 // letterlijk staan — zijn clip-id is en blijft 'well_done' (zie FIXED_TEXTS),
-// niet hernoemen. Index 1-3 zijn de nieuwe varianten (finish_var_1..3, zie
-// allPhrases hieronder); finishUtterance rouleert erover.
-const FINISH_CLOSERS: [string, string, string, string] = [
+// niet hernoemen. Index 1+ zijn de varianten (finish_var_1.., zie allPhrases
+// hieronder); finishUtterance rouleert modulo de daadwerkelijke lijstlengte.
+const FINISH_CLOSERS: string[] = [
   'Geweldig gedaan!',
   'Wat een prestatie!',
   'Dat heb je verdiend!',
   'Knap gelopen!',
+  'Sterk staaltje werk!',
+  'Dat was topsport van jou!',
+  'Mooi afgerond, goed gedaan!',
+  'Weer een streepje erbij, knap!',
 ];
 
 // ── 15. Race-felicitaties — "Gefeliciteerd! Je hebt {race} uitgelopen!" ────
@@ -311,28 +357,36 @@ const IV_FIXED_TEXTS: Record<string, string> = {
   iv_cooldown: 'Dat waren al je intervallen, sterk gewerkt. We sluiten af met een rustige cooling-down. Loop losjes uit.',
 };
 
-const IV_GET_READY_TEXTS: [string, string] = [
+const IV_GET_READY_TEXTS: string[] = [
   'Bijna. Maak je klaar voor de volgende versnelling.',
   'Zet je schrap, we gaan zo weer aan.',
+  'Nog even, dan gaan we er weer voor.',
+  'Klaar maken, de volgende komt eraan.',
 ];
 
-const IV_GO_TEXTS: [string, string, string, string] = [
+const IV_GO_TEXTS: string[] = [
   'Gaan! Zet aan.',
   'Nu versnellen. Sterk en soepel.',
   'Volle focus, dit is jouw interval.',
   'Aanzetten! Voel de kracht in je benen.',
+  'Erop! Laat zien wat je kan.',
+  'Nu vol gas, dit is jouw moment.',
 ];
 
-const IV_WORK_END_TEXTS: [string, string] = [
+const IV_WORK_END_TEXTS: string[] = [
   'Nog tien seconden. Volhouden.',
   'Bijna, laatste tien tellen. Doorzetten.',
+  'Tien seconden nog, geef alles.',
+  'Bijna klaar met deze, hou vol.',
 ];
 
-const IV_RECOVER_TEXTS: [string, string, string, string] = [
+const IV_RECOVER_TEXTS: string[] = [
   'Mooi. Loop nu rustig uit en herstel.',
   'Goed gedaan. Adem diep en laat je hartslag zakken.',
   'Sterk. Dribbel rustig door, klaar voor de volgende.',
   'Knap. Even bijkomen, schud je armen los.',
+  'Sterk werk. Rustig ademen, laat het los.',
+  'Goed zo. Loop rustig door en herstel even.',
 ];
 
 // ── 17. Warming-up & cooling-down — losse routine (CP3) ─────────────────────
@@ -437,7 +491,7 @@ export function allPhrases(): CatalogPhrase[] {
     phrases.push({ id: `zone_${zx}`, text: `Zone ${i + 1}. ${ZONE_DESCRIPTIONS[zx]}` });
   });
 
-  // 8. Hartslagcoaching — drie varianten per type
+  // 8. Hartslagcoaching — varianten per type
   (Object.keys(HR_TEXTS) as Array<keyof typeof HR_TEXTS>).forEach(key => {
     HR_TEXTS[key].forEach((text, i) => {
       phrases.push({ id: `hr_${key}_${i}`, text });
@@ -604,11 +658,12 @@ export function halfwayUtterance(remainingKm: number): PhraseUtterance {
  * (zie TIME_FINE_MAX/TIME_STEP_ABOVE), de fallback-tijd blijft exact
  * (minuten + seconden, huidig gedrag).
  *
- * `variant` rouleert de afsluitzin (0 = "Geweldig gedaan!"/well_done, 1-3 de
- * fase E-varianten finish_var_1..3) zodat een gebruiker die vaak loopt niet
- * elke keer exact dezelfde felicitatie hoort — zie CP4 in
+ * `variant` rouleert de afsluitzin (0 = "Geweldig gedaan!"/well_done, 1+ de
+ * varianten finish_var_1..) zodat een gebruiker die vaak loopt niet elke
+ * keer exact dezelfde felicitatie hoort — zie CP4/CP6 in
  * Elevenlabs-creditplan-aug-2026.md. De aanroeper (useVoiceGuidance) geeft
- * hiervoor het aantal voltooide sessies mee; deze functie klemt zelf modulo 4.
+ * hiervoor het aantal voltooide sessies mee; deze functie klemt zelf modulo
+ * de daadwerkelijke lijstlengte.
  */
 export function finishUtterance(
   distanceKm: number,
@@ -629,7 +684,7 @@ export function finishUtterance(
   const secs = durationSeconds % 60;
   const timeStr = secs > 0 ? `${mins} minuten en ${secs} seconden` : `${mins} minuten`;
 
-  const idx = ((variant % 4) + 4) % 4;
+  const idx = ((variant % FINISH_CLOSERS.length) + FINISH_CLOSERS.length) % FINISH_CLOSERS.length;
   const closerId = idx === 0 ? 'well_done' : `finish_var_${idx}`;
   const closerText = FINISH_CLOSERS[idx];
 
@@ -657,8 +712,9 @@ export function zoneUtterance(zone: string): PhraseUtterance {
  * functie nooit een niet-bestaande clip-id kan opleveren.
  */
 export function hrUtterance(kind: 'high' | 'low' | 'ok', variant: number = 0): PhraseUtterance {
-  const idx = ((variant % 3) + 3) % 3;
-  return { ids: [`hr_${kind}_${idx}`], fallbackText: HR_TEXTS[kind][idx] };
+  const texts = HR_TEXTS[kind];
+  const idx = ((variant % texts.length) + texts.length) % texts.length;
+  return { ids: [`hr_${kind}_${idx}`], fallbackText: texts[idx] };
 }
 
 /**
@@ -735,8 +791,9 @@ export function previewUtterance(): PhraseUtterance {
 export function greetingForSessionStart(hour: number, variant: number = 0): PhraseUtterance {
   const period: 'morning' | 'afternoon' | 'evening' =
     hour >= 5 && hour < 12 ? 'morning' : hour >= 12 && hour < 18 ? 'afternoon' : 'evening';
-  const idx = ((variant % 2) + 2) % 2;
-  return { ids: [`greet_${period}_${idx}`], fallbackText: GREET_TEXTS[period][idx] };
+  const texts = GREET_TEXTS[period];
+  const idx = ((variant % texts.length) + texts.length) % texts.length;
+  return { ids: [`greet_${period}_${idx}`], fallbackText: texts[idx] };
 }
 
 /**
@@ -844,7 +901,8 @@ export function intervalCueUtterance(
       return { ids: ['iv_warmup'], fallbackText: IV_FIXED_TEXTS.iv_warmup };
 
     case 'getReady': {
-      const idx = ((variant % 2) + 2) % 2;
+      const n = IV_GET_READY_TEXTS.length;
+      const idx = ((variant % n) + n) % n;
       return { ids: [`iv_get_ready_${idx}`], fallbackText: IV_GET_READY_TEXTS[idx] };
     }
 
@@ -855,7 +913,8 @@ export function intervalCueUtterance(
           fallbackText: `${IV_COUNTDOWN_FALLBACK} ${IV_FIXED_TEXTS.iv_go_last}`,
         };
       }
-      const idx = ((variant % 4) + 4) % 4;
+      const n = IV_GO_TEXTS.length;
+      const idx = ((variant % n) + n) % n;
       return {
         ids: ['iv_countdown', `iv_go_${idx}`],
         fallbackText: `${IV_COUNTDOWN_FALLBACK} ${IV_GO_TEXTS[idx]}`,
@@ -866,12 +925,14 @@ export function intervalCueUtterance(
       return { ids: ['iv_work_half'], fallbackText: IV_FIXED_TEXTS.iv_work_half };
 
     case 'workEnd': {
-      const idx = ((variant % 2) + 2) % 2;
+      const n = IV_WORK_END_TEXTS.length;
+      const idx = ((variant % n) + n) % n;
       return { ids: [`iv_work_end_${idx}`], fallbackText: IV_WORK_END_TEXTS[idx] };
     }
 
     case 'recover': {
-      const idx = ((variant % 4) + 4) % 4;
+      const n = IV_RECOVER_TEXTS.length;
+      const idx = ((variant % n) + n) % n;
       return { ids: [`iv_recover_${idx}`], fallbackText: IV_RECOVER_TEXTS[idx] };
     }
 
