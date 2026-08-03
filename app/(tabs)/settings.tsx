@@ -4,7 +4,7 @@ import {
   Alert, TextInput, KeyboardAvoidingView, Platform, Linking, Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone, Cloud, Activity, Bell, HeartPulse, ChevronRight, Mail, LogOut, Crown } from 'lucide-react-native';
+import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone, Cloud, Activity, Bell, HeartPulse, ChevronRight, Mail, LogOut, Crown, Info } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
@@ -28,6 +28,7 @@ import { connectStrava, disconnectStrava, isStravaConfigured } from '../../src/s
 import { enableHealthConnect, isHealthConnectAvailable } from '../../src/services/healthConnectService';
 import { enableHealthKit, isHealthKitAvailable } from '../../src/services/healthKitService';
 import { HeartRateMonitorSheet } from '../../src/components/ui/HeartRateMonitorSheet';
+import { CoachExplainerSheet } from '../../src/components/ui/CoachExplainerSheet';
 import {
   requestNotificationPermission,
   scheduleTrainingReminders,
@@ -202,6 +203,7 @@ export default function SettingsScreen() {
   const hrMonitorDeviceName = useAppStore(s => s.hrMonitorDeviceName);
   const setHrMonitorDevice  = useAppStore(s => s.setHrMonitorDevice);
   const [showHrSheet, setShowHrSheet] = useState(false);
+  const [showCoachExplainer, setShowCoachExplainer] = useState(false);
   const autoPauseEnabled    = useAppStore(s => s.autoPauseEnabled);
   const setAutoPauseEnabled = useAppStore(s => s.setAutoPauseEnabled);
   const completedSessions   = useAppStore(s => s.completedSessions);
@@ -670,6 +672,21 @@ export default function SettingsScreen() {
                   thumbColor={profile.voiceGuidance ? colors.brandPrimary : colors.textTertiary}
                 />
               </View>
+              <Divider />
+              <TouchableOpacity
+                style={styles.switchRow}
+                onPress={() => setShowCoachExplainer(true)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Wat doet je coach tijdens het lopen?"
+              >
+                <Info size={18} color={colors.textSecondary} strokeWidth={2} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.switchLabel}>Wat doet je coach tijdens het lopen?</Text>
+                  <Text style={styles.switchSub}>Een kort overzicht van wat je hoort en voelt</Text>
+                </View>
+                <ChevronRight size={16} color={colors.textTertiary} strokeWidth={2} />
+              </TouchableOpacity>
               <Divider />
               <View style={styles.switchRow}>
                 <Activity size={18} color={colors.textSecondary} strokeWidth={2} />
@@ -1152,6 +1169,11 @@ export default function SettingsScreen() {
         onClose={() => setShowHrSheet(false)}
         onPair={(id, name) => setHrMonitorDevice(id, name)}
         onUnpair={() => setHrMonitorDevice(null, null)}
+      />
+
+      <CoachExplainerSheet
+        visible={showCoachExplainer}
+        onClose={() => setShowCoachExplainer(false)}
       />
     </SafeAreaView>
   );

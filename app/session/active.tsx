@@ -27,6 +27,7 @@ import { sessionIntroUtterance, intervalIntroUtterance, raceFinishUtterance } fr
 import { buildIntervalSegments, intervalStateAt } from '../../src/data/intervals';
 import { RoutePreviewSheet } from '../../src/components/ui/RoutePreviewSheet';
 import { SessionTypeSheet } from '../../src/components/ui/SessionTypeSheet';
+import { CoachExplainerSheet } from '../../src/components/ui/CoachExplainerSheet';
 import { Button } from '../../src/components/ui/Button';
 import { LiveRouteMap } from '../../src/components/ui/LiveRouteMap';
 import { NextTurnBanner } from '../../src/components/ui/NextTurnBanner';
@@ -238,6 +239,10 @@ export default function ActiveSessionScreen() {
     !hasAccess && routePlansThisWeek >= PREMIUM_CONFIG.FREE_ROUTE_PLANS_PER_WEEK;
   const canUsePlanner = hasAccess || !routeLimitReached;
   const [showRouteQuestion, setShowRouteQuestion] = useState(false);
+  // Uitlegscherm "Wat kun je verwachten van je coach?": alleen relevant terwijl
+  // er nog gewacht wordt op GPS/route (zie de render hieronder), vandaar hier
+  // en niet bij de andere sheets verderop in dit bestand.
+  const [showCoachExplainer, setShowCoachExplainer] = useState(false);
   const [showRoutePreview, setShowRoutePreview]   = useState(false);
   const [activePlannedRoute, setActivePlannedRoute] = useState<PlannedRoute | null>(null);
   const routePlanTriggered = useRef(false);
@@ -967,6 +972,16 @@ export default function ActiveSessionScreen() {
                   Dan starten we zonder GPS.
                 </Text>
               </View>
+
+              <TouchableOpacity
+                onPress={() => setShowCoachExplainer(true)}
+                style={styles.coachExplainerLink}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Uitleg: wat doet je coach tijdens het lopen?"
+              >
+                <Text style={styles.coachExplainerLinkText}>Wat doet je coach tijdens het lopen?</Text>
+              </TouchableOpacity>
             </>
           )}
 
@@ -990,6 +1005,15 @@ export default function ActiveSessionScreen() {
               )}
               <Button label="Plan mijn route" onPress={handlePlanRoute} fullWidth />
               <Button label="Start zonder route" onPress={handleSkipRoute} variant="secondary" fullWidth />
+              <TouchableOpacity
+                onPress={() => setShowCoachExplainer(true)}
+                style={styles.coachExplainerLink}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Uitleg: wat doet je coach tijdens het lopen?"
+              >
+                <Text style={styles.coachExplainerLinkText}>Wat doet je coach tijdens het lopen?</Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -1030,6 +1054,11 @@ export default function ActiveSessionScreen() {
             onClose={handleStartWithoutRoute}
           />
         )}
+
+        <CoachExplainerSheet
+          visible={showCoachExplainer}
+          onClose={() => setShowCoachExplainer(false)}
+        />
       </View>
     );
   }
@@ -1433,6 +1462,20 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   skipGpsText: {
     fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.sm,
     color: colors.textSecondary,
+  },
+
+  // Subtiele tekstlink naar CoachExplainerSheet — géén volle knop, mag de
+  // aandacht niet wegtrekken van de route-vraag/GPS-status erboven.
+  coachExplainerLink: {
+    alignSelf: 'center',
+    marginTop: spacing[1.5],
+    paddingVertical: spacing[0.5],
+    paddingHorizontal: spacing[1],
+  },
+  coachExplainerLinkText: {
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.xs,
+    color: colors.textTertiary,
+    textDecorationLine: 'underline',
   },
 
   // Actief scherm
