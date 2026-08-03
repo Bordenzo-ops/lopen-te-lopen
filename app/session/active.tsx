@@ -20,6 +20,7 @@ import { useVoiceGuidance } from '../../src/hooks/useVoiceGuidance';
 import { useRoutePlanner } from '../../src/hooks/useRoutePlanner';
 import { useRouteCoaching } from '../../src/hooks/useRouteCoaching';
 import { useHeartRateCoaching } from '../../src/hooks/useHeartRateCoaching';
+import { useTechniqueCoaching } from '../../src/hooks/useTechniqueCoaching';
 import { useIntervalCoaching } from '../../src/hooks/useIntervalCoaching';
 import * as voiceService from '../../src/services/voiceService';
 import { sessionIntroUtterance, intervalIntroUtterance, raceFinishUtterance } from '../../src/config/voicePhrases';
@@ -275,6 +276,17 @@ export default function ActiveSessionScreen() {
   const week    = resolveWeek();
   const session = week?.sessions.find(s => s.id === sessionId);
 
+  // Is dit de RACE-sessie van de laatste week van een actief wedstrijdschema?
+  // Detectie via dezelfde description die buildRacePlan.injectRaceName op
+  // precies díé ene sessie zet ("{racenaam}: RACE DAG!"), plus het
+  // weeknummer als extra zekerheid — zie ook raceFinishUtterance hieronder
+  // en de pep-talk-intro (CP7).
+  const isRaceDaySession = !!(
+    session && schemaMode === 'race' && racePlan &&
+    weekNum === racePlan.totalWeeks &&
+    session.description === `${racePlan.race.name}: RACE DAG!`
+  );
+
   // ── Routeplanner hook ─────────────────────────────────────────────────────
   const planner = useRoutePlanner(session?.distanceKm ?? 5);
 
@@ -304,6 +316,16 @@ export default function ActiveSessionScreen() {
     maxHrForZones,
     voiceType,
   );
+  // Techniek-cues tijdens lange duurlopen (fase G/CP7) — zuiver tijdgedreven,
+  // zie useTechniqueCoaching.ts. Via een ref hieronder aangeroepen vanuit de
+  // secondetimer (leeg dependency-array), net als intervalOnTickRef.
+  const { onTick: onTechniqueTick } = useTechniqueCoaching(
+    voiceEnabled,
+    session?.type === 'long',
+    voiceType,
+  );
+  const techniqueOnTickRef = useRef(onTechniqueTick);
+  techniqueOnTickRef.current = onTechniqueTick;
   // Via een ref doorgegeven aan het BLE-verbindingseffect hieronder: de
   // callback wisselt van identiteit als bijv. de spraak aan/uit gaat, en dat
   // mag de bluetooth-verbinding niet laten her-opzetten middenin een run.
@@ -386,10 +408,13 @@ export default function ActiveSessionScreen() {
       ) {
         introSpokenRef.current = true;
         void voiceService.speakPhrases(
-          sessionIntroUtterance(session.type, session.distanceKm, session.zone, {
-            hour: new Date().getHours(),
-            variant: completedSessionsCount,
-          }),
+          sessionIntroUtterance(
+            session.type, session.distanceKm, session.zone,
+            { hour: new Date().getHours(), variant: completedSessionsCount },
+            // Pep-talk (CP7): alleen bij een lange duurloop of de racedag zelf
+            // — daar is een mentale aanmoediging vooraf het meest op zijn plek.
+            (session.type === 'long' || isRaceDaySession) ? completedSessionsCount : undefined,
+          ),
           voiceType,
         );
       }
@@ -694,6 +719,9 @@ export default function ActiveSessionScreen() {
         // Intervalcoaching: de segmentklok loopt gelijk met deze timer, dus
         // pauzeert vanzelf mee (deze tak draait alleen terwijl isRunning).
         if (isIntervalRef.current) intervalOnTickRef.current(next);
+        // Techniek-cues (CP7): pauzeert om dezelfde reden vanzelf mee. De hook
+        // zelf bepaalt of dit sessietype/tijdstip een cue oplevert.
+        techniqueOnTickRef.current(next);
         return next;
       }), 1000);
     } else {
@@ -812,11 +840,7 @@ export default function ActiveSessionScreen() {
             // uitspraak (zie voiceService.ts), dus een tweede melding vlak na
             // "Sessie voltooid!" zou die gewoon afkappen — door elkaar heen
             // praten dus. Eén heldere felicitatie is hier het betere moment.
-            if (
-              session && schemaMode === 'race' && racePlan &&
-              weekNum === racePlan.totalWeeks &&
-              session.description === `${racePlan.race.name}: RACE DAG!`
-            ) {
+            if (isRaceDaySession) {
               if (voiceEnabled) {
                 voiceService.speakPhrases(
                   raceFinishUtterance(racePlan.race.id, racePlan.race.name),

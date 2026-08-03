@@ -425,6 +425,35 @@ const CD_STEP_TEXTS: string[] = [
   'Adem een paar keer rustig diep in en uit, en voel hoe je ontspant.',
 ];
 
+// ── 18. Techniek-cues tijdens lange duurlopen (CP7) ──────────────────────────
+// Korte, rustige houdings-/ademhalingstips die alleen tijdens sessietype
+// 'long' klinken (zie useTechniqueCoaching.ts) — bij kortere trainingen is
+// hier geen ruimte/noodzaak voor. Rouleren net als ENC_MESSAGES, modulo de
+// lijstlengte.
+const TECH_TEXTS: string[] = [
+  'Check je houding: rechte rug, ontspannen schouders.',
+  'Adem rustig en diep, laat je ademhaling je tempo bepalen.',
+  'Land zacht, onder je zwaartepunt, niet ver vooruit.',
+  'Laat je armen ontspannen meebewegen, niet spannen.',
+  'Kijk vooruit, hou je hoofd in het verlengde van je rug.',
+  'Voel je voeten, licht en snel contact met de grond.',
+  'Ontspan je kaak en je handen, dat scheelt energie.',
+  'Blijf rechtop, ook als je moe wordt. Kleine pas, hoge cadans.',
+];
+
+// ── 19. Mentale pep-talk vóór een race of lange duurloop (CP7) ──────────────
+// Eén extra motivatiezin, ALLEEN voor de sessie-intro (niet los aan te
+// roepen) — zie het optionele `pep`-argument van sessionIntroUtterance
+// hieronder. Getriggerd door de aanroeper (active.tsx) bij sessietype 'long'
+// of de RACE-dagsessie van een actief wedstrijdschema (zelfde detectie als
+// raceFinishUtterance). Rouleert net als de andere sessie-intro-varianten.
+const PEP_TEXTS: string[] = [
+  'Denk aan je waarom. Je hebt hiervoor getraind.',
+  'Je bent klaar voor dit moment. Vertrouw op je training.',
+  'Elke kilometer die je al hebt gelopen, bracht je hier. Ga ervoor.',
+  'Dit is jouw moment. Geniet ervan en geef wat je hebt.',
+];
+
 // ── Catalogus-enumeratie ─────────────────────────────────────────────────────
 
 export interface CatalogPhrase {
@@ -583,6 +612,16 @@ export function allPhrases(): CatalogPhrase[] {
     phrases.push({ id: `cd_step_${i}`, text });
   });
   phrases.push({ id: 'cd_done', text: CD_DONE_TEXT });
+
+  // 18. Techniek-cues
+  TECH_TEXTS.forEach((text, i) => {
+    phrases.push({ id: `tech_${i}`, text });
+  });
+
+  // 19. Mentale pep-talk
+  PEP_TEXTS.forEach((text, i) => {
+    phrases.push({ id: `pep_${i}`, text });
+  });
 
   return phrases;
 }
@@ -815,12 +854,20 @@ export function greetingForSessionStart(hour: number, variant: number = 0): Phra
  * finish/raceFinishUtterance in active.tsx). Zonder dit argument (bijv. de
  * race-felicitatie-tak, die geen sessie-intro gebruikt) verandert er niets
  * aan bestaand gedrag.
+ *
+ * `pepVariant` is optioneel (CP7): meegeven om er, vóór "Veel plezier!", één
+ * mentale pep-talk-zin (pep_0.., zie sectie 19) doorheen te weven — bedoeld
+ * voor een lange duurloop of de RACE-dagsessie, waar dat moment het meest
+ * betekenisvol is. De aanroeper (active.tsx) bepaalt óf dit meegegeven wordt
+ * (sessietype/race-detectie); deze functie rouleert alleen de variant, net
+ * als greeting hierboven.
  */
 export function sessionIntroUtterance(
   type: 'easy' | 'tempo' | 'long' | 'cross',
   distanceKm: number,
   zone?: string,
   greeting?: { hour: number; variant?: number },
+  pepVariant?: number,
 ): PhraseUtterance {
   const ids: string[] = [];
   let greetSentence = '';
@@ -835,6 +882,14 @@ export function sessionIntroUtterance(
 
   const hasZone = !!zone && zone in ZONE_DESCRIPTIONS;
   if (hasZone) ids.push(`zone_${zone}`);
+
+  let pepSentence = '';
+  if (pepVariant !== undefined) {
+    const idx = ((pepVariant % PEP_TEXTS.length) + PEP_TEXTS.length) % PEP_TEXTS.length;
+    ids.push(`pep_${idx}`);
+    pepSentence = ` ${PEP_TEXTS[idx]}`;
+  }
+
   ids.push('have_fun');
 
   const zoneSentence = hasZone ? ` ${zoneUtterance(zone as string).fallbackText}` : '';
@@ -842,8 +897,19 @@ export function sessionIntroUtterance(
     ids,
     // Nederlandse notatie met komma (bv. "7,5"), anders leest de telefoonstem
     // de punt voor als "punt".
-    fallbackText: `${greetSentence}${INTRO_TEXTS[type]} Het doel is ongeveer ${String(distanceKm).replace('.', ',')} kilometer.${zoneSentence} Veel plezier!`,
+    fallbackText: `${greetSentence}${INTRO_TEXTS[type]} Het doel is ongeveer ${String(distanceKm).replace('.', ',')} kilometer.${zoneSentence}${pepSentence} Veel plezier!`,
   };
+}
+
+/**
+ * Eén techniek-cue tijdens een lange duurloop (CP7, sectie 18): een korte
+ * houdings-/ademhalingstip. `variant` rouleert modulo de lijstlengte, net als
+ * de andere rouleer-teksten in dit bestand — zie useTechniqueCoaching.ts voor
+ * de tijdgedreven trigger (elke ~15 minuten, hooguit een handvol per sessie).
+ */
+export function techniqueCueUtterance(variant: number = 0): PhraseUtterance {
+  const idx = ((variant % TECH_TEXTS.length) + TECH_TEXTS.length) % TECH_TEXTS.length;
+  return { ids: [`tech_${idx}`], fallbackText: TECH_TEXTS[idx] };
 }
 
 /**
