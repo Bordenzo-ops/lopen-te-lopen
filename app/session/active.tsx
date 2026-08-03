@@ -29,6 +29,7 @@ import { RoutePreviewSheet } from '../../src/components/ui/RoutePreviewSheet';
 import { SessionTypeSheet } from '../../src/components/ui/SessionTypeSheet';
 import { Button } from '../../src/components/ui/Button';
 import { LiveRouteMap } from '../../src/components/ui/LiveRouteMap';
+import { NextTurnBanner } from '../../src/components/ui/NextTurnBanner';
 import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
 import { PREMIUM_CONFIG } from '../../src/config/premiumConfig';
 import { usePremium } from '../../src/hooks/usePremium';
@@ -298,7 +299,11 @@ export default function ActiveSessionScreen() {
     session?.distanceKm ?? 0,
     voiceType,
   );
-  const { onGpsUpdate: onRouteCoachingUpdate } = useRouteCoaching(
+  const {
+    onGpsUpdate: onRouteCoachingUpdate,
+    nextTurn:    nextRouteTurn,
+    isOffRoute,
+  } = useRouteCoaching(
     !!activePlannedRoute,
     voiceEnabled,
     activePlannedRoute ?? undefined,
@@ -1089,6 +1094,14 @@ export default function ActiveSessionScreen() {
             <Text style={styles.autoPauseBannerText}>Auto-pauze</Text>
           </View>
         )}
+
+        {/* Afslagbalk: de eerstvolgende afslag (of een off-route-melding),
+            zodat de loper niet naar de kaart hoeft te kijken. Rendert zelf
+            null zonder route (nextRouteTurn/isOffRoute komen dan altijd
+            neutraal terug uit useRouteCoaching, ook bij een intervalsessie
+            — zie de isIntervalRef-tak hierboven, die start altijd zonder
+            geplande route). */}
+        <NextTurnBanner nextTurn={nextRouteTurn} isOffRoute={isOffRoute} accentColor={zoneColor} />
 
         {/* Hoofdmetric: tijd */}
         <View style={styles.mainMetric}>
