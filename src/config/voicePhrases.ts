@@ -240,6 +240,31 @@ const TURN_PATTERNS: Array<[string, string]> = [
   ['doel bereikt',         'turn_arrive'],
 ];
 
+// ── 10b. Van-de-route-afdwalen — off-route-detectie tijdens het lopen ──────
+// Aparte subsectie vlak na de turn-by-turn-navigatie (sectie 10): dit is
+// GEEN afslag-instructie (geen match in TURN_PATTERNS/detectTurnType), maar
+// een eigen coach-melding zodra de loper te ver van de uitgestippelde route
+// afwijkt (>~40 m, detectie zit in een aparte sessie-hook) en zodra hij weer
+// terug is. Bewust GEEN "turn_"-voorvoegsel — dat is gereserveerd voor de
+// door toNl() herkende afslagtypes; "route_off_"/"route_on" maakt meteen
+// duidelijk dat dit een ANDER concept is (afwijking van de lijn, geen
+// navigatie-instructie naar een afslag).
+// Twee rouleervarianten voor "je bent van de route af" (zelfde opzet als
+// ENC_MESSAGES/HR_TEXTS/TECH_TEXTS hierboven), één vaste tekst voor "je bent
+// er weer op" — dat laatste is kort en bevestigend, daar is geen variatie
+// nodig.
+// Toon: rustig en niet-beschuldigend — de loper kan bewust een andere weg
+// genomen hebben, of het GPS-signaal hapert even, dus NIET "je loopt
+// verkeerd". Ook geen loze belofte om een nieuwe route te zoeken (dat kan de
+// app niet herberekenen); de enige zinvolle actie zonder scherm is
+// teruggaan naar de uitgestippelde lijn, dus dat zeggen beide teksten
+// letterlijk.
+const OFFROUTE_TEXTS: string[] = [
+  'Je loopt even naast de route. Ga terug naar de lijn zodra het uitkomt.',
+  'Je wijkt af van de uitgestippelde route. Zoek de lijn weer op wanneer je kan.',
+];
+const BACK_ON_ROUTE_TEXT = 'Goed zo, je bent weer op de route.';
+
 // ── 11. Nav-afstand — "Over 100 meter:" ─────────────────────────────────────
 // Afgerond op 10 meter, geklemd 50..150 (binnen dat bereik wordt een afslag
 // in useRouteCoaching aangekondigd; zie ANNOUNCE_AT_M).
@@ -538,6 +563,12 @@ export function allPhrases(): CatalogPhrase[] {
     phrases.push({ id, text });
   });
 
+  // 10b. Van-de-route-afdwalen
+  OFFROUTE_TEXTS.forEach((text, i) => {
+    phrases.push({ id: `route_off_${i}`, text });
+  });
+  phrases.push({ id: 'route_on', text: BACK_ON_ROUTE_TEXT });
+
   // 11. Nav-afstand
   for (let m = DIST_M_MIN; m <= DIST_M_MAX; m += DIST_M_STEP) {
     phrases.push({ id: `dist_m_${m}`, text: `Over ${m} meter:` });
@@ -806,6 +837,23 @@ export function navUtterance(instructionText: string, distM?: number): PhraseUtt
   ids.push(turnId);
 
   return { ids, fallbackText };
+}
+
+/**
+ * Van-de-route-afgedwaald-melding (off-route-detectie tijdens het lopen,
+ * zie de toelichting bij OFFROUTE_TEXTS in sectie 10b hierboven). `variant`
+ * rouleert tussen de twee teksten (modulo, zelfde opzet als hrUtterance/
+ * techniqueCueUtterance) zodat een loper die vaker afwijkt niet steeds
+ * dezelfde melding hoort.
+ */
+export function offRouteUtterance(variant: number = 0): PhraseUtterance {
+  const idx = ((variant % OFFROUTE_TEXTS.length) + OFFROUTE_TEXTS.length) % OFFROUTE_TEXTS.length;
+  return { ids: [`route_off_${idx}`], fallbackText: OFFROUTE_TEXTS[idx] };
+}
+
+/** Terug-op-route-melding: kort en bevestigend, geen varianten nodig. */
+export function backOnRouteUtterance(): PhraseUtterance {
+  return { ids: ['route_on'], fallbackText: BACK_ON_ROUTE_TEXT };
 }
 
 /** Onboarding-begroeting (stemkeuzescherm). */
