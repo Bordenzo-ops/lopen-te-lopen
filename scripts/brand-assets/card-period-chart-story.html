@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Deelkaart periode met verloop 1080x1920</title>
+<link rel="stylesheet" href="brand.css">
+<style>
+  /* Ontwerpreferentie voor de 'verloop'-variant van SharePeriodCard. Net als
+     de andere kaartbronnen is dit exact 3x de maat waarop de kaart in de app
+     rendert (360x640): deel elke waarde hier door 3 om bij de React
+     Native-styles uit te komen.
+
+     Deze variant is de tegenhanger van de runkaart: daar is het routetracé de
+     held, hier het staafdiagram met het verloop binnen de periode. Vandaar
+     dezelfde topografieplaat en hetzelfde ritme (held boven, cijfers eronder,
+     artwork dat in de onderste derde opengaat). */
+  html, body, .canvas { width: 1080px; height: 1920px; }
+
+  .art { background-image: url('plates/texture.jpg'); background-position: center; }
+
+  .scrim {
+    background:
+      linear-gradient(180deg, rgba(10,15,26,0.97) 0%, rgba(10,15,26,0.93) 52%, rgba(10,15,26,0.35) 70%, rgba(10,15,26,0.00) 80%),
+      linear-gradient(0deg,   rgba(10,15,26,0.95) 0%, rgba(10,15,26,0.55) 8%, rgba(10,15,26,0.00) 20%);
+  }
+
+  .content {
+    position: absolute; inset: 0;
+    padding: 84px 78px 72px;
+    display: flex; flex-direction: column;
+  }
+
+  /* ── Kop: merk links, loper rechts ── */
+  .top { display: flex; align-items: center; justify-content: space-between; }
+  .top .lockup { display: flex; align-items: center; gap: 16px; }
+  .top .icon { width: 60px; height: 60px; border-radius: 26%; display: block; }
+  .top .name { font-size: 22px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+  .top .runner { font-size: 26px; font-weight: 600; color: var(--muted); }
+
+  /* ── Staafdiagram: de held van deze kaart ──
+     De hoogste staaf krijgt de volle merkkleur, de rest een gedempte variant.
+     Zo zie je in één oogopslag waar de zwaarste dag zat zonder extra tekst. */
+  .chart      { margin-top: 44px; height: 460px; display: flex; flex-direction: column; }
+  .bars       { flex: 1; display: flex; align-items: flex-end; gap: 18px; }
+  .bar        { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+  /* Volle dekking wordt bruin op deze donkere ondergrond, dus de gedempte
+     staven krijgen een verloop dat naar boven toe oplicht in plaats van een
+     vlakke transparante vulling. */
+  .bar .fill  { width: 100%; border-radius: 12px 12px 4px 4px;
+                background: linear-gradient(180deg, rgba(255,116,48,0.72) 0%, rgba(242,80,17,0.34) 100%); }
+  .bar.top .fill { background: linear-gradient(180deg, var(--orange-lite) 0%, var(--orange) 100%); }
+  /* Lege dagen blijven zichtbaar als streepje: een gat vertelt ook iets. */
+  .bar.empty .fill { background: rgba(156,163,175,0.20); border-radius: 4px; }
+  .bar .val   { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 12px; color: var(--white); }
+  .bar.empty .val { color: transparent; }
+  .axis       { margin-top: 18px; display: flex; gap: 18px; }
+  .axis span  { flex: 1; text-align: center; font-size: 20px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.12em; color: var(--dim); }
+
+  /* ── Periode + vergelijking ── */
+  .meta  { margin-top: 40px; display: flex; align-items: center; justify-content: space-between; }
+  .label { font-size: 30px; letter-spacing: 0.2em; }
+  .delta { font-size: 24px; padding: 13px 26px; }
+  .range { margin-top: 14px; font-size: 24px; font-weight: 500; color: var(--dim); }
+
+  /* ── Hero-stat ── */
+  .heroRow  { margin-top: 22px; display: flex; align-items: baseline; gap: 18px; }
+  .hero     { font-size: 288px; }
+  .heroUnit { font-size: 64px; font-weight: 700; color: var(--muted); letter-spacing: -0.02em; }
+
+  .hair { height: 3px; margin: 34px 0 0; border-radius: 2px; }
+
+  /* ── Statistiekraster ── */
+  .stats { margin-top: 40px; display: grid; grid-template-columns: repeat(3, 1fr); row-gap: 40px; }
+  .stat .label2 { font-size: 20px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.16em; color: var(--dim); }
+  .stat .value { margin-top: 12px; font-size: 52px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+  .stat .value small { font-size: 26px; font-weight: 500; color: var(--dim); margin-left: 6px; letter-spacing: 0; }
+
+  /* ── Merkbalk onderaan ── */
+  .brandbar { margin-top: auto; align-items: baseline; gap: 16px; }
+  .brandbar .name   { font-size: 30px; letter-spacing: -0.01em; }
+  .brandbar .sep    { width: 5px; height: 5px; border-radius: 999px; background: var(--orange); align-self: center; }
+  .brandbar .handle { font-size: 27px; }
+</style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="art"></div>
+    <div class="scrim"></div>
+
+    <div class="content">
+      <div class="top">
+        <div class="lockup">
+          <img class="icon" src="../../assets/icon.png" alt="">
+          <span class="name">Lopen te Lopen</span>
+        </div>
+        <span class="runner">Anne</span>
+      </div>
+
+      <div class="chart">
+        <div class="bars">
+          <div class="bar empty"><span class="val">0</span><div class="fill" style="height:6px"></div></div>
+          <div class="bar">      <span class="val">8.2</span><div class="fill" style="height:258px"></div></div>
+          <div class="bar empty"><span class="val">0</span><div class="fill" style="height:6px"></div></div>
+          <div class="bar">      <span class="val">6.4</span><div class="fill" style="height:201px"></div></div>
+          <div class="bar empty"><span class="val">0</span><div class="fill" style="height:6px"></div></div>
+          <div class="bar top">  <span class="val">12.6</span><div class="fill" style="height:396px"></div></div>
+          <div class="bar">      <span class="val">5.1</span><div class="fill" style="height:160px"></div></div>
+        </div>
+        <div class="axis">
+          <span>ma</span><span>di</span><span>wo</span><span>do</span><span>vr</span><span>za</span><span>zo</span>
+        </div>
+      </div>
+
+      <div class="meta">
+        <span class="label eyebrow">Week 29</span>
+        <span class="delta pill">+18% t.o.v. vorige week</span>
+      </div>
+      <div class="range">29 juni t/m 5 juli</div>
+
+      <div class="heroRow">
+        <span class="hero">32.3</span>
+        <span class="heroUnit">km</span>
+      </div>
+
+      <div class="hair"></div>
+
+      <div class="stats">
+        <div class="stat"><div class="label2">Runs</div>          <div class="value">4</div></div>
+        <div class="stat"><div class="label2">Tijd</div>          <div class="value">3:04:12</div></div>
+        <div class="stat"><div class="label2">Gem. tempo</div>    <div class="value">5:42<small>/km</small></div></div>
+        <div class="stat"><div class="label2">Langste run</div>   <div class="value">12.6<small>km</small></div></div>
+        <div class="stat"><div class="label2">Beste tempo</div>   <div class="value">5:18<small>/km</small></div></div>
+        <div class="stat"><div class="label2">Actieve dagen</div> <div class="value">4</div></div>
+      </div>
+
+      <div class="brandbar">
+        <span class="name">Lopen te Lopen</span>
+        <i class="sep"></i>
+        <span class="handle">@lopentelopen</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

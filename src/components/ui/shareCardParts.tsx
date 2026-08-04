@@ -10,8 +10,9 @@
  * gebeuren: een aanpassing raakt beide kaarten tegelijk.
  *
  * Ontwerpreferenties op ware grootte (1080x1920 = exact 3x deze kaarten):
- *   scripts/brand-assets/card-story.html      — periodekaart
- *   scripts/brand-assets/card-run-story.html  — runkaart
+ *   scripts/brand-assets/card-story.html               — periodekaart 'gradient'
+ *   scripts/brand-assets/card-period-chart-story.html  — periodekaart 'chart'
+ *   scripts/brand-assets/card-run-story.html           — runkaart
  * Deel elke waarde daar door 3 om bij de styles hier uit te komen.
  */
 

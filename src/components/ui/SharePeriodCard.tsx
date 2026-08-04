@@ -9,16 +9,21 @@
  * moet meteen zien wélke app dit is. Vandaar de merkbalk bovenaan (app-icoon
  * + naam) en onderaan (naam + handle), en het artwork uit assets/brand/.
  *
- * Drie stijlvarianten (prop `variant`):
+ * Vier stijlvarianten (prop `variant`):
+ *  - 'chart'    — het verloop binnen de periode als staafdiagram, met de
+ *    volledige statistiek eronder. De tegenhanger van de runkaart: daar is het
+ *    routetracé de held, hier het diagram. Draagt de meeste informatie en is
+ *    daarom de standaard.
  *  - 'gradient' — donker met het merk-artwork (schoen + oranje sweep) en één
  *    enorme totaal-km bovenaan; het meest uitgesproken uithangbord.
  *  - 'minimal'  — licht en clean, één hero-stat heel groot, veel witruimte.
  *  - 'grid'     — donker statsgrid (2 kolommen) op de rustige topografie-plaat,
  *    met een accentkleur per tegel.
  *
- * Ontwerpreferentie op ware grootte: scripts/brand-assets/card-story.html
- * (1080x1920 = exact 3x deze kaart). Vermenigvuldig de waarden hier met 3 om
- * de twee naast elkaar te leggen.
+ * Ontwerpreferenties op ware grootte (1080x1920 = exact 3x deze kaart):
+ *   scripts/brand-assets/card-story.html               — 'gradient'
+ *   scripts/brand-assets/card-period-chart-story.html  — 'chart'
+ * Vermenigvuldig de waarden hier met 3 om ze naast elkaar te leggen.
  *
  * Gebruik:
  *   const cardRef = useRef<View>(null);
@@ -27,6 +32,7 @@
 
 import React, { forwardRef } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { palette, typography, radius, spacing } from '../../theme/tokens';
 import type { PeriodStats, PeriodType } from '../../utils/periodStats';
 import {
@@ -78,9 +84,21 @@ function formatDelta(pct: number): string {
   return `${rounded >= 0 ? '+' : ''}${rounded}%`;
 }
 
+/**
+ * "29 juni t/m 5 juli". Bij een heel jaar weggelaten: het label zegt dan al
+ * alles en "1 januari t/m 31 december" voegt niets toe.
+ */
+function formatRange(stats: PeriodStats): string | null {
+  if (stats.period === 'year') return null;
+  const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long' };
+  const from = new Date(`${stats.startISO}T12:00:00`).toLocaleDateString('nl-NL', opts);
+  const to   = new Date(`${stats.endISO}T12:00:00`).toLocaleDateString('nl-NL', opts);
+  return `${from} t/m ${to}`;
+}
+
 // ── Component ─────────────────────────────────────────────────────────────
 
-export type SharePeriodCardVariant = 'gradient' | 'minimal' | 'grid';
+export type SharePeriodCardVariant = 'chart' | 'gradient' | 'minimal' | 'grid';
 
 export interface SharePeriodCardProps {
   stats: PeriodStats;
@@ -92,6 +110,9 @@ export const SharePeriodCard = forwardRef<View, SharePeriodCardProps>(function S
   { stats, runnerName, variant },
   ref,
 ) {
+  if (variant === 'chart') {
+    return <ChartCard ref={ref} stats={stats} runnerName={runnerName} />;
+  }
   if (variant === 'minimal') {
     return <MinimalCard ref={ref} stats={stats} runnerName={runnerName} />;
   }
@@ -100,6 +121,139 @@ export const SharePeriodCard = forwardRef<View, SharePeriodCardProps>(function S
   }
   return <GradientCard ref={ref} stats={stats} runnerName={runnerName} />;
 });
+
+// ── Variant: chart (verloop binnen de periode) ───────────────────────────
+
+const CHART_W   = CARD_WIDTH - PAD_H * 2; // 312
+const CHART_H   = 153;              // totale hoogte, incl. aslabels
+const AXIS_H    = 15;               // marge + regelhoogte van de aslabels
+const BAR_AREA  = CHART_H - AXIS_H;
+const BAR_MAX   = BAR_AREA - 14;    // 14 laat ruimte voor het waardelabel
+const BAR_MIN   = 2;                // lege bakjes blijven zichtbaar als streepje
+/** Boven de zeven staven wordt het te druk voor een cijfer per staaf. */
+const MAX_BARS_WITH_VALUES = 7;
+
+const ChartCard = forwardRef<View, { stats: PeriodStats; runnerName?: string }>(
+  function ChartCard({ stats, runnerName }, ref) {
+    const series  = stats.series;
+    const maxKm   = Math.max(...series.map(b => b.km), 0);
+    const range   = formatRange(stats);
+    const showValues = series.length <= MAX_BARS_WITH_VALUES;
+    const gap = series.length > 8 ? 3 : 6;
+    const barW = (CHART_W - gap * (series.length - 1)) / series.length;
+
+    // Eén staaf krijgt de volle merkkleur: de zwaarste. Zo zie je de piek
+    // zonder dat er een extra regel tekst bij hoeft. Bij een lege periode is
+    // er geen piek, dan blijven alle staven streepjes.
+    const peakIndex = maxKm > 0 ? series.findIndex(b => b.km === maxKm) : -1;
+
+    const bars = series.map((bucket, i) => {
+      const isEmpty = bucket.km <= 0 || maxKm === 0;
+      return {
+        ...bucket,
+        isEmpty,
+        x: i * (barW + gap),
+        height: isEmpty ? BAR_MIN : Math.max(BAR_MIN, Math.round((bucket.km / maxKm) * BAR_MAX)),
+      };
+    });
+
+    return (
+      <View ref={ref} style={shared.card}>
+        <Image source={ART_TEXTURE} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        <ArtScrim profile="texture" />
+
+        <View style={shared.content}>
+          <TopBar runnerName={runnerName} />
+
+          {/* ── Staafdiagram: de held van deze kaart ──
+              Eén Svg voor alle staven; de waardelabels liggen er als losse
+              laag overheen zodat ze in het app-lettertype staan. */}
+          <View style={styles.chart}>
+            <View style={styles.barArea}>
+              <Svg width={CHART_W} height={BAR_AREA}>
+                <Defs>
+                  <LinearGradient id="barNormal" x1="0" y1="0" x2="0" y2="1">
+                    <Stop offset="0" stopColor={palette.primary[400]} stopOpacity="0.72" />
+                    <Stop offset="1" stopColor={palette.primary[500]} stopOpacity="0.34" />
+                  </LinearGradient>
+                  <LinearGradient id="barPeak" x1="0" y1="0" x2="0" y2="1">
+                    <Stop offset="0" stopColor={palette.primary[400]} stopOpacity="1" />
+                    <Stop offset="1" stopColor={palette.primary[500]} stopOpacity="1" />
+                  </LinearGradient>
+                </Defs>
+                {bars.map((bar, i) => (
+                  <Rect
+                    key={`${bar.label}-${i}`}
+                    x={bar.x}
+                    y={BAR_AREA - bar.height}
+                    width={barW}
+                    height={bar.height}
+                    rx={bar.isEmpty ? 1 : 3}
+                    fill={bar.isEmpty
+                      ? 'rgba(156,163,175,0.20)'
+                      : i === peakIndex ? 'url(#barPeak)' : 'url(#barNormal)'}
+                  />
+                ))}
+              </Svg>
+
+              {showValues && bars.map((bar, i) => bar.isEmpty ? null : (
+                <Text
+                  key={`v-${bar.label}-${i}`}
+                  style={[styles.barValue, { left: bar.x, width: barW, bottom: bar.height + 2 }]}
+                  numberOfLines={1}
+                  {...NO_FONT_PADDING}
+                >
+                  {formatKm(bar.km)}
+                </Text>
+              ))}
+            </View>
+
+            <View style={[styles.axis, { gap }]}>
+              {series.map((bucket, i) => (
+                <Text key={`${bucket.label}-${i}`} style={styles.axisLabel} numberOfLines={1}>
+                  {bucket.label}
+                </Text>
+              ))}
+            </View>
+          </View>
+
+          {/* ── Periode + vergelijking ── */}
+          <View style={styles.chartMeta}>
+            <Text style={[styles.periodLabel, styles.chartPeriodLabel]} numberOfLines={1}>
+              {stats.label.toUpperCase()}
+            </Text>
+            {stats.kmDeltaPct !== null && (
+              <View style={styles.deltaBadge}>
+                <Text style={styles.deltaText}>
+                  {formatDelta(stats.kmDeltaPct)} t.o.v. {prevPeriodNoun(stats.period)}
+                </Text>
+              </View>
+            )}
+          </View>
+          {range && <Text style={styles.rangeText}>{range}</Text>}
+
+          <View style={[shared.heroRow, styles.chartHeroRow]}>
+            <Text style={shared.heroValue} {...NO_FONT_PADDING}>{formatKm(stats.totalKm)}</Text>
+            <Text style={shared.heroUnit}>km</Text>
+          </View>
+
+          <Hairline style={styles.chartHairline} />
+
+          <View style={styles.statsGrid}>
+            <StatCell label="Runs"          value={String(stats.runCount)} />
+            <StatCell label="Tijd"          value={formatDuration(stats.totalSeconds)} />
+            <StatCell label="Gem. tempo"    value={formatPace(stats.avgPaceSecPerKm)} unit="/km" />
+            <StatCell label="Langste run"   value={formatKm(stats.longestRunKm)} unit="km" />
+            <StatCell label="Beste tempo"   value={formatPace(stats.bestPaceSecPerKm)} unit="/km" />
+            <StatCell label="Actieve dagen" value={String(stats.activeDays)} />
+          </View>
+
+          <BrandFooter />
+        </View>
+      </View>
+    );
+  },
+);
 
 // ── Variant: gradient (merk-artwork) ─────────────────────────────────────
 
@@ -276,6 +430,56 @@ const GridCard = forwardRef<View, { stats: PeriodStats; runnerName?: string }>(
 // in shareCardParts; hier alleen wat eigen is aan de periodekaart.
 
 const styles = StyleSheet.create({
+  // ── chart: staafdiagram ──
+  chart: {
+    marginTop: 15,
+    height: CHART_H,
+  },
+  barArea: {
+    height: BAR_AREA,
+    justifyContent: 'flex-end',
+  },
+  barValue: {
+    position: 'absolute',
+    textAlign: 'center',
+    fontFamily: typography.fontFamily.sansBold,
+    fontSize: 7,
+    lineHeight: 9,
+    letterSpacing: -0.2,
+    color: palette.neutral[0],
+  },
+  axis: {
+    flexDirection: 'row',
+    marginTop: 6,
+  },
+  axisLabel: {
+    flex: 1,
+    textAlign: 'center',
+    fontFamily: typography.fontFamily.sansMedium,
+    fontSize: 7,
+    color: palette.neutral[500],
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+
+  chartMeta: {
+    marginTop: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing[1],
+  },
+  rangeText: {
+    marginTop: 5,
+    fontFamily: typography.fontFamily.sansMedium,
+    fontSize: 8,
+    color: palette.neutral[500],
+  },
+  /** De gedeelde periodeLabel staat los onder de kop; hier staat hij op een rij. */
+  chartPeriodLabel: { marginTop: 0, flexShrink: 1 },
+  chartHeroRow:  { marginTop: 7 },
+  chartHairline: { marginTop: 11 },
+
   // ── Periode ──
   yearLabel: {
     fontFamily: typography.fontFamily.sansSemi,

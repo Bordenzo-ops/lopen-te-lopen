@@ -23,6 +23,10 @@ import {
   getISOWeek,
   getQuarter,
   isWithinInterval,
+  eachDayOfInterval,
+  eachWeekOfInterval,
+  eachMonthOfInterval,
+  endOfDay,
   format,
 } from 'date-fns';
 import type { CompletedSession } from '../store/appStore';
@@ -30,6 +34,17 @@ import type { CompletedSession } from '../store/appStore';
 // ── Types ─────────────────────────────────────
 
 export type PeriodType = 'week' | 'month' | 'quarter' | 'year';
+
+/**
+ * Eén staaf in het verloop van de periode. De reeks is bewust altijd volledig
+ * (ook lege bakjes), zodat een week met twee runs er op de deelkaart uitziet
+ * als twee staven in zeven vakken en niet als twee losse staven.
+ */
+export interface PeriodBucket {
+  /** Kort aslabel, bijv. "ma", "W29" of "jul". */
+  label: string;
+  km: number;
+}
 
 export interface PeriodStats {
   period: PeriodType;
@@ -46,6 +61,8 @@ export interface PeriodStats {
   activeDays: number;               // aantal unieke dagen met een run
   prevTotalKm: number | null;       // totale km van de vórige periode (null als geen data)
   kmDeltaPct: number | null;        // % verschil t.o.v. vorige periode (null als vorige periode 0 of geen data)
+  /** Verloop binnen de periode: per dag, per week of per maand. */
+  series: PeriodBucket[];
 }
 
 // ── Nederlandse maandnamen ────────────────────
@@ -98,6 +115,51 @@ function getPeriodLabel(period: PeriodType, refDate: Date, start: Date): string 
     case 'year':
       return `${start.getFullYear()}`;
   }
+}
+
+const DAG_LETTERS   = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'];
+const MAAND_KORT    = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun',
+                       'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+
+/**
+ * Verdeel de kilometers van de periode over staafjes. De korrel schaalt mee
+ * met de periode: een week per dag, een maand per week, een kwartaal en een
+ * jaar per maand. Zo blijft het aantal staven altijd tussen 3 en 12.
+ */
+function buildSeries(
+  period: PeriodType,
+  sessions: CompletedSession[],
+  start: Date,
+  end: Date,
+): PeriodBucket[] {
+  const kmInRange = (from: Date, to: Date): number =>
+    sessions
+      .filter(s => isWithinInterval(new Date(s.completedAt), { start: from, end: to }))
+      .reduce((sum, s) => sum + s.actualDistanceKm, 0);
+
+  if (period === 'week') {
+    return eachDayOfInterval({ start, end }).map((day, i) => ({
+      label: DAG_LETTERS[i] ?? format(day, 'EEEEEE'),
+      km: kmInRange(day, endOfDay(day)),
+    }));
+  }
+
+  if (period === 'month') {
+    return eachWeekOfInterval({ start, end }, { weekStartsOn: 1 }).map(weekStart => {
+      // Knip het eerste en laatste bakje af op de maandgrens, anders tellen
+      // runs uit de aangrenzende maand mee in de eerste of laatste staaf.
+      const from = weekStart < start ? start : weekStart;
+      const rawTo = endOfWeek(weekStart, { weekStartsOn: 1 });
+      const to = rawTo > end ? end : rawTo;
+      return { label: `W${getISOWeek(weekStart)}`, km: kmInRange(from, to) };
+    });
+  }
+
+  // Kwartaal (3 staven) en jaar (12 staven): per maand.
+  return eachMonthOfInterval({ start, end }).map(monthStart => ({
+    label: MAAND_KORT[monthStart.getMonth()],
+    km: kmInRange(monthStart, endOfMonth(monthStart)),
+  }));
 }
 
 // ── Hoofdfunctie ──────────────────────────────
@@ -167,5 +229,6 @@ export function getPeriodStats(
     activeDays,
     prevTotalKm,
     kmDeltaPct,
+    series: buildSeries(period, periodSessions, start, end),
   };
 }

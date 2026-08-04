@@ -52,7 +52,10 @@ const PREVIEW_SCALE = 0.72;
 const PREVIEW_W = CARD_WIDTH  * PREVIEW_SCALE;
 const PREVIEW_H = CARD_HEIGHT * PREVIEW_SCALE;
 
+// 'chart' staat vooraan en is de standaard: die kaart draagt de meeste
+// informatie over de periode en is daarmee ook de interessantste om te delen.
 const VARIANTS: Array<{ key: SharePeriodCardVariant; label: string }> = [
+  { key: 'chart',    label: 'Verloop' },
   { key: 'gradient', label: 'Gradient' },
   { key: 'minimal',  label: 'Minimaal' },
   { key: 'grid',     label: 'Grid' },
@@ -67,7 +70,7 @@ export function SharePeriodSheet({
   const { cardRef, isSharing, share, saveToLibrary, captureCard } = useShareRun();
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [variant, setVariant] = useState<SharePeriodCardVariant>('gradient');
+  const [variant, setVariant] = useState<SharePeriodCardVariant>('chart');
 
   const handleInstagram = useCallback(async () => {
     const result = await share();
@@ -292,7 +295,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // Stijlkiezer
   variantRow: {
     flexDirection: 'row',
+    // Vier chips passen op de meeste toestellen op één regel, maar niet op een
+    // SE of met een grotere systeemlettergrootte; dan zakt de laatste door.
+    flexWrap: 'wrap',
     justifyContent: 'center',
+    rowGap: spacing[0.5],
     gap: spacing[1],
     paddingHorizontal: spacing[3],
     marginBottom: spacing[1.5],

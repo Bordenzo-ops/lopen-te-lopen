@@ -45,6 +45,7 @@ const TARGETS = [
   { html: 'card-story.html',      out: 'store-assets/social/deelkaart-story-1080x1920.png',     w: 1080, h: 1920 },
   { html: 'card-feed.html',       out: 'store-assets/social/deelkaart-feed-1080x1350.png',      w: 1080, h: 1350 },
   { html: 'card-run-story.html',  out: 'store-assets/social/deelkaart-run-story-1080x1920.png', w: 1080, h: 1920 },
+  { html: 'card-period-chart-story.html', out: 'store-assets/social/deelkaart-verloop-story-1080x1920.png', w: 1080, h: 1920 },
 ];
 
 for (const t of TARGETS) {
