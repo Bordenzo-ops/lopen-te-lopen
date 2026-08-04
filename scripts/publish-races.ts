@@ -18,16 +18,23 @@
  *     npx tsx scripts/publish-races.ts
  *     npx tsx scripts/publish-races.ts --dry-run
  *
- *   Publiceren naar Supabase Storage (PowerShell):
- *     $env:SUPABASE_SERVICE_ROLE_KEY = 'eyJ...'
+ *   Publiceren naar Supabase Storage — in CMD (de shell die hier gebruikt
+ *   wordt). LET OP: bij `set` in CMD géén aanhalingstekens en geen spaties
+ *   rond het =-teken; die zouden onderdeel van de waarde worden en de sleutel
+ *   ongeldig maken. En `#` is in CMD geen comment-teken: plak dus nooit een
+ *   toelichting achter het commando, die belandt als argument bij het script.
+ *     set SUPABASE_SERVICE_ROLE_KEY=eyJ...
  *     npx tsx scripts/publish-races.ts --upload
  *     (SUPABASE_URL is optioneel: zonder die env-var valt het script terug op
  *     de production-URL uit eas.json en print het welke URL gebruikt is.)
  *
- *   Als SUPABASE_URL moet afwijken van eas.json (bv. een test-project),
- *   ook in PowerShell:
- *     $env:SUPABASE_URL = 'https://xxxx.supabase.co'
+ *   Hetzelfde in PowerShell, mocht je die gebruiken:
  *     $env:SUPABASE_SERVICE_ROLE_KEY = 'eyJ...'
+ *     npx tsx scripts/publish-races.ts --upload
+ *
+ *   Als SUPABASE_URL moet afwijken van eas.json (bv. een test-project):
+ *     set SUPABASE_URL=https://xxxx.supabase.co
+ *     set SUPABASE_SERVICE_ROLE_KEY=eyJ...
  *     npx tsx scripts/publish-races.ts --upload
  *
  *   Andere lokale outputmap voor de dry-run:

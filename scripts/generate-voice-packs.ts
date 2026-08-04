@@ -26,6 +26,19 @@
  *     (SUPABASE_URL is optioneel: zonder die env-var valt het script terug op
  *     de production-URL uit eas.json en print het welke URL gebruikt wordt.)
  *
+ *   LET OP — de voorbeelden hierboven zijn bash-syntaxis. In CMD (de shell die
+ *   hier in de praktijk gebruikt wordt) werkt noch het `VAR=waarde commando`-
+ *   voorvoegsel, noch de `\` als regelvervolg. Zet de variabelen daar eerst
+ *   apart, zonder aanhalingstekens en zonder spaties rond het =-teken (die
+ *   zouden onderdeel van de waarde worden en de sleutel ongeldig maken), en
+ *   plak geen #-toelichting achter een commando — CMD kent geen comments, dus
+ *   dat belandt als argument bij het script:
+ *     set ELEVENLABS_API_KEY=sk_...
+ *     set SUPABASE_SERVICE_ROLE_KEY=eyJ...
+ *     npx tsx scripts/generate-voice-packs.ts --upload
+ *
+ *   In PowerShell is het weer anders: `$env:ELEVENLABS_API_KEY = 'sk_...'`.
+ *
  *   Andere outputmap:
  *     npx tsx scripts/generate-voice-packs.ts --out ./ergens-anders
  *
