@@ -26,42 +26,27 @@
  */
 
 import React, { forwardRef } from 'react';
-import { View, Text, Image, StyleSheet, Platform } from 'react-native';
-import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
+import { View, Text, Image, StyleSheet } from 'react-native';
 import { palette, typography, radius, spacing } from '../../theme/tokens';
 import type { PeriodStats, PeriodType } from '../../utils/periodStats';
-
-// ── Formaat: Instagram Stories 9:16 (gelijk aan ShareRunCard) ───────────────
-const CARD_WIDTH  = 360;
-const CARD_HEIGHT = 640;
-
-// ── Merk-assets ────────────────────────────────────────────────────────────
-const APP_ICON    = require('../../../assets/icon.png');
-const ART_HERO    = require('../../../assets/brand/share-bg-hero.jpg');
-const ART_TEXTURE = require('../../../assets/brand/share-bg-texture.jpg');
-
-const SOCIAL_HANDLE = '@lopentelopen';
-const BRAND_NAME    = 'Lopen te Lopen';
-
-/** Android knijpt regels met negatieve letterSpacing af zonder deze vlag. */
-const NO_FONT_PADDING = Platform.OS === 'android' ? { includeFontPadding: false } : null;
+import {
+  ArtScrim,
+  ART_HERO,
+  ART_TEXTURE,
+  BrandFooter,
+  CARD_HEIGHT,
+  CARD_WIDTH,
+  Hairline,
+  NO_FONT_PADDING,
+  PAD_H,
+  StatCell,
+  TopBar,
+  formatDuration,
+  formatPace,
+  styles as shared,
+} from './shareCardParts';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
-
-function formatPace(secPerKm: number | null): string {
-  if (!secPerKm || secPerKm <= 0) return '--:--';
-  const mins = Math.floor(secPerKm / 60);
-  const secs = Math.round(secPerKm % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
-function formatDuration(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.round(seconds % 60);
-  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
 
 function formatKm(km: number | null): string {
   if (km === null) return '0.0';
@@ -116,77 +101,6 @@ export const SharePeriodCard = forwardRef<View, SharePeriodCardProps>(function S
   return <GradientCard ref={ref} stats={stats} runnerName={runnerName} />;
 });
 
-// ── Gedeelde bouwstenen ──────────────────────────────────────────────────
-
-/**
- * Leesbaarheidsverloop over het artwork: donker bovenin voor de statistiek,
- * en een smalle donkere band onderin zodat de merkbalk over de schoen heen
- * leesbaar blijft. Zonder dit wordt de kaart onleesbaar zodra het artwork
- * licht uitvalt.
- */
-function ArtScrim() {
-  return (
-    <Svg width={CARD_WIDTH} height={CARD_HEIGHT} style={StyleSheet.absoluteFill}>
-      <Defs>
-        <LinearGradient id="scrimTop" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0"    stopColor={palette.neutral[950]} stopOpacity="0.97" />
-          <Stop offset="0.38" stopColor={palette.neutral[950]} stopOpacity="0.90" />
-          <Stop offset="0.58" stopColor={palette.neutral[950]} stopOpacity="0.30" />
-          <Stop offset="0.70" stopColor={palette.neutral[950]} stopOpacity="0" />
-        </LinearGradient>
-        <LinearGradient id="scrimBottom" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0.78" stopColor={palette.neutral[950]} stopOpacity="0" />
-          <Stop offset="0.91" stopColor={palette.neutral[950]} stopOpacity="0.55" />
-          <Stop offset="1"    stopColor={palette.neutral[950]} stopOpacity="0.95" />
-        </LinearGradient>
-      </Defs>
-      <Rect width={CARD_WIDTH} height={CARD_HEIGHT} fill="url(#scrimTop)" />
-      <Rect width={CARD_WIDTH} height={CARD_HEIGHT} fill="url(#scrimBottom)" />
-    </Svg>
-  );
-}
-
-/** Kop: app-icoon + merknaam links, naam van de loper rechts. */
-function TopBar({ runnerName, light = false }: { runnerName?: string; light?: boolean }) {
-  return (
-    <View style={styles.topBar}>
-      <View style={styles.lockup}>
-        <Image source={APP_ICON} style={styles.topIcon} />
-        <Text style={[styles.topName, light && styles.topNameLight]}>{BRAND_NAME}</Text>
-      </View>
-      {runnerName ? (
-        <Text style={[styles.runnerName, light && styles.runnerNameLight]} numberOfLines={1}>
-          {runnerName}
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
-/** Voet: merknaam + handle. Het stukje dat nieuwsgierig moet maken. */
-function BrandFooter({ light = false }: { light?: boolean }) {
-  return (
-    <View style={styles.brandFooter}>
-      <Text style={[styles.brandName, light && styles.brandNameLight]}>{BRAND_NAME}</Text>
-      <View style={styles.brandDot} />
-      <Text style={[styles.brandHandle, light && styles.brandHandleLight]}>{SOCIAL_HANDLE}</Text>
-    </View>
-  );
-}
-
-/** Eén cel in het 3-koloms statistiekraster. */
-function StatCell({ label, value, unit }: { label: string; value: string; unit?: string }) {
-  return (
-    <View style={styles.statCell}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <View style={styles.statValueRow}>
-        <Text style={styles.statValue} {...NO_FONT_PADDING}>{value}</Text>
-        {unit && <Text style={styles.statUnit}>{unit}</Text>}
-      </View>
-    </View>
-  );
-}
-
 // ── Variant: gradient (merk-artwork) ─────────────────────────────────────
 
 const GradientCard = forwardRef<View, { stats: PeriodStats; runnerName?: string }>(
@@ -194,11 +108,11 @@ const GradientCard = forwardRef<View, { stats: PeriodStats; runnerName?: string 
     const isYear = stats.period === 'year';
 
     return (
-      <View ref={ref} style={styles.card}>
+      <View ref={ref} style={shared.card}>
         <Image source={ART_HERO} style={StyleSheet.absoluteFill} resizeMode="cover" />
         <ArtScrim />
 
-        <View style={styles.content}>
+        <View style={shared.content}>
           <TopBar runnerName={runnerName} />
 
           {isYear && <Text style={styles.yearLabel}>Jaaroverzicht</Text>}
@@ -214,9 +128,9 @@ const GradientCard = forwardRef<View, { stats: PeriodStats; runnerName?: string 
             </View>
           )}
 
-          <View style={styles.heroRow}>
-            <Text style={styles.heroValue} {...NO_FONT_PADDING}>{formatKm(stats.totalKm)}</Text>
-            <Text style={styles.heroUnit}>km</Text>
+          <View style={[shared.heroRow, styles.heroRow]}>
+            <Text style={shared.heroValue} {...NO_FONT_PADDING}>{formatKm(stats.totalKm)}</Text>
+            <Text style={shared.heroUnit}>km</Text>
           </View>
 
           <Hairline />
@@ -237,29 +151,14 @@ const GradientCard = forwardRef<View, { stats: PeriodStats; runnerName?: string 
   },
 );
 
-/** Oranje haarlijn die naar rechts uitdooft; scheidt hero van de stats. */
-function Hairline() {
-  return (
-    <Svg width={CARD_WIDTH - spacing[3] * 2} height={1} style={styles.hairline}>
-      <Defs>
-        <LinearGradient id="hair" x1="0" y1="0" x2="1" y2="0">
-          <Stop offset="0" stopColor={palette.primary[500]} stopOpacity="0.75" />
-          <Stop offset="1" stopColor={palette.primary[500]} stopOpacity="0.10" />
-        </LinearGradient>
-      </Defs>
-      <Rect width={CARD_WIDTH - spacing[3] * 2} height={1} fill="url(#hair)" />
-    </Svg>
-  );
-}
-
 // ── Variant: minimal (licht) ─────────────────────────────────────────────
 
 const MinimalCard = forwardRef<View, { stats: PeriodStats; runnerName?: string }>(
   function MinimalCard({ stats, runnerName }, ref) {
     const isYear = stats.period === 'year';
     return (
-      <View ref={ref} style={[styles.card, styles.minimalCard]}>
-        <View style={styles.content}>
+      <View ref={ref} style={[shared.card, styles.minimalCard]}>
+        <View style={shared.content}>
           <TopBar runnerName={runnerName} light />
 
           <View style={styles.minimalHero}>
@@ -329,11 +228,11 @@ const GridCard = forwardRef<View, { stats: PeriodStats; runnerName?: string }>(
     ];
 
     return (
-      <View ref={ref} style={styles.card}>
+      <View ref={ref} style={shared.card}>
         <Image source={ART_TEXTURE} style={StyleSheet.absoluteFill} resizeMode="cover" />
         <ArtScrim />
 
-        <View style={styles.content}>
+        <View style={shared.content}>
           <TopBar runnerName={runnerName} />
 
           {isYear && <Text style={styles.yearLabel}>Jaaroverzicht</Text>}
@@ -373,56 +272,10 @@ const GridCard = forwardRef<View, { stats: PeriodStats; runnerName?: string }>(
 );
 
 // ── Styles ────────────────────────────────────────────────────────────────
-
-const PAD_H = spacing[3]; // 24 — horizontale marge van alle varianten
+// Wat beide deelkaarten delen (kaart, merkbalken, hero, statistiekcel) staat
+// in shareCardParts; hier alleen wat eigen is aan de periodekaart.
 
 const styles = StyleSheet.create({
-  card: {
-    width:  CARD_WIDTH,
-    height: CARD_HEIGHT,
-    backgroundColor: palette.neutral[950],
-    borderRadius: radius['2xl'],
-    overflow: 'hidden',
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: PAD_H,
-    paddingTop: 28,
-    paddingBottom: spacing[3],
-  },
-
-  // ── Merkbalk boven ──
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  lockup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  topIcon: {
-    width: 20,
-    height: 20,
-    borderRadius: 5,
-  },
-  topName: {
-    fontFamily: typography.fontFamily.sansBold,
-    fontSize: 8,
-    color: palette.neutral[0],
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  topNameLight: { color: palette.neutral[900] },
-  runnerName: {
-    fontFamily: typography.fontFamily.sansSemi,
-    fontSize: 9,
-    color: palette.neutral[400],
-    maxWidth: 110,
-  },
-  runnerNameLight: { color: palette.neutral[500] },
-
   // ── Periode ──
   yearLabel: {
     fontFamily: typography.fontFamily.sansSemi,
@@ -458,27 +311,7 @@ const styles = StyleSheet.create({
   },
 
   // ── Hero-stat ──
-  heroRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
-    marginTop: spacing[1.5],
-  },
-  heroValue: {
-    fontFamily: typography.fontFamily.display,
-    fontSize: 96,
-    lineHeight: 96,
-    letterSpacing: -4,
-    color: palette.neutral[0],
-  },
-  heroUnit: {
-    fontFamily: typography.fontFamily.sansBold,
-    fontSize: 21,
-    color: palette.neutral[400],
-    letterSpacing: -0.4,
-  },
-
-  hairline: { marginTop: spacing[1.5] },
+  heroRow: { marginTop: spacing[1.5] },
 
   // ── Statistiekraster (3 kolommen, 2 rijen) ──
   statsGrid: {
@@ -487,61 +320,6 @@ const styles = StyleSheet.create({
     marginTop: spacing[1.5],
     rowGap: spacing[1.5],
   },
-  statCell: {
-    width: '33.33%',
-  },
-  statLabel: {
-    fontFamily: typography.fontFamily.sansMedium,
-    fontSize: 7,
-    color: palette.neutral[500],
-    textTransform: 'uppercase',
-    letterSpacing: 1.1,
-  },
-  statValueRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 2,
-    marginTop: 4,
-  },
-  statValue: {
-    fontFamily: typography.fontFamily.sansBold,
-    fontSize: 17,
-    lineHeight: 19,
-    letterSpacing: -0.5,
-    color: palette.neutral[0],
-  },
-  statUnit: {
-    fontFamily: typography.fontFamily.sansMedium,
-    fontSize: 9,
-    color: palette.neutral[500],
-  },
-
-  // ── Merkbalk onder ──
-  brandFooter: {
-    marginTop: 'auto' as any,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  brandName: {
-    fontFamily: typography.fontFamily.sansBold,
-    fontSize: 10,
-    color: palette.neutral[0],
-    letterSpacing: -0.1,
-  },
-  brandNameLight: { color: palette.neutral[900] },
-  brandDot: {
-    width: 2,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: palette.primary[500],
-  },
-  brandHandle: {
-    fontFamily: typography.fontFamily.sansMedium,
-    fontSize: 9,
-    color: palette.neutral[400],
-  },
-  brandHandleLight: { color: palette.neutral[500] },
 
   // ── minimal ──
   minimalCard: {

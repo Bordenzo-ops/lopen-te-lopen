@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Deelkaart run story 1080x1920</title>
+<link rel="stylesheet" href="brand.css">
+<style>
+  /* Ontwerpreferentie voor ShareRunCard (delen van één sessie). Net als
+     card-story.html is dit exact 3x de maat waarop de kaart in de app rendert
+     (360x640): deel elke waarde hier door 3 om bij de React Native-styles uit
+     te komen.
+
+     Verschil met card-story.html (de periodekaart): daar is de schoen de held,
+     hier is het routetracé dat. Vandaar de rustige topografieplaat in plaats
+     van de heldplaat, en een scrim die pas onder de statistiek opengaat zodat
+     de oranje sweep van de plaat onder de cijfers uit komt. */
+  html, body, .canvas { width: 1080px; height: 1920px; }
+
+  .art { background-image: url('plates/texture.jpg'); background-position: center; }
+
+  /* Donker over de route en de statistiek, open in de onderste derde waar het
+     artwork mag ademen, en weer donker onder de merkbalk. */
+  .scrim {
+    background:
+      linear-gradient(180deg, rgba(10,15,26,0.97) 0%, rgba(10,15,26,0.93) 52%, rgba(10,15,26,0.35) 70%, rgba(10,15,26,0.00) 80%),
+      linear-gradient(0deg,   rgba(10,15,26,0.95) 0%, rgba(10,15,26,0.55) 8%, rgba(10,15,26,0.00) 20%);
+  }
+
+  .content {
+    position: absolute; inset: 0;
+    padding: 84px 78px 72px;
+    display: flex; flex-direction: column;
+  }
+
+  /* ── Kop: merk links, loper rechts ── */
+  .top { display: flex; align-items: center; justify-content: space-between; }
+  .top .lockup { display: flex; align-items: center; gap: 16px; }
+  .top .icon { width: 60px; height: 60px; border-radius: 26%; display: block; }
+  .top .name { font-size: 22px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+  .top .runner { font-size: 26px; font-weight: 600; color: var(--muted); }
+
+  /* ── Routetracé: de held van deze kaart ── */
+  .route { margin: 44px -12px 0; height: 462px; }
+  .route svg { display: block; width: 100%; height: 100%; }
+
+  /* ── Datum + hartslagzone ── */
+  .meta   { margin-top: 44px; display: flex; align-items: center; justify-content: space-between; }
+  .date   { font-size: 30px; letter-spacing: 0.2em; }
+  .zone   { font-size: 24px; padding: 13px 26px; gap: 14px; }
+  .zone i { width: 18px; height: 18px; border-radius: 999px; background: currentColor; }
+
+  /* ── Hero-stat ── */
+  .heroRow  { margin-top: 30px; display: flex; align-items: baseline; gap: 18px; }
+  .hero     { font-size: 288px; }
+  .heroUnit { font-size: 64px; font-weight: 700; color: var(--muted); letter-spacing: -0.02em; }
+
+  .hair { height: 3px; margin: 38px 0 0; border-radius: 2px; }
+
+  /* ── Statistiekraster ── */
+  .stats { margin-top: 40px; display: grid; grid-template-columns: repeat(3, 1fr); }
+  .stat .label { font-size: 20px; }
+  .stat .value { margin-top: 12px; font-size: 52px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+  .stat .value small { font-size: 26px; font-weight: 500; color: var(--dim); margin-left: 6px; letter-spacing: 0; }
+
+  /* ── Weekvoortgang: plaatst de run in het trainingsplan ── */
+  .week      { margin-top: 46px; }
+  .week .row { display: flex; justify-content: space-between; align-items: baseline; }
+  .week .plan { font-size: 22px; font-weight: 500; color: var(--dim); letter-spacing: 0.02em; }
+  .week .nr   { font-size: 22px; font-weight: 600; color: var(--muted); }
+  .week .track { margin-top: 16px; height: 9px; border-radius: 999px; background: rgba(156,163,175,0.22); overflow: hidden; }
+  .week .fill  { height: 100%; width: 33%; border-radius: 999px; background: linear-gradient(90deg, var(--orange) 0%, var(--orange-lite) 100%); }
+
+  /* ── Merkbalk onderaan: dit maakt de kaart tot uithangbord ── */
+  .brandbar { margin-top: auto; align-items: baseline; gap: 16px; }
+  .brandbar .name   { font-size: 30px; letter-spacing: -0.01em; }
+  .brandbar .sep    { width: 5px; height: 5px; border-radius: 999px; background: var(--orange); align-self: center; }
+  .brandbar .handle { font-size: 27px; }
+</style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="art"></div>
+    <div class="scrim"></div>
+
+    <div class="content">
+      <div class="top">
+        <div class="lockup">
+          <img class="icon" src="../../assets/icon.png" alt="">
+          <span class="name">Lopen te Lopen</span>
+        </div>
+        <span class="runner">Anne</span>
+      </div>
+
+      <div class="route">
+        <svg viewBox="0 0 948 462" fill="none">
+          <defs>
+            <linearGradient id="trace" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0"   stop-color="#FF7430"/>
+              <stop offset="1"   stop-color="#F25011" stop-opacity="0.55"/>
+            </linearGradient>
+          </defs>
+          <!-- Schaduwtracé geeft diepte op een drukke ondergrond -->
+          <path d="M 118,300 C 168,110 330,44 470,76 C 610,108 742,196 812,268 C 872,330 828,392 700,388 C 560,384 372,352 268,332 C 176,314 118,300 118,300"
+                stroke="#0A0F1A" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" opacity="0.75"/>
+          <path d="M 118,300 C 168,110 330,44 470,76 C 610,108 742,196 812,268 C 872,330 828,392 700,388 C 560,384 372,352 268,332 C 176,314 118,300 118,300"
+                stroke="url(#trace)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+          <!-- Startpunt -->
+          <circle cx="118" cy="300" r="26" fill="#FF7430" opacity="0.20"/>
+          <circle cx="118" cy="300" r="13" fill="#FF7430"/>
+        </svg>
+      </div>
+
+      <div class="meta">
+        <span class="date eyebrow">Zondag 19 juli</span>
+        <span class="zone pill"><i></i>Zone 2</span>
+      </div>
+
+      <div class="heroRow">
+        <span class="hero">8.42</span>
+        <span class="heroUnit">km</span>
+      </div>
+
+      <div class="hair"></div>
+
+      <div class="stats">
+        <div class="stat"><div class="label">Tijd</div>      <div class="value">48:36</div></div>
+        <div class="stat"><div class="label">Tempo</div>     <div class="value">5:47<small>/km</small></div></div>
+        <div class="stat"><div class="label">Hartslag</div>  <div class="value">142<small>bpm</small></div></div>
+      </div>
+
+      <div class="week">
+        <div class="row">
+          <span class="plan">Trainingsschema</span>
+          <span class="nr">Week 4 van 12</span>
+        </div>
+        <div class="track"><div class="fill"></div></div>
+      </div>
+
+      <div class="brandbar">
+        <span class="name">Lopen te Lopen</span>
+        <i class="sep"></i>
+        <span class="handle">@lopentelopen</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

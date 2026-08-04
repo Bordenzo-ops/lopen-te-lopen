@@ -12,6 +12,7 @@ import { RunCalendar } from '../../src/components/ui/RunCalendar';
 import { ShareRunSheet } from '../../src/components/ui/ShareRunSheet';
 import { formatPacePerKm, formatDuration } from '../../src/data/paceModel';
 import { getPeriodStats, type PeriodType, type PeriodStats } from '../../src/utils/periodStats';
+import { resolveActivePlan } from '../../src/data/activePlan';
 import { SharePeriodSheet } from '../../src/components/ui/SharePeriodSheet';
 
 const periodOptions: { value: PeriodType; label: string; shareLabel: string }[] = [
@@ -33,8 +34,20 @@ const sourceLabel: Record<CompletedSession['source'], string> = {
 export default function LogbookScreen() {
   const profile = useAppStore(s => s.profile);
   const completedSessions = useAppStore(s => s.completedSessions);
+  const racePlan = useAppStore(s => s.racePlan);
+  const customPlan = useAppStore(s => s.customPlan);
+  const schemaMode = useAppStore(s => s.schemaMode);
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  // Naam en lengte van het actieve schema, zodat de deelkaart de run in het
+  // trainingsplan kan plaatsen in plaats van een vaste 12 weken aan te nemen.
+  const activePlan = useMemo(
+    () => profile
+      ? resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal, trainingDays: profile.trainingDays })
+      : null,
+    [schemaMode, racePlan, customPlan, profile],
+  );
 
   const [period, setPeriod] = useState<PeriodType>('week');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -213,6 +226,8 @@ export default function LogbookScreen() {
           visible={!!runToShare}
           session={runToShare}
           weekNumber={runToShare.weekNumber}
+          totalWeeks={activePlan?.totalWeeks}
+          planLabel={activePlan?.name}
           runnerName={profile.name}
           maxHeartRate={profile.maxHeartRate}
           onClose={() => setRunToShare(null)}

@@ -170,6 +170,8 @@ export default function SchemaCompleteScreen() {
           visible={showShare}
           session={lastSession}
           weekNumber={parseInt(weekNumber ?? '1')}
+          totalWeeks={resolved.totalWeeks}
+          planLabel={planName}
           runnerName={profile.name}
           maxHeartRate={profile.maxHeartRate}
           onClose={() => setShowShare(false)}

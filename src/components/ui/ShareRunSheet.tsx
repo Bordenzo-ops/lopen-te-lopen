@@ -41,6 +41,8 @@ interface ShareRunSheetProps {
   runnerName?: string;
   maxHeartRate?: number;
   totalWeeks?: number;
+  /** Naam van het actieve schema, zodat de kaart de run in het plan plaatst. */
+  planLabel?: string;
   onClose: () => void;
 }
 
@@ -56,6 +58,7 @@ export function ShareRunSheet({
   runnerName,
   maxHeartRate,
   totalWeeks,
+  planLabel,
   onClose,
 }: ShareRunSheetProps) {
   const { cardRef, isSharing, share, saveToLibrary, captureCard } = useShareRun();
@@ -145,6 +148,7 @@ export function ShareRunSheet({
                 runnerName={runnerName}
                 maxHeartRate={maxHeartRate}
                 totalWeeks={totalWeeks}
+                planLabel={planLabel}
               />
             </View>
           </View>
@@ -159,6 +163,7 @@ export function ShareRunSheet({
             runnerName={runnerName}
             maxHeartRate={maxHeartRate}
             totalWeeks={totalWeeks}
+            planLabel={planLabel}
           />
         </View>
 

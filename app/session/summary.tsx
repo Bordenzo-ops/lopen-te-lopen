@@ -445,6 +445,8 @@ export default function SummaryScreen() {
           visible={showShare}
           session={lastSession}
           weekNumber={parseInt(weekNumber ?? '1')}
+          totalWeeks={totalWeeks}
+          planLabel={activePlan.name}
           runnerName={profile.name}
           maxHeartRate={profile.maxHeartRate}
           onClose={() => setShowShare(false)}
