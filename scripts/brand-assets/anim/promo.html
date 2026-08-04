@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>App-promo — animatie</title>
+<link rel="stylesheet" href="../brand.css">
+<style>
+  /* Basis is promo-story.html op 1080x1920. Zelfde bewegingshandschrift als
+     card.html: opening met lichtstreep, alles rijst op, trage inzoom. */
+  html, body, .canvas { width: 1080px; height: 1920px; }
+  .canvas { position: relative; overflow: hidden; background: #0A0F1A; }
+
+  .artWrap { position: absolute; inset: 0; overflow: hidden; }
+  .art {
+    position: absolute; inset: 0;
+    background: url('../plates/vert.jpg') center bottom/cover no-repeat;
+    transform-origin: 50% 74%;
+  }
+  .scrim {
+    position: absolute; inset: 0;
+    background:
+      linear-gradient(180deg, rgba(10,15,26,0.96) 0%, rgba(10,15,26,0.93) 30%, rgba(10,15,26,0.62) 44%, rgba(10,15,26,0.00) 56%),
+      linear-gradient(0deg,   rgba(10,15,26,0.90) 0%, rgba(10,15,26,0.45) 10%, rgba(10,15,26,0.00) 20%);
+  }
+  .glow {
+    position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen;
+    background: radial-gradient(46% 24% at 46% 76%, rgba(255,116,48,0.5) 0%, rgba(242,80,17,0.14) 45%, rgba(242,80,17,0) 78%);
+  }
+  .streak {
+    position: absolute; left: -35%; right: -35%; top: 46%; height: 17%;
+    pointer-events: none; mix-blend-mode: screen; transform-origin: 50% 50%;
+    background: linear-gradient(90deg,
+      rgba(255,150,70,0) 0%, rgba(255,165,90,0.75) 38%,
+      rgba(255,225,180,1) 51%, rgba(255,165,90,0.7) 64%, rgba(255,150,70,0) 100%);
+    filter: blur(36px);
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 42%, #000 58%, transparent 100%);
+    mask-image: linear-gradient(180deg, transparent 0%, #000 42%, #000 58%, transparent 100%);
+  }
+
+  .content { position: absolute; left: 90px; right: 90px; top: 250px; bottom: 250px; display: flex; flex-direction: column; }
+
+  .top { display: flex; align-items: center; gap: 20px; }
+  .top .icon { width: 76px; height: 76px; border-radius: 26%; display: block; }
+  .top .name { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; }
+
+  .ruleWrap { margin: 96px 0 34px; }
+  .rule { width: 72px; height: 6px; transform-origin: 0% 50%; }
+
+  .eyebrow { font-size: 24px; }
+
+  h1 { margin-top: 26px; font-size: 104px; font-weight: 800; line-height: 0.98; letter-spacing: -0.045em; }
+  h1 .ln { display: block; }
+  /* "finish" krijgt een aanzwellende gloed als accentmoment. */
+  h1 em { font-style: normal; color: var(--orange-lite); }
+
+  .sub { margin-top: 36px; font-size: 33px; font-weight: 500; line-height: 1.42; color: var(--muted); max-width: 780px; }
+
+  .feats { margin-top: 44px; display: flex; flex-wrap: wrap; gap: 16px; }
+  .feats .pill { font-size: 25px; padding: 16px 30px; }
+
+  .foot { margin-top: auto; }
+  .ctaWrap { display: inline-block; transform-origin: 0% 50%; }
+  .cta { font-size: 33px; padding: 30px 54px; }
+  .handle { margin-top: 30px; font-size: 27px; font-weight: 500; color: var(--dim); }
+</style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="artWrap">
+      <div class="art" id="art"></div>
+      <div class="scrim"></div>
+      <div class="glow" id="glow"></div>
+      <div class="streak" id="streak"></div>
+    </div>
+
+    <div class="content" id="content">
+      <div class="top" id="top">
+        <img class="icon" src="../../../assets/icon.png" alt="">
+        <span class="name">Lopen te Lopen</span>
+      </div>
+
+      <div class="ruleWrap"><div class="rule" id="rule"></div></div>
+      <div class="eyebrow" id="eyebrow">Hardloopcoach</div>
+
+      <h1>
+        <span class="ln" id="ln1">Jouw coach</span>
+        <span class="ln" id="ln2">naar de <em id="flare">finish</em>.</span>
+      </h1>
+
+      <p class="sub" id="sub">Schema's van 5 km en 10 km tot de marathon.<br>Met coaching in je oor tijdens elke run.</p>
+
+      <div class="feats" id="feats">
+        <span class="pill">Weekschema's</span>
+        <span class="pill">Audiocoaching</span>
+        <span class="pill">Hartslagzones</span>
+      </div>
+
+      <div class="foot">
+        <div class="ctaWrap" id="ctaWrap"><span class="cta">Nu in de App Store</span></div>
+        <div class="handle" id="handle">@lopentelopen</div>
+      </div>
+    </div>
+  </div>
+
+<script src="timeline.js"></script>
+<script>
+/* ── Regie ──────────────────────────────────────────────────────────────
+   Zelfde 6.5s en zelfde uitloop als card.html, zodat de twee films naast
+   elkaar als één campagne lezen. Verschil in opbouw: hier is de claim de
+   held (twee regels die na elkaar invallen), niet een tellend getal.     */
+const DURATION = 6.5;
+
+const el = {
+  art: document.getElementById('art'),
+  glow: document.getElementById('glow'),
+  streak: document.getElementById('streak'),
+  content: document.getElementById('content'),
+  top: document.getElementById('top'),
+  rule: document.getElementById('rule'),
+  eyebrow: document.getElementById('eyebrow'),
+  ln1: document.getElementById('ln1'),
+  ln2: document.getElementById('ln2'),
+  flare: document.getElementById('flare'),
+  sub: document.getElementById('sub'),
+  feats: Array.from(document.querySelectorAll('#feats .pill')),
+  ctaWrap: document.getElementById('ctaWrap'),
+  handle: document.getElementById('handle'),
+};
+
+window.renderAt = function (t) {
+  const out = phase(t, DURATION - 0.3, DURATION, ease.inOutCubic);
+  const alive = 1 - out;
+
+  const zoom = lerp(1.13, 1.00, phase(t, 0, DURATION - 0.3, ease.outQuint));
+  el.art.style.transform = `scale(${zoom.toFixed(4)})`;
+  el.art.style.opacity = String(lerp(0.45, 1, phase(t, 0, 0.75)) * alive);
+
+  const sp = phase(t, 0, 0.62, ease.outExpo);
+  el.streak.style.transform = `rotate(14deg) translateX(${lerp(-105, 30, sp).toFixed(1)}%)`;
+  el.streak.style.opacity = String((1 - phase(t, 0.22, 0.80, ease.outCubic)) * 0.95);
+
+  el.glow.style.opacity = String(phase(t, 2.6, 4.4, ease.inOutCubic) * alive);
+
+  riseIn(el.top,     t, 0.20, 0.75, 12);
+
+  // De merkstreep tekent zichzelf van links.
+  el.rule.style.transform = `scaleX(${phase(t, 0.55, 1.05, ease.outQuint).toFixed(4)})`;
+  el.rule.style.opacity = String(alive);
+
+  riseIn(el.eyebrow, t, 0.72, 1.22, 14);
+
+  // Kop: twee regels kort na elkaar, zodat het oog de zin volgt.
+  riseIn(el.ln1, t, 0.95, 1.55, 22);
+  riseIn(el.ln2, t, 1.15, 1.75, 22);
+
+  // "finish" licht kort op — het enige echte accentmoment in de film.
+  const fl = phase(t, 1.70, 2.10, ease.outCubic) * (1 - phase(t, 2.10, 2.90, ease.outCubic));
+  el.flare.style.textShadow = fl > 0.01
+    ? `0 0 ${(fl * 60).toFixed(0)}px rgba(255,140,60,${(fl * 0.9).toFixed(2)})`
+    : 'none';
+
+  riseIn(el.sub, t, 1.85, 2.45, 16);
+  riseInStagger(el.feats, t, 2.35, 0.09, 0.45, 12);
+
+  // CTA landt met overshoot en blijft daarna zacht ademen, zodat het beeld
+  // tijdens de hold niet stilvalt.
+  const cp = phase(t, 3.00, 3.60, ease.outBack);
+  const breathe = t > 3.6 ? 1 + Math.sin((t - 3.6) * 2.2) * 0.012 : 1;
+  el.ctaWrap.style.opacity = String(Math.min(1, phase(t, 3.00, 3.35)) * alive);
+  el.ctaWrap.style.transform = `scale(${(lerp(0.88, 1, cp) * breathe).toFixed(4)})`;
+
+  riseIn(el.handle, t, 3.45, 3.95, 10);
+
+  el.content.style.opacity = String(alive);
+};
+
+window.ANIM = { duration: DURATION, width: 1080, height: 1920 };
+renderAt(0);
+</script>
+</body>
+</html>

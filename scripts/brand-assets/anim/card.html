@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Deelkaart — animatie</title>
+<link rel="stylesheet" href="../brand.css">
+<style>
+  /* Basis is card-story.html op 1080x1920; hier komt alleen beweging bij.
+     Alle beginstanden staan op 0/verschoven, want renderAt(t) zet ze. */
+  html, body, .canvas { width: 1080px; height: 1920px; }
+  .canvas { position: relative; overflow: hidden; background: #0A0F1A; }
+
+  /* Het artwork zit in een eigen laag zodat we er los op kunnen inzoomen
+     (langzame ken-burns) zonder de typografie mee te schalen. */
+  .artWrap { position: absolute; inset: 0; overflow: hidden; }
+  .art {
+    position: absolute; inset: 0;
+    background: url('../plates/vert.jpg') center bottom/cover no-repeat;
+    transform-origin: 50% 72%;
+  }
+  .scrim {
+    position: absolute; inset: 0;
+    background:
+      linear-gradient(180deg, rgba(10,15,26,0.97) 0%, rgba(10,15,26,0.90) 38%, rgba(10,15,26,0.30) 58%, rgba(10,15,26,0.00) 70%),
+      linear-gradient(0deg,   rgba(10,15,26,0.95) 0%, rgba(10,15,26,0.55) 9%, rgba(10,15,26,0.00) 22%);
+  }
+
+  /* Extra gloed die aanzwelt als de schoen "aangaat". Los van het artwork,
+     zodat de opbouw stuurbaar is. */
+  .glow {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(46% 26% at 44% 74%, rgba(255,116,48,0.55) 0%, rgba(242,80,17,0.16) 45%, rgba(242,80,17,0) 78%);
+    mix-blend-mode: screen;
+  }
+
+  /* De openingsflits: een streep licht die langs de bestaande lichtbaan
+     van het artwork schiet. De verticale mask is essentieel — zonder dat
+     zie je de rand van de div en leest het als een wazig blokje in plaats
+     van als licht. De rotatie volgt de hoek van het lint in vert.jpg. */
+  .streak {
+    position: absolute; left: -35%; right: -35%; top: 44%; height: 17%;
+    pointer-events: none; mix-blend-mode: screen;
+    transform-origin: 50% 50%;
+    background: linear-gradient(90deg,
+      rgba(255,150,70,0) 0%, rgba(255,165,90,0.75) 38%,
+      rgba(255,225,180,1) 51%, rgba(255,165,90,0.7) 64%, rgba(255,150,70,0) 100%);
+    filter: blur(36px);
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 42%, #000 58%, transparent 100%);
+    mask-image: linear-gradient(180deg, transparent 0%, #000 42%, #000 58%, transparent 100%);
+  }
+
+  .content { position: absolute; inset: 0; padding: 84px 78px 72px; display: flex; flex-direction: column; }
+
+  .top { display: flex; align-items: center; justify-content: space-between; }
+  .top .lockup { display: flex; align-items: center; gap: 16px; }
+  .top .icon { width: 60px; height: 60px; border-radius: 26%; display: block; }
+  .top .name { font-size: 22px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+  .top .runner { font-size: 26px; font-weight: 600; color: var(--muted); }
+
+  .period { margin-top: 78px; font-size: 34px; letter-spacing: 0.2em; }
+  .deltaWrap { margin-top: 26px; }
+  .delta { font-size: 26px; padding: 15px 28px; }
+
+  .heroRow { margin-top: 40px; display: flex; align-items: baseline; gap: 18px; }
+  .hero { font-size: 288px; transform-origin: 0% 100%; }
+  .heroUnit { font-size: 64px; font-weight: 700; color: var(--muted); letter-spacing: -0.02em; transform-origin: 0% 100%; }
+
+  .hairWrap { margin-top: 44px; height: 3px; }
+  .hair { height: 3px; border-radius: 2px; transform-origin: 0% 50%; }
+
+  .stats { margin-top: 44px; display: grid; grid-template-columns: repeat(3, 1fr); row-gap: 44px; }
+  .stat .label { font-size: 20px; }
+  .stat .value { margin-top: 12px; font-size: 52px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+  .stat .value small { font-size: 26px; font-weight: 500; color: var(--dim); margin-left: 6px; letter-spacing: 0; }
+
+  .brandbar { margin-top: auto; align-items: baseline; gap: 16px; }
+  .brandbar .name   { font-size: 30px; letter-spacing: -0.01em; }
+  .brandbar .sep    { width: 5px; height: 5px; border-radius: 999px; background: var(--orange); align-self: center; }
+  .brandbar .handle { font-size: 27px; }
+</style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="artWrap">
+      <div class="art"   id="art"></div>
+      <div class="scrim"></div>
+      <div class="glow"  id="glow"></div>
+      <div class="streak" id="streak"></div>
+    </div>
+
+    <div class="content">
+      <div class="top" id="top">
+        <div class="lockup">
+          <img class="icon" src="../../../assets/icon.png" alt="">
+          <span class="name">Lopen te Lopen</span>
+        </div>
+        <span class="runner">Anne</span>
+      </div>
+
+      <div class="period eyebrow" id="period">Week 29</div>
+      <div class="deltaWrap" id="deltaWrap"><span class="delta pill">+18% t.o.v. vorige week</span></div>
+
+      <div class="heroRow">
+        <span class="hero" id="hero">0.0</span>
+        <span class="heroUnit" id="heroUnit">km</span>
+      </div>
+
+      <div class="hairWrap"><div class="hair" id="hair"></div></div>
+
+      <div class="stats" id="stats">
+        <div class="stat"><div class="label">Runs</div>          <div class="value">1</div></div>
+        <div class="stat"><div class="label">Tijd</div>          <div class="value">38:18</div></div>
+        <div class="stat"><div class="label">Gem. tempo</div>    <div class="value">5:47<small>/km</small></div></div>
+        <div class="stat"><div class="label">Langste run</div>   <div class="value">6.6<small>km</small></div></div>
+        <div class="stat"><div class="label">Beste tempo</div>   <div class="value">5:47<small>/km</small></div></div>
+        <div class="stat"><div class="label">Actieve dagen</div> <div class="value">1</div></div>
+      </div>
+
+      <div class="brandbar" id="brand">
+        <span class="name">Lopen te Lopen</span>
+        <i class="sep"></i>
+        <span class="handle">@lopentelopen</span>
+      </div>
+    </div>
+  </div>
+
+<script src="timeline.js"></script>
+<script>
+/* ── Regie ──────────────────────────────────────────────────────────────
+   DUUR 6.5s. De laatste 0.3s draait terug naar de beginstand, zodat de
+   loop op Reels/TikTok naadloos rondgaat in plaats van hard te knippen.
+   De uitleesbare "hold" loopt van 4.6 tot 6.2 — ruim 1.5s om de stats te
+   lezen, wat bij deze hoeveelheid cijfers het minimum is.               */
+const DURATION = 6.5;
+
+const el = {
+  art:    document.getElementById('art'),
+  glow:   document.getElementById('glow'),
+  streak: document.getElementById('streak'),
+  top:    document.getElementById('top'),
+  period: document.getElementById('period'),
+  delta:  document.getElementById('deltaWrap'),
+  hero:   document.getElementById('hero'),
+  unit:   document.getElementById('heroUnit'),
+  hair:   document.getElementById('hair'),
+  stats:  Array.from(document.querySelectorAll('#stats .stat')),
+  brand:  document.getElementById('brand'),
+};
+
+const TOTAL_KM = 6.6;
+
+window.renderAt = function (t) {
+  // Uitloop: alles zakt in de laatste 0.3s terug naar de beginstand.
+  const out = phase(t, DURATION - 0.3, DURATION, ease.inOutCubic);
+  const alive = 1 - out;
+
+  // ── Artwork: trage inzoom van 1.14 naar 1.00 over de hele film.
+  //    Begint op 45% zichtbaar in plaats van op zwart: een volledig zwart
+  //    openingsframe kost op TikTok meteen kijkers.
+  const zoom = lerp(1.14, 1.00, phase(t, 0, DURATION - 0.3, ease.outQuint));
+  el.art.style.transform = `scale(${zoom.toFixed(4)})`;
+  el.art.style.opacity = String(lerp(0.45, 1, phase(t, 0, 0.75)) * (1 - out));
+
+  // ── Openingsflits: streep licht schiet langs de baan van het lint weg.
+  const sp = phase(t, 0, 0.62, ease.outExpo);
+  el.streak.style.transform = `rotate(14deg) translateX(${lerp(-105, 30, sp).toFixed(1)}%)`;
+  el.streak.style.opacity = String((1 - phase(t, 0.22, 0.80, ease.outCubic)) * 0.95);
+
+  // ── Gloed onder de schoen zwelt aan als het beeld "aangaat".
+  el.glow.style.opacity = String(phase(t, 3.1, 4.7, ease.inOutCubic) * alive);
+
+  // ── Typografie, in leesvolgorde.
+  riseIn(el.top,    t, 0.20, 0.75, 12);
+  riseIn(el.period, t, 0.38, 0.95, 16);
+  riseIn(el.delta,  t, 0.58, 1.15, 16);
+
+  // ── Hero: telt op van 0.0 naar 6.6 en zakt daarbij iets terug in schaal.
+  //    outExpo geeft de "snel weg, zacht landen"-curve die een teller nodig
+  //    heeft; lineair tellen voelt mechanisch.
+  const cp = phase(t, 0.75, 2.15, ease.outExpo);
+  el.hero.textContent = (TOTAL_KM * cp).toFixed(1);
+  el.hero.style.opacity = String(phase(t, 0.68, 0.98) * alive);
+  el.hero.style.transform = `scale(${lerp(1.05, 1.0, cp).toFixed(4)})`;
+
+  // De eenheid landt pas als het getal bijna stilstaat, met lichte overshoot.
+  const up = phase(t, 1.85, 2.35, ease.outBack);
+  el.unit.style.opacity = String(Math.min(1, phase(t, 1.85, 2.15)) * alive);
+  el.unit.style.transform = `translateY(${lerp(18, 0, up).toFixed(2)}px)`;
+
+  // ── Haarlijn veegt open van links naar rechts.
+  el.hair.style.background = 'linear-gradient(90deg, rgba(242,80,17,0.75) 0%, rgba(242,80,17,0.10) 100%)';
+  el.hair.style.transform = `scaleX(${phase(t, 2.20, 2.85, ease.outQuint).toFixed(4)})`;
+  el.hair.style.opacity = String(alive);
+
+  // ── Stats vallen gestaggerd in (70 ms uit elkaar).
+  riseInStagger(el.stats, t, 2.40, 0.07, 0.50, 12);
+
+  riseIn(el.brand, t, 4.35, 4.95, 10);
+
+  // ── Uitloop over de hele inhoud, zodat frame 6.5s == frame 0s.
+  document.querySelector('.content').style.opacity = String(alive);
+};
+
+window.ANIM = { duration: DURATION, width: 1080, height: 1920 };
+renderAt(0);
+</script>
+</body>
+</html>
