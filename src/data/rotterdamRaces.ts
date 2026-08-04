@@ -1013,6 +1013,29 @@ const NL_PROVINCES: RaceProvince[] = [
       },
     ],
   },
+  {
+    id: 'limburg',
+    name: 'Limburg',
+    cities: [
+      {
+        id: 'venlo',
+        name: 'Venlo',
+        races: [
+          {
+            id: 'arrow-venloop-2027',
+            name: 'Arrow Venloop',
+            date: '2027-03-21',
+            distance: 'half_marathon',
+            url: 'https://venloop.nl/en/running/arrow-venloop/',
+            description: '20e editie van de Arrow Venloop door Venlo, met halve marathon, 10 km en 5 km. De halve marathon is doorgaans binnen enkele dagen uitverkocht, dus wees er op tijd bij.',
+            location: 'Venlo',
+            accentColor: '#EA580C',
+            registrationOpen: false,
+          },
+        ],
+      },
+    ],
+  },
 ];
 
 // België is voorbereid met de belangrijkste provincies/steden voor toekomstige
@@ -1201,6 +1224,29 @@ const BE_PROVINCES: RaceProvince[] = [
                 registrationOpen: false,
               },
             ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'brussel',
+    name: 'Brussel',
+    cities: [
+      {
+        id: 'brussel-stad',
+        name: 'Brussel',
+        races: [
+          {
+            id: '20-km-door-brussel-2027',
+            name: '20 km door Brussel',
+            date: '2027-05-30',
+            distance: 'half_marathon', // 20 km; dichtstbijzijnde type
+            url: 'https://www.20kmdebruxelles.be/nl/',
+            description: '47e editie van deze stadsloop van 20 km door het centrum van Brussel. Inschrijvingen voor 2027 starten begin dat jaar.',
+            location: 'Brussel',
+            accentColor: '#CA8A04',
+            registrationOpen: false,
           },
         ],
       },
