@@ -1186,7 +1186,7 @@ export default function SettingsScreen() {
             <Text style={styles.sectionLabel}>Overige</Text>
             <View style={styles.card}>
               <TouchableOpacity
-                onPress={() => Linking.openURL('https://bordenzo-ops.github.io/lopen-te-lopen/privacy-policy.html')}
+                onPress={() => Linking.openURL('https://lopentelopen.nl/privacy-policy.html')}
                 style={styles.row}
                 activeOpacity={0.7}
               >
