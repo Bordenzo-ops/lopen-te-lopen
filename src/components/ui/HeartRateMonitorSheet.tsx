@@ -12,9 +12,10 @@ import {
   View, Text, StyleSheet, Modal, TouchableOpacity,
   TouchableWithoutFeedback, ScrollView, ActivityIndicator, Platform,
 } from 'react-native';
-import { X, HeartPulse, Bluetooth, Link2 } from 'lucide-react-native';
+import { HeartPulse, Bluetooth, Link2 } from 'lucide-react-native';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
+import { SheetHandle, SheetCloseButton } from './sheetParts';
 import {
   isBleAvailable,
   requestBlePermissions,
@@ -131,12 +132,7 @@ export function HeartRateMonitorSheet({
       </TouchableWithoutFeedback>
 
       <View style={styles.sheet}>
-        <View style={styles.sheetTop}>
-          <View style={styles.handle} />
-          <TouchableOpacity style={styles.closeBtn} onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="Sluiten">
-            <X size={20} color={colors.textSecondary} strokeWidth={2} />
-          </TouchableOpacity>
-        </View>
+        <SheetHandle />
 
         <Text style={styles.title}>Hartslagmeter</Text>
 
@@ -228,6 +224,9 @@ export function HeartRateMonitorSheet({
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Laatste kind, zie sheetParts. */}
+        <SheetCloseButton onPress={onClose} />
       </View>
     </Modal>
   );
@@ -249,24 +248,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     maxHeight: '80%',
     paddingBottom: Platform.OS === 'ios' ? 30 : 20,
     ...shadows.lg,
-  },
-  sheetTop: {
-    alignItems: 'center',
-    paddingTop: spacing[1],
-    paddingHorizontal: spacing[2],
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  handle: {
-    width: 40, height: 4,
-    backgroundColor: colors.borderDefault,
-    borderRadius: radius.full,
-  },
-  closeBtn: {
-    position: 'absolute',
-    right: spacing[2],
-    top: spacing[1],
-    padding: 4,
   },
   title: {
     fontFamily: typography.fontFamily.sansBold,

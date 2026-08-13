@@ -22,9 +22,10 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { X, MapPin, Bookmark, Trash2 } from 'lucide-react-native';
+import { MapPin, Bookmark, Trash2 } from 'lucide-react-native';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
+import { SheetHandle, SheetCloseButton } from './sheetParts';
 import { useAppStore, selectSavedRoutes, type SavedRoute } from '../../store/appStore';
 import { PREMIUM_CONFIG } from '../../config/premiumConfig';
 import { usePremium } from '../../hooks/usePremium';
@@ -187,19 +188,7 @@ export function SavedRoutesSheet({ visible, currentPosition, onSelect, onClose }
       </TouchableWithoutFeedback>
 
       <View style={styles.sheet}>
-        {/* Handle + sluitknop */}
-        <View style={styles.sheetTop}>
-          <View style={styles.handle} />
-          <TouchableOpacity
-            style={styles.closeBtn}
-            onPress={onClose}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel="Sluiten"
-          >
-            <X size={20} color={colors.textSecondary} strokeWidth={2} />
-          </TouchableOpacity>
-        </View>
+        <SheetHandle />
 
         <Text style={styles.title}>Bewaarde routes</Text>
         {savedRoutes.length > 0 && (
@@ -238,6 +227,9 @@ export function SavedRoutesSheet({ visible, currentPosition, onSelect, onClose }
             </>
           )}
         </ScrollView>
+
+        {/* Laatste kind, zie sheetParts. */}
+        <SheetCloseButton onPress={onClose} />
       </View>
     </Modal>
   );
@@ -259,24 +251,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     maxHeight: '80%',
     paddingBottom: Platform.OS === 'ios' ? 30 : 20,
     ...shadows.lg,
-  },
-  sheetTop: {
-    alignItems: 'center',
-    paddingTop: spacing[1],
-    paddingHorizontal: spacing[2],
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  handle: {
-    width: 40, height: 4,
-    backgroundColor: colors.borderDefault,
-    borderRadius: radius.full,
-  },
-  closeBtn: {
-    position: 'absolute',
-    right: spacing[2],
-    top: spacing[1],
-    padding: 4,
   },
   title: {
     fontFamily: typography.fontFamily.sansBold,

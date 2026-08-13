@@ -40,9 +40,10 @@ import MapView, {
   PROVIDER_DEFAULT,
   PROVIDER_GOOGLE,
 } from 'react-native-maps';
-import { X, RefreshCw, Navigation, ArrowRight, MapPin, Bookmark, Check } from 'lucide-react-native';
+import { RefreshCw, Navigation, ArrowRight, MapPin, Bookmark, Check } from 'lucide-react-native';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors, useIsLightTheme } from '../../theme/useTheme';
+import { SheetHandle, SheetCloseButton } from './sheetParts';
 import { PremiumBadge } from './PremiumBadge';
 import { useAppStore } from '../../store/appStore';
 import { usePremium } from '../../hooks/usePremium';
@@ -186,19 +187,7 @@ export function RoutePreviewSheet({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
       <View style={styles.sheet}>
-        {/* Handle + sluitknop */}
-        <View style={styles.sheetHeader}>
-          <View style={styles.handle} />
-          <TouchableOpacity
-            style={styles.closeBtn}
-            onPress={onClose}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel="Sluiten"
-          >
-            <X size={20} color={colors.textSecondary} strokeWidth={2} />
-          </TouchableOpacity>
-        </View>
+        <SheetHandle />
 
         {/* Titel */}
         <View style={styles.titleRow}>
@@ -397,6 +386,9 @@ export function RoutePreviewSheet({
             )
           )}
         </View>
+
+        {/* Laatste kind, zie sheetParts. */}
+        <SheetCloseButton onPress={onClose} />
       </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -428,26 +420,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderTopRightRadius: radius['2xl'],
     paddingBottom:        Platform.OS === 'ios' ? 34 : 24,
     ...shadows.lg,
-  },
-
-  sheetHeader: {
-    alignItems:        'center',
-    paddingTop:         spacing[1],
-    paddingHorizontal:  spacing[2],
-    flexDirection:     'row',
-    justifyContent:    'center',
-  },
-  handle: {
-    width:           40,
-    height:           4,
-    backgroundColor: colors.borderDefault,
-    borderRadius:    radius.full,
-  },
-  closeBtn: {
-    position: 'absolute',
-    right:     spacing[2],
-    top:       spacing[1],
-    padding:   4,
   },
 
   titleRow: {

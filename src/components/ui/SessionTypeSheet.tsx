@@ -7,12 +7,12 @@
 
 import React, { useMemo } from 'react';
 import {
-  View, Text, StyleSheet, Modal, TouchableOpacity,
+  View, Text, StyleSheet, Modal,
   TouchableWithoutFeedback, ScrollView, Platform,
 } from 'react-native';
-import { X } from 'lucide-react-native';
 import { palette, typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
+import { SheetHandle, SheetCloseButton } from './sheetParts';
 import type { Session } from '../../data/trainingPlans';
 
 // ── Content per sessie-type ───────────────────────────────────────────────────
@@ -145,19 +145,7 @@ export function SessionTypeSheet({ sessionType, onClose }: SessionTypeSheetProps
       </TouchableWithoutFeedback>
 
       <View style={styles.sheet}>
-        {/* Handle + sluiten */}
-        <View style={styles.sheetTop}>
-          <View style={styles.handle} />
-          <TouchableOpacity
-            style={styles.closeBtn}
-            onPress={onClose}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel="Sluiten"
-          >
-            <X size={20} color={colors.textSecondary} strokeWidth={2} />
-          </TouchableOpacity>
-        </View>
+        <SheetHandle />
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
           {/* Hero */}
@@ -196,6 +184,9 @@ export function SessionTypeSheet({ sessionType, onClose }: SessionTypeSheetProps
             <Text style={styles.whyText}>{info.waarom}</Text>
           </View>
         </ScrollView>
+
+        {/* Laatste kind, zie sheetParts. */}
+        <SheetCloseButton onPress={onClose} />
       </View>
     </Modal>
   );
@@ -217,24 +208,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     maxHeight: '85%',
     paddingBottom: Platform.OS === 'ios' ? 36 : 24,
     ...shadows.lg,
-  },
-  sheetTop: {
-    alignItems: 'center',
-    paddingTop: spacing[1],
-    paddingHorizontal: spacing[2],
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  handle: {
-    width: 40, height: 4,
-    backgroundColor: colors.borderDefault,
-    borderRadius: radius.full,
-  },
-  closeBtn: {
-    position: 'absolute',
-    right: spacing[2],
-    top: spacing[1],
-    padding: 4,
   },
   scroll: {
     paddingHorizontal: spacing[3],

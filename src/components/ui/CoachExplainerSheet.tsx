@@ -13,13 +13,14 @@
 
 import React, { useMemo } from 'react';
 import {
-  View, Text, StyleSheet, Modal, TouchableOpacity,
+  View, Text, StyleSheet, Modal,
   TouchableWithoutFeedback, ScrollView, Platform,
 } from 'react-native';
-import { X, Compass, Play, Footprints, Route, PartyPopper, Settings2 } from 'lucide-react-native';
+import { Compass, Play, Footprints, Route, PartyPopper, Settings2 } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
+import { SheetHandle, SheetCloseButton } from './sheetParts';
 
 // ── Inhoud ────────────────────────────────────────────────────────────────────
 // Losstaand van de rendercode, zodat de copy later makkelijk bij te werken is.
@@ -193,19 +194,7 @@ export function CoachExplainerSheet({ visible, onClose }: CoachExplainerSheetPro
       </TouchableWithoutFeedback>
 
       <View style={styles.sheet}>
-        {/* Handle + sluiten */}
-        <View style={styles.sheetTop}>
-          <View style={styles.handle} />
-          <TouchableOpacity
-            style={styles.closeBtn}
-            onPress={onClose}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel="Sluiten"
-          >
-            <X size={20} color={colors.textSecondary} strokeWidth={2} />
-          </TouchableOpacity>
-        </View>
+        <SheetHandle />
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
           {/* Titel + intro in de coach-stem */}
@@ -236,6 +225,9 @@ export function CoachExplainerSheet({ visible, onClose }: CoachExplainerSheetPro
             );
           })}
         </ScrollView>
+
+        {/* Laatste kind, zie sheetParts. */}
+        <SheetCloseButton onPress={onClose} />
       </View>
     </Modal>
   );
@@ -257,24 +249,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     maxHeight: '85%',
     paddingBottom: Platform.OS === 'ios' ? 36 : 24,
     ...shadows.lg,
-  },
-  sheetTop: {
-    alignItems: 'center',
-    paddingTop: spacing[1],
-    paddingHorizontal: spacing[2],
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  handle: {
-    width: 40, height: 4,
-    backgroundColor: colors.borderDefault,
-    borderRadius: radius.full,
-  },
-  closeBtn: {
-    position: 'absolute',
-    right: spacing[2],
-    top: spacing[1],
-    padding: 4,
   },
   scroll: {
     paddingHorizontal: spacing[3],

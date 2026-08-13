@@ -27,9 +27,10 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
-import { Share2, Download, X, Camera } from 'lucide-react-native';
+import { Share2, Download, Camera } from 'lucide-react-native';
 import { palette, typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
+import { SheetHandle, SheetCloseButton } from './sheetParts';
 import {
   SharePeriodCard,
   CARD_WIDTH,
@@ -110,19 +111,7 @@ export function SharePeriodSheet({
       </TouchableWithoutFeedback>
 
       <View style={styles.sheet}>
-        {/* Handle + sluitknop */}
-        <View style={styles.sheetHeader}>
-          <View style={styles.handle} />
-          <TouchableOpacity
-            style={styles.closeBtn}
-            onPress={onClose}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel="Sluiten"
-          >
-            <X size={20} color={colors.textSecondary} strokeWidth={2} />
-          </TouchableOpacity>
-        </View>
+        <SheetHandle />
 
         <Text style={styles.title}>{periodActionLabel(stats.period)}</Text>
         <Text style={styles.subtitle}>
@@ -230,6 +219,8 @@ export function SharePeriodSheet({
           </View>
         </View>
 
+        {/* Laatste kind, zie sheetParts. */}
+        <SheetCloseButton onPress={onClose} />
       </View>
     </Modal>
   );
@@ -253,26 +244,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderTopRightRadius: radius['2xl'],
     paddingBottom: Platform.OS === 'ios' ? 34 : 24,
     ...shadows.lg,
-  },
-
-  sheetHeader: {
-    alignItems: 'center',
-    paddingTop: spacing[1],
-    paddingHorizontal: spacing[2],
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  handle: {
-    width:  40,
-    height: 4,
-    backgroundColor: colors.borderDefault,
-    borderRadius: radius.full,
-  },
-  closeBtn: {
-    position: 'absolute',
-    right: spacing[2],
-    top: spacing[1],
-    padding: 4,
   },
 
   title: {
