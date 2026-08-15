@@ -7,6 +7,8 @@ De app blijft volledig offline werken: deze backend is additief.
 
 - `migrations/0001_profiles.sql`: tabel `profiles` (een rij per gebruiker, gekoppeld aan `auth.users`), met Row Level Security.
 - `migrations/0002_runs.sql`: tabel `runs` (voltooide hardloopsessies), met Row Level Security.
+- `migrations/0003_events.sql`: tabel `events` (funnel-analytics) plus de views `funnel_weekly` en `events_weekly`. Toegepast op de live database op 4 augustus 2026.
+- `migrations/0004_app_stats.sql`: functie `app_stats()`, het telwerk achter de edge function `stats`. Toegepast op 4 augustus 2026.
 
 Beide tabellen hebben RLS aan: een ingelogde gebruiker ziet en schrijft uitsluitend zijn eigen rijen.
 
@@ -20,8 +22,9 @@ Kies een van de twee manieren.
 2. Ga naar SQL Editor.
 3. Plak de inhoud van `0001_profiles.sql`, klik Run.
 4. Plak daarna de inhoud van `0002_runs.sql`, klik Run.
+5. Plak daarna de inhoud van `0003_events.sql`, klik Run.
 
-Voer de bestanden in volgorde uit (eerst 0001, dan 0002).
+Voer de bestanden in volgorde uit (eerst 0001, dan 0002, dan 0003).
 
 ### Optie B: via de Supabase CLI
 
