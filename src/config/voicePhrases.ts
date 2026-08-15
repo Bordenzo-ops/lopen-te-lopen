@@ -340,13 +340,281 @@ const FINISH_CLOSERS: string[] = [
 ];
 
 // ── 15. Race-felicitaties — "Gefeliciteerd! Je hebt {race} uitgelopen!" ────
-// Eén clip per wedstrijd uit rotterdamRaces.ts. getAllRaces() geeft de
+// Eén clip per wedstrijdNAAM (niet per wedstrijd-id). getAllRaces() geeft de
 // daadwerkelijk kiesbare "bladwedstrijden" terug (bij een evenement met
 // subRaces tellen alleen die subRaces mee, niet de groepsrace zelf — precies
 // wat een gebruiker in de racekiezer selecteert, zie buildRacePlan.ts). Begint
 // de naam zelf al met een lidwoord ("De ..."/"Het ..."), dan geen extra "de"
 // ervoor (zie raceNamePhrase).
+//
+// WAAROM OP NAAM EN NIET OP ID — race-ids dragen het jaartal
+// ('drechtstadloop-2026'), dus de editie van volgend jaar zou onder een id-
+// sleutel een compleet nieuwe clip zijn terwijl de uitgesproken tekst
+// identiek is. Op naam gesleuteld dekt één clip alle edities van hetzelfde
+// evenement, voor altijd. Dat is wat racedata-updates zonder app-build
+// (scripts/publish-races.ts) én zonder ElevenLabs-abonnement mogelijk maakt:
+// zolang de naam al eens is ingesproken, klinkt de felicitatie in de echte
+// coachstem — ook voor een wedstrijd die pas jaren later gepubliceerd wordt.
 const RACE_LIST = getAllRaces();
+
+/**
+ * Extra wedstrijdnamen die WEL een clip krijgen maar (nog) niet in
+ * rotterdamRaces.ts staan: een vooruit ingesproken voorraad, zodat een later
+ * gepubliceerde wedstrijd meteen zijn eigen felicitatie heeft zonder dat er
+ * nog een ElevenLabs-abonnement aan te pas komt.
+ *
+ * Spelregels: exact de naam zoals die in de racedata komt te staan (de slug
+ * wordt eruit afgeleid, zie raceVoiceClipId), en nooit een naam verwijderen —
+ * dat zou de clip uit het manifest halen terwijl er misschien al een
+ * wedstrijd onder die naam gepubliceerd is. Namen die intussen wél in
+ * rotterdamRaces.ts staan mogen hier blijven: dubbele namen leveren dezelfde
+ * slug op en worden bij het opbouwen van de catalogus ontdubbeld.
+ *
+ * De lijst bestaat uit twee groepen met een verschillend doel:
+ *
+ * 1. De vooruit ingesproken voorraad (Deel A/B/C hieronder, 132 namen, zie
+ *    `_workspace/notities/Race-stemvoorraad-aug-2026.md`) — wedstrijden die
+ *    nog niet in rotterdamRaces.ts staan maar wel al een felicitatie krijgen
+ *    zodra ze via publish-races.ts verschijnen, ook ver na 19 augustus 2026
+ *    (einde ElevenLabs-abonnement).
+ *
+ * 2. De oude sponsornamen (36 namen) — GEEN nieuwe voorraad, maar bestaande,
+ *    al betaalde clips die anders wees zouden worden. Op 15-08-2026 zijn 44
+ *    wedstrijdnamen in rotterdamRaces.ts hernoemd (sponsors en jaartallen
+ *    eruit); daardoor verwijst geen enkele wedstrijd in de huidige data meer
+ *    naar deze 36 oude naam-slugs, en het generatiescript ruimt wezen op bij
+ *    upload. Gebruikers op app-versie 1.0/1.1 hebben echter nog de
+ *    gebúndelde racedata met de OUDE namen (serverdata lezen begint pas bij
+ *    1.2.0) — verdwijnen die clips, dan verliezen precies die gebruikers hun
+ *    wedstrijdfelicitatie. Door de oude namen hier te laten staan blijven de
+ *    clips in het manifest. Dit kost NUL credits: het generatiescript is
+ *    idempotent op `{phraseId}-{hash}.mp3` en de tekst achter deze namen is
+ *    ongewijzigd, dus de bestaande bestanden worden simpelweg overgeslagen.
+ *    NIET opruimen, ook al lijkt er geen wedstrijd meer naar te verwijzen.
+ */
+const EXTRA_RACE_VOICE_NAMES: string[] = [
+  // Voorraad Deel A — kale varianten van wedstrijden die al in de app staan
+  "Marathon Rotterdam",
+  "Marathon Rotterdam - Marathon",
+  "Marathon Rotterdam - Halve Marathon",
+  "Marathon Rotterdam - 10 km",
+  "Marathon Eindhoven",
+  "Marathon Eindhoven - Marathon",
+  "Marathon Eindhoven - Halve Marathon",
+  "Marathon Eindhoven - 10 km",
+  "Marathon Eindhoven - 5 km",
+  "Amsterdam Marathon",
+  "Amsterdam Marathon - Marathon",
+  "Amsterdam Marathon - Halve Marathon",
+  "Marathon Den Haag",
+  "Marathon Den Haag - Marathon",
+  "Marathon Den Haag - 10 km",
+  "Marathon Den Haag - 5 km",
+  "Dam tot Damloop",
+  "Egmond Halve Marathon",
+  "Zevenheuvelenloop",
+  "Bruggenloop Rotterdam",
+  "Singelloop Utrecht",
+  "Singelloop Utrecht - 10 km",
+  "Singelloop Utrecht - 5 km",
+  "Tilburg Ten Miles",
+  "Tilburg Ten Miles - 10 Mijl",
+  "Tilburg Ten Miles - 10 km",
+  "Tilburg Ten Miles - 5 km",
+  "Venloop",
+  "Venloop - Halve Marathon",
+  "Venloop - 10 km",
+  "Venloop - 5 km",
+  "Bruges Marathon",
+  "Bruges Marathon - Marathon",
+  "Bruges Marathon - Halve Marathon",
+  "Antwerp Marathon",
+  "Antwerp Marathon - Marathon",
+  "Antwerp Marathon - Halve Marathon",
+  "Antwerp Marathon - 10 km",
+  "Antwerp 10 Miles",
+  "Antwerp 10 Miles - 10 Miles",
+  "Antwerp 10 Miles - 5 Miles",
+  "Gent 10 Mijl",
+  "Gent 10 Mijl - 10 Mijl",
+  "Gent 10 Mijl - 5 Mijl",
+  // Voorraad Deel B — nieuwe Nederlandse evenementen
+  "CPC Loop Den Haag",
+  "CPC Loop Den Haag - Halve Marathon",
+  "CPC Loop Den Haag - 10 km",
+  "CPC Loop Den Haag - 5 km",
+  "Midwinter Marathon Apeldoorn",
+  "Midwinter Marathon Apeldoorn - Marathon",
+  "Midwinter Marathon Apeldoorn - Halve Marathon",
+  "Midwinter Marathon Apeldoorn - 10 km",
+  "Enschede Marathon",
+  "Enschede Marathon - Marathon",
+  "Enschede Marathon - Halve Marathon",
+  "Enschede Marathon - 10 km",
+  "Utrecht Marathon",
+  "Utrecht Marathon - Marathon",
+  "Utrecht Marathon - Halve Marathon",
+  "Utrecht Marathon - 10 km",
+  "Kustmarathon Zeeland",
+  "Kustmarathon Zeeland - Marathon",
+  "Kustmarathon Zeeland - Halve Marathon",
+  "Kustmarathon Zeeland - 10 km",
+  "Berenloop Terschelling",
+  "Berenloop Terschelling - Marathon",
+  "Berenloop Terschelling - Halve Marathon",
+  "Berenloop Terschelling - 10 km",
+  "Berenloop Terschelling - 5 km",
+  "4 Mijl van Groningen",
+  "Nacht van Groningen",
+  "Nacht van Groningen - Halve Marathon",
+  "Nacht van Groningen - 10 km",
+  "Maastrichts Mooiste",
+  "Maastrichts Mooiste - Halve Marathon",
+  "Maastrichts Mooiste - 10 km",
+  "Maastrichts Mooiste - 5 km",
+  "Bredase Singelloop",
+  "Bredase Singelloop - Halve Marathon",
+  "Bredase Singelloop - 10 km",
+  "Bredase Singelloop - 5 km",
+  "Bridge to Bridge Arnhem",
+  "Bridge to Bridge Arnhem - 10 Mijl",
+  "Bridge to Bridge Arnhem - 10 km",
+  "Bridge to Bridge Arnhem - 5 km",
+  "Groet uit Schoorl Run",
+  "Groet uit Schoorl Run - 20 km",
+  "Groet uit Schoorl Run - 10 km",
+  "Goudse Singelloop",
+  "Goudse Singelloop - 10 km",
+  "Goudse Singelloop - 5 km",
+  "Halve Marathon van Texel",
+  "Halve Marathon van Texel - Halve Marathon",
+  "Halve Marathon van Texel - 10 km",
+  "Montferland Halve Marathon",
+  "Montferland Halve Marathon - Halve Marathon",
+  "Montferland Halve Marathon - 10 km",
+  "Parelloop Brunssum",
+  "Parelloop Brunssum - 10 km",
+  "Parelloop Brunssum - 5 km",
+  "Zandvoort Circuit Run",
+  "Amersfoort Marathon",
+  "Amersfoort Marathon - Halve Marathon",
+  "Amersfoort Marathon - 10 km",
+  "Roosendaal Halve Marathon",
+  "Roosendaal Halve Marathon - 10 km",
+  "Two Rivers Marathon",
+  "10 van Noordwijk",
+  "Linschotenloop",
+  "Linschotenloop - Halve Marathon",
+  "Linschotenloop - 10 km",
+  "Diepe Hel Holterbergloop",
+  "Blaauwbekmarathon",
+  "Kruikenloop",
+  "Achtkastelenloop",
+  "Lansingerland Run",
+  // Voorraad Deel C — nieuwe Vlaamse evenementen
+  "Ghent Marathon",
+  "Ghent Marathon - Marathon",
+  "Ghent Marathon - Halve Marathon",
+  "Ghent Marathon - 10 km",
+  "Dwars door Brugge",
+  "Dwars door Brugge - 10 km",
+  "Dwars door Brugge - 5 km",
+  "In Flanders Fields Marathon",
+  "In Flanders Fields Marathon - Marathon",
+  "In Flanders Fields Marathon - Halve Marathon",
+  "Dwars door Mechelen",
+  "Bruggenloop Kortrijk",
+  "Leiecorrida Wevelgem",
+  "Flandrien Loop Oudenaarde",
+  "Halve Marathon Poppel",
+  "Mutotoloop",
+  // Oude sponsornamen — wees geworden door de sponsorloze hernoeming van
+  // 15-08-2026 in rotterdamRaces.ts; blijven hier zodat gebruikers op app-
+  // versie 1.0/1.1 (gebundelde racedata, nog met deze namen) hun felicitatie
+  // houden. Zie de toelichting boven deze constante.
+  "NN Marathon Rotterdam 2027",
+  "DSW Bruggenloop Rotterdam",
+  "City-Pier-City Loop",
+  "NN Marathon The Hague - Marathon",
+  "NN The Hague 10K",
+  "The Hague 5K",
+  "Spijkenisse SPARK Marathon",
+  "Spijkenisse SPARK Halve Marathon",
+  "Spijkenisse SPARK 10 km",
+  "Spijkenisse SPARK 5 km",
+  "NN Dam tot Damloop",
+  "TCS Amsterdam Marathon",
+  "TCS Amsterdam Half Marathon",
+  "NN Egmond Halve Marathon",
+  "CZ Tilburg Ten Miles - 10 Mijl",
+  "CZ Tilburg Ten Miles - 10 km",
+  "CZ Tilburg Ten Miles - 5 km",
+  "ASML Marathon Eindhoven - Marathon",
+  "ASML Marathon Eindhoven - Halve Marathon",
+  "ASML Marathon Eindhoven - 10 km",
+  "ASML Marathon Eindhoven - 5 km",
+  "TREK Singelloop Utrecht 10 km",
+  "TREK Singelloop Utrecht 5 km",
+  "Garmin Zevenheuvelenloop",
+  "Arrow Venloop - Halve marathon",
+  "Arrow Venloop - 10 km",
+  "Arrow Venloop - 5 km",
+  "Athora Bruges Marathon - Marathon",
+  "Athora Bruges Marathon - Halve Marathon",
+  "MAES Gent 10 Mijl - 10 Mijl",
+  "MAES Gent 10 Mijl - 5 Mijl",
+  "TREK Antwerp Marathon - Marathon",
+  "TREK Antwerp Marathon - Halve Marathon",
+  "TREK Antwerp Marathon - 10 km",
+  "Baloise Antwerp 10 Miles - 10 Miles",
+  "Baloise Antwerp 10 Miles - 5 Miles",
+  // Idem, maar los besloten op 15-08-2026: de halve marathon van Dordrecht
+  // heeft geen officiële sponsorloze naam (het evenement rebrandt volledig bij
+  // elke sponsorwissel, eerder "Riwal Hoogwerkers Halve Marathon"). De data
+  // gebruikt daarom bewust de zelfgekozen naam "Dordrecht Halve Marathon";
+  // deze regel houdt de al betaalde clip van de oude naam in het manifest.
+  "Boels Rental Run",
+];
+
+/** Vangnetclip als een wedstrijdnaam zelf niet in het pakket zit. */
+const RACE_GENERIC_TEXT = 'Gefeliciteerd! Je hebt je wedstrijd uitgelopen!';
+
+/**
+ * Vaste vervangingen voor letters met een accent. Bewust een expliciete tabel
+ * in plaats van String.prototype.normalize('NFD'): de slug moet in Node (het
+ * generatiescript) en in Hermes (de app) tot op de letter hetzelfde resultaat
+ * geven, en Unicode-normalisatie is precies het soort API waar die twee
+ * omgevingen in kunnen verschillen. Een tabel is saai, maar controleerbaar.
+ */
+const SLUG_CHAR_MAP: Record<string, string> = {
+  à: 'a', á: 'a', â: 'a', ã: 'a', ä: 'a', å: 'a',
+  è: 'e', é: 'e', ê: 'e', ë: 'e',
+  ì: 'i', í: 'i', î: 'i', ï: 'i',
+  ò: 'o', ó: 'o', ô: 'o', õ: 'o', ö: 'o', ø: 'o',
+  ù: 'u', ú: 'u', û: 'u', ü: 'u',
+  ç: 'c', ñ: 'n', ý: 'y', ÿ: 'y',
+  æ: 'ae', œ: 'oe', ß: 'ss',
+};
+
+/**
+ * Clip-id voor de felicitatie bij een wedstrijdnaam: 'race_' + een slug van
+ * de naam (kleine letters, accenten weg, alles buiten a-z0-9 wordt een
+ * koppelteken). Deterministisch en stabiel — dezelfde naam levert altijd
+ * hetzelfde id op, ongeacht jaartal, editie of wedstrijd-id.
+ *
+ * Levert een naam een lege slug op (denkbaar bij een naam die alleen uit
+ * leestekens bestaat), dan valt dit terug op 'race_overig' zodat er nooit een
+ * id als 'race_' ontstaat.
+ */
+export function raceVoiceClipId(raceName: string): string {
+  let out = '';
+  for (const char of (raceName ?? '').toLowerCase()) {
+    const mapped = SLUG_CHAR_MAP[char] ?? char;
+    out += /^[a-z0-9]+$/.test(mapped) ? mapped : '-';
+  }
+  const slug = out.replace(/-+/g, '-').replace(/^-|-$/g, '');
+  return slug ? `race_${slug}` : 'race_overig';
+}
 
 /**
  * Voegt "de" toe vóór een wedstrijdnaam, tenzij die zelf al met een lidwoord
@@ -592,13 +860,20 @@ export function allPhrases(): CatalogPhrase[] {
     });
   }
 
-  // 15. Race-felicitaties
-  RACE_LIST.forEach(race => {
-    phrases.push({
-      id: `race_${race.id}`,
-      text: `Gefeliciteerd! Je hebt ${raceNamePhrase(race.name)} uitgelopen!`,
-    });
+  // 15. Race-felicitaties — op naam gesleuteld (zie sectie 15 hierboven), dus
+  // ontdubbeld: dezelfde naam in meerdere edities/steden = één clip. De eerste
+  // voorkomende naam wint; identieke slugs leveren immers identieke tekst op.
+  const raceClipTexts = new Map<string, string>();
+  [...RACE_LIST.map(race => race.name), ...EXTRA_RACE_VOICE_NAMES].forEach(name => {
+    const id = raceVoiceClipId(name);
+    if (!raceClipTexts.has(id)) {
+      raceClipTexts.set(id, `Gefeliciteerd! Je hebt ${raceNamePhrase(name)} uitgelopen!`);
+    }
   });
+  raceClipTexts.forEach((text, id) => {
+    phrases.push({ id, text });
+  });
+  phrases.push({ id: 'race_generic', text: RACE_GENERIC_TEXT });
 
   // 15b. Dagdeel-begroeting
   (Object.keys(GREET_TEXTS) as Array<keyof typeof GREET_TEXTS>).forEach(period => {
@@ -667,6 +942,15 @@ export function allPhrases(): CatalogPhrase[] {
 export type PhraseUtterance = {
   ids: string[];
   fallbackText: string;
+  /**
+   * Alternatieve clip-reeksen, op volgorde geprobeerd zodra `ids` niet
+   * VOLLEDIG in het stempakket zit (voiceService speelt een reeks immers
+   * alleen af als elke clip erin bestaat). Bedoeld voor boodschappen die een
+   * minder specifieke, maar nog altijd echte-stem-variant hebben — nu alleen
+   * de race-felicitatie (zie raceFinishUtterance). Blijft elke reeks
+   * onvolledig, dan spreekt de telefoonstem gewoon de fallbackText.
+   */
+  altIds?: string[][];
 };
 
 /**
@@ -962,17 +1246,31 @@ export function techniqueCueUtterance(variant: number = 0): PhraseUtterance {
 
 /**
  * Race-felicitatie bij het uitlopen van de RACE-sessie van de laatste week
- * van een wedstrijdschema (fase E, zie app/session/active.tsx). Onbekende
- * `raceId` (race niet gevonden in rotterdamRaces.ts, bijvoorbeeld verwijderd
- * uit de racelijst na het bouwen van het schema) → `ids: []`, zodat er nooit
- * naar een niet-bestaande clip verwezen wordt; de fallbackText blijft wel
- * gewoon de volledige zin, met de meegegeven `raceName` (die zit al in het
- * opgeslagen racePlan, dus is altijd bekend ongeacht de catalogus).
+ * van een wedstrijdschema (fase E, zie app/session/active.tsx).
+ *
+ * Sleutelt op de NAAM (`raceVoiceClipId`), niet op `raceId` — zie sectie 15
+ * voor het waarom. De naam zit in het opgeslagen racePlan en is dus altijd
+ * bekend, ook voor een wedstrijd die de app pas via een serverupdate kent
+ * (`setRaceCountriesOverride`). Er wordt hier bewust NIET meer gecontroleerd
+ * of de wedstrijd in rotterdamRaces.ts voorkomt: die controle las een
+ * momentopname van de gebundelde lijst en sloot serverwedstrijden dus juist
+ * uit. Ontbreekt de clip in het pakket, dan lost voiceService dat al netjes
+ * op via de reeksen hieronder.
+ *
+ * Drie niveaus, in deze volgorde:
+ *  1. de clip van deze wedstrijdnaam;
+ *  2. het oude, op wedstrijd-id gesleutelde clip-id — zodat een gebruiker die
+ *     nog een ouder stempakket op de telefoon heeft staan de felicitatie toch
+ *     in de echte stem hoort (die pakketten kennen alleen `race_{id}`);
+ *  3. de naamloze vangnetclip ("Je hebt je wedstrijd uitgelopen!").
+ * Lukt geen van drieën, dan spreekt de telefoonstem de volledige zin mét naam.
  */
 export function raceFinishUtterance(raceId: string, raceName: string): PhraseUtterance {
-  const fallbackText = `Gefeliciteerd! Je hebt ${raceNamePhrase(raceName)} uitgelopen!`;
-  const known = RACE_LIST.some(race => race.id === raceId);
-  return { ids: known ? [`race_${raceId}`] : [], fallbackText };
+  return {
+    ids: [raceVoiceClipId(raceName)],
+    altIds: [[`race_${raceId}`], ['race_generic']],
+    fallbackText: `Gefeliciteerd! Je hebt ${raceNamePhrase(raceName)} uitgelopen!`,
+  };
 }
 
 /**

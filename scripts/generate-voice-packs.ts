@@ -188,6 +188,29 @@ function printDryRun(): void {
     console.log(`  ${group}: ${list.length}`);
   }
   console.log(`  TOTAAL: ${phrases.length} clips per stem`);
+
+  // Botsingscontrole: sinds de race-clips op een slug van de wedstrijdNAAM
+  // gesleuteld zijn (zie sectie 15 in voicePhrases.ts) is het theoretisch
+  // mogelijk dat twee verschillende namen tot hetzelfde id herleiden. Dan zou
+  // de ene wedstrijd de felicitatie van de andere te horen krijgen. Dat is een
+  // datafout, geen runtime-fout — dus hier melden, waar het opvalt vóór er
+  // credits aan gespendeerd worden.
+  const seen = new Map<string, string>();
+  const collisions: string[] = [];
+  for (const phrase of phrases) {
+    const previous = seen.get(phrase.id);
+    if (previous !== undefined && previous !== phrase.text) {
+      collisions.push(`  ${phrase.id}:\n      "${previous}"\n      "${phrase.text}"`);
+    }
+    seen.set(phrase.id, phrase.text);
+  }
+  if (collisions.length > 0) {
+    console.error(`\n!! ${collisions.length} clip-id(s) met verschillende teksten:`);
+    collisions.forEach((line) => console.error(line));
+    console.error('   Los dit op vóór het genereren — één id kan maar één clip zijn.');
+  } else {
+    console.log(`  (geen dubbele clip-ids, ${seen.size} unieke ids)`);
+  }
 }
 
 // ── Hash / bestandsnaam ──────────────────────────────────────────────────────

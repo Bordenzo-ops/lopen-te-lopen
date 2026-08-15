@@ -151,12 +151,41 @@ function playClip(source: string | number, myToken: number): Promise<boolean> {
 }
 
 /**
+ * Zoekt de eerste id-reeks waarvan ELK id een lokale clip heeft en geeft de
+ * bijbehorende uri's terug; is geen enkele reeks compleet, dan null.
+ *
+ * De "alles of niets"-regel per reeks is bewust: een half beschikbare reeks
+ * zou een halve zin opleveren ("Gefeliciteerd! Je hebt ... uitgelopen!" zonder
+ * de wedstrijdnaam). Liever een minder specifieke reeks die wél compleet is,
+ * of anders de telefoonstem met de volledige zin.
+ */
+function firstCompleteClipSet(idSets: string[][], voice: VoiceType): string[] | null {
+  for (const ids of idSets) {
+    if (!ids || ids.length === 0) continue;
+    const uris: string[] = [];
+    let complete = true;
+    for (const id of ids) {
+      const uri = getLocalClipUri(voice, id);
+      if (!uri) {
+        complete = false;
+        break;
+      }
+      uris.push(uri);
+    }
+    if (complete) return uris;
+  }
+  return null;
+}
+
+/**
  * Probeert de volledige utterance als stempakket-clips af te spelen.
  *
  * Voorwaarden (allemaal nodig, anders wordt er NIETS afgespeeld en mag de
  * aanroeper de fallbackText via de telefoonstem spreken): premium-toegang,
- * minstens één clip-id, en voor ELK id een lokale clip beschikbaar
- * (`voicePackService.getLocalClipUri`, zelf al offline-first/stil-falend).
+ * minstens één clip-id, en een complete id-reeks — `utterance.ids` zelf, of
+ * anders een van de `utterance.altIds` (zie firstCompleteClipSet en de
+ * toelichting bij PhraseUtterance). Beschikbaarheid komt uit
+ * `voicePackService.getLocalClipUri`, zelf al offline-first/stil-falend.
  *
  * Geeft terug of er al minstens één clip geklonken heeft. Zodra dat zo is,
  * mag de aanroeper NOOIT meer de fallback spreken (ook niet als een latere
@@ -178,12 +207,15 @@ async function tryPlayPackClips(utterance: PhraseUtterance, voice: VoiceType, my
     if (!utterance.ids || utterance.ids.length === 0) return false;
     if (!isPackAvailable(voice)) return false;
 
-    const uris: string[] = [];
-    for (const id of utterance.ids) {
-      const uri = getLocalClipUri(voice, id);
-      if (!uri) return false; // niet ELK id heeft een clip: wachtrij niet starten
-      uris.push(uri);
-    }
+    // Eerst de gewenste reeks, daarna eventuele alternatieven (zie altIds in
+    // voicePhrases.ts): de eerste reeks waarvan ELK id een lokale clip heeft
+    // wint. Zonder zo'n complete reeks wordt er niets afgespeeld en spreekt de
+    // aanroeper de fallbackText via de telefoonstem.
+    const uris = firstCompleteClipSet(
+      [utterance.ids, ...(utterance.altIds ?? [])],
+      voice,
+    );
+    if (!uris) return false;
 
     await ensureAudioMode();
 
