@@ -1,6 +1,6 @@
 ---
 name: werkpakket
-description: Voer een werkpakket (WP1 t/m WP13) uit het technisch jaarplan 2026-2027 uit. Gebruik wanneer Lars een werkpakket noemt, bijv. "/werkpakket WP1" of "voer WP5 uit".
+description: Voer een werkpakket (WP1 t/m WP14) uit het technisch jaarplan 2026-2027 uit. Gebruik wanneer Lars een werkpakket noemt, bijv. "/werkpakket WP1" of "voer WP5 uit".
 ---
 
 # Werkpakket uitvoeren
