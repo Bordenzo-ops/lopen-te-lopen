@@ -5,7 +5,10 @@
  *
  * Logica (zelfde opbouw als Strava Training Plans / Garmin Coach):
  *
- *  1. Bereken beschikbare weken = floor((raceDate - vandaag) / 7)
+ *  1. Bereken beschikbare KALENDERweken tot de racedag, deze week inclusief
+ *     (calendarWeeksAvailable in raceSchedule.ts — bewust GEEN dag-gebaseerde
+ *     telling vanaf vandaag, zie de toelichting daar: dat leverde eerder een
+ *     structurele off-by-one op t.o.v. raceWeekForDate/raceScheduleStatus)
  *  2. Kies het best passende basisprogramma (5km / 10km / halve_marathon)
  *  3. Als er MEER weken zijn dan het basisprogramma: voeg opbouwweken toe aan het begin
  *  4. Als er MINDER weken zijn: trim rustiger weken aan het begin weg (bewaar altijd taper + race week)
@@ -28,10 +31,23 @@
  * door geraakt: dat genereert altijd gloednieuwe 'custom-' id's.
  */
 
+import { startOfWeek, subWeeks } from 'date-fns';
 import { getTrainingPlan } from './trainingPlans';
 import type { TrainingWeek, Session, GoalType } from './trainingPlans';
 import type { RotterdamRace } from './rotterdamRaces';
-import { weeksUntilRace } from './rotterdamRaces';
+// LET OP: bewust NIET weeksUntilRace uit rotterdamRaces.ts. Die telt
+// dag-gebaseerd vanaf vandaag (voor countdown-teksten als "5 weken te
+// gaan") en gebruikt daarmee een andere maat dan raceWeekForDate/
+// raceScheduleStatus in raceSchedule.ts (kalenderweken vanaf de maandag van
+// deze week). Beide maten hebben niet dezelfde nul: de dag-maat "verliest"
+// de dagen tussen vandaag en deze maandag, en komt structureel één
+// kalenderweek te laag uit. Gebruikte buildRacePlan die maat voor
+// totalWeeks, dan liep dat getal niet meer in de pas met de kalenderrekening
+// die er later (in appStore.ts/selectCurrentWeek) mee vergeleken wordt — het
+// schema kreeg dan permanent status 'voor' terwijl het gewoon meteen had
+// moeten starten. Zie calendarWeeksAvailable in raceSchedule.ts voor de
+// volledige toelichting.
+import { parseLocalISODate, formatLocalISODate, calendarWeeksAvailable } from './raceSchedule';
 
 // Minimale en maximale schema-lengte per afstand
 const PLAN_BOUNDS: Record<GoalType, { min: number; base: number; max: number }> = {
@@ -163,7 +179,7 @@ export function buildRacePlan(
   const goal: GoalType = goalForDistance(race.distance);
 
   const bounds       = PLAN_BOUNDS[goal];
-  const availWeeks   = weeksUntilRace(race.date, today);
+  const availWeeks   = calendarWeeksAvailable(race.date, today);
   const basePlan     = getTrainingPlan(goal);
 
   // Te weinig weken: minimaal TAPER_WEEKS + 1 nodig
@@ -218,8 +234,9 @@ export function buildRacePlan(
   // schema niet meer "op 0" te beginnen. We slaan weken vooraan over zolang
   // de langste sessie van die week ONDER het opgegeven niveau ligt (dus
   // zwaardere of gelijke weken worden nooit weggesneden) en zolang er
-  // minimaal TAPER_WEEKS + 1 weken overblijven. De startdatum schuift
-  // evenveel weken op, zodat het schema nog steeds op de racedatum eindigt.
+  // minimaal TAPER_WEEKS + 1 weken overblijven. De startdatum hoeft hiervoor
+  // NIET apart aangepast te worden: die wordt hieronder toch al teruggerekend
+  // vanaf de racedag op basis van het (dan al verkorte) aantal weken.
   let comfortWeeksSkipped = 0;
   if (typeof comfortableKm === 'number' && comfortableKm > 0) {
     const maxSkippable = weeks.length - (TAPER_WEEKS + 1);
@@ -241,36 +258,69 @@ export function buildRacePlan(
     i === weeks.length - 1 ? injectRaceName(w, race.name, goal, raceKm) : w,
   );
 
-  // Startdatum = customStartDate, of anders vandaag (snap naar aankomende maandag)
-  const startDate = customStartDate ? new Date(customStartDate) : new Date(today);
-  const dow = startDate.getDay();
-  if (dow !== 1) {
-    // Snap naar aankomende maandag (0=zo→+1, anders 8-dow dagen vooruit)
-    startDate.setDate(startDate.getDate() + (dow === 0 ? 1 : 8 - dow));
-  }
-  // Zijn er weken vooraan overgeslagen op basis van het niveau? Dan start de
-  // gebruiker pas later: schuif de startdatum evenveel weken op zodat het
-  // schema, met minder weken, nog steeds op de racedatum eindigt.
-  if (comfortWeeksSkipped > 0) {
-    startDate.setDate(startDate.getDate() + comfortWeeksSkipped * 7);
+  // Startdatum: terugrekenen vanaf de RACEDAG, niet vooruitrekenen vanaf
+  // vandaag. Zo eindigt het schema per constructie altijd precies op de
+  // racedag — ook wanneer de wedstrijd verder weg ligt dan het langste
+  // schema toelaat (targetWeeks is dan hierboven al geklemd op bounds.max):
+  // in dat geval ligt startDate simpelweg verder in de toekomst, en toont de
+  // UI dat eerlijk via raceScheduleStatus() (raceSchedule.ts, status
+  // 'voor') in plaats van het schema vroeg te laten starten en ruim vóór de
+  // wedstrijd alweer klaar te zijn (de oorspronkelijke bug: het schema liep
+  // dan niet meer gelijk met de kalender).
+  //
+  // `weeks.length` is op dit punt al het definitieve aantal weken (inclusief
+  // een eventuele niveau-correctie hierboven), dus startDate = racedag-
+  // maandag − (weeks.length − 1) weken klopt vanzelf, zonder de aparte
+  // "schuif comfortWeeksSkipped weken op"-correctie die hier eerder stond.
+  //
+  // customStartDate blijft als expliciete override beschikbaar (nu ongebruikt
+  // in de app, maar bruikbaar voor tests): die snapt zoals voorheen naar de
+  // eerstvolgende maandag in plaats van terug te rekenen vanaf de racedag.
+  let startDate: Date;
+  if (customStartDate) {
+    // parseLocalISODate i.p.v. new Date(customStartDate): dezelfde
+    // UTC-parseval als race.date hierboven (zie parseLocalISODate in
+    // raceSchedule.ts) — customStartDate is een kale 'YYYY-MM-DD'-string.
+    startDate = parseLocalISODate(customStartDate);
+    const dow = startDate.getDay();
+    if (dow !== 1) {
+      // Snap naar aankomende maandag (0=zo→+1, anders 8-dow dagen vooruit)
+      startDate.setDate(startDate.getDate() + (dow === 0 ? 1 : 8 - dow));
+    }
+  } else {
+    const raceWeekMonday = startOfWeek(parseLocalISODate(race.date), { weekStartsOn: 1 });
+    startDate = subWeeks(raceWeekMonday, weeks.length - 1);
   }
 
   return {
     race,
     goal,
     totalWeeks: weeks.length,
-    startDate:  startDate.toISOString().split('T')[0],
+    // formatLocalISODate i.p.v. startDate.toISOString().split('T')[0]: die
+    // laatste converteert eerst naar UTC en kan in een tijdzone ten oosten
+    // van UTC (zoals Nederlandse zomertijd) een dag te vroeg uitkomen — een
+    // berekende maandag zou dan als de voorgaande zondag opgeslagen worden.
+    // Zie formatLocalISODate in raceSchedule.ts voor de volledige toelichting.
+    startDate:  formatLocalISODate(startDate),
     weeks,
     adaptationNote,
   };
 }
 
-/** Geeft aan of een gebruiker op tijd kan beginnen voor de wedstrijd */
+/**
+ * Geeft aan of een gebruiker op tijd kan beginnen voor de wedstrijd.
+ *
+ * Gebruikt bewust dezelfde `calendarWeeksAvailable`-maat als buildRacePlan
+ * hierboven (in plaats van de dag-gebaseerde `weeksUntilRace`): zouden deze
+ * twee functies een verschillende maat hanteren, dan zou de picker een
+ * wedstrijd kunnen goedkeuren die buildRacePlan vervolgens alsnog weigert
+ * (of andersom) — met precies de rand van TAPER_WEEKS + 1 als breekpunt.
+ */
 export function canTrainForRace(
   race: RotterdamRace,
   today = new Date(),
 ): { possible: boolean; reason?: string } {
-  const weeks = weeksUntilRace(race.date, today);
+  const weeks = calendarWeeksAvailable(race.date, today);
   const goal: GoalType = goalForDistance(race.distance);
   const { min } = PLAN_BOUNDS[goal];
 

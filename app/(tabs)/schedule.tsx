@@ -12,7 +12,8 @@ import type { Session } from '../../src/data/trainingPlans';
 import { resolveActivePlan } from '../../src/data/activePlan';
 import { DayPicker } from '../../src/components/ui/DayPicker';
 import { SessionEditorSheet } from '../../src/components/ui/SessionEditorSheet';
-import { weeksUntilLabel } from '../../src/data/rotterdamRaces';
+import { weeksUntilLabel, formatRaceDate } from '../../src/data/rotterdamRaces';
+import { raceScheduleStatus } from '../../src/data/raceSchedule';
 import { Dumbbell, Trophy } from 'lucide-react-native';
 import { useRacePace } from '../../src/hooks/useRacePace';
 import { formatPacePerKm } from '../../src/data/paceModel';
@@ -79,6 +80,10 @@ export default function ScheduleScreen() {
   const planName  = activePlan.name;
   const planTotal = activePlan.totalWeeks;
   const weeksLeftLabel = useRace && racePlan ? weeksUntilLabel(racePlan.race.date) : null;
+  // Kalenderstatus van het wedstrijdschema: 'voor' (moet nog beginnen),
+  // 'bezig' of 'na' (racedatum al gepasseerd). Bepaalt hieronder welke
+  // regel we onder de wedstrijdnaam tonen — zie raceScheduleStatus.
+  const raceStatus = useRace && racePlan ? raceScheduleStatus(racePlan, new Date()) : null;
 
   // Bewerkmodus is alleen zinvol met een actief vrij schema; verlaat hem
   // automatisch zodra dat niet meer zo is (schema gewist of van modus gewisseld).
@@ -174,6 +179,19 @@ export default function ScheduleScreen() {
               🏁 {racePlan ? new Date(racePlan.race.date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}
               {'  ·  '}{weeksLeftLabel} · {planTotal}-wekenschema
             </Text>
+            {/* Feitelijke, korte melding dat het schema aan de kalender vastzit
+                (zie appStore.ts/raceScheduleStatus): de week-met-racedag klopt
+                altijd met de echte racedag, ook als er trainingen gemist zijn.
+                Bij status 'voor' ligt de wedstrijd verder weg dan het langste
+                schema toelaat — toon dan eerlijk wanneer het schema start in
+                plaats van te doen alsof week 1 al bezig is. */}
+            {racePlan && (
+              <Text style={styles.raceInfoMeta}>
+                {raceStatus?.status === 'voor'
+                  ? `Je schema start op ${formatRaceDate(racePlan.startDate)}`
+                  : `Week ${currentWeek} van ${planTotal} · het schema volgt de kalender, ook als er een training gemist is`}
+              </Text>
+            )}
           </View>
         ) : isCustom ? (
           <View style={styles.customHeaderRow}>

@@ -8,6 +8,8 @@ import { typography, spacing, radius, type ThemeColors } from '../../src/theme/t
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore, selectWeeklyKm, selectIsSessionCompleted, selectTotalKm, selectCurrentWeek } from '../../src/store/appStore';
 import { resolveActivePlan } from '../../src/data/activePlan';
+import { raceScheduleStatus } from '../../src/data/raceSchedule';
+import { formatRaceDate } from '../../src/data/rotterdamRaces';
 import { SessionCard } from '../../src/components/ui/SessionCard';
 import { StatRing } from '../../src/components/ui/StatRing';
 import { Button } from '../../src/components/ui/Button';
@@ -76,6 +78,9 @@ export default function DashboardScreen() {
   const activePlan  = resolved.weeks;
   const totalWeeks  = resolved.totalWeeks;
   const planLabel   = useRace ? resolved.name : goalLabel[profile.goal];
+  // Kalenderstatus van het wedstrijdschema (zie schedule.tsx voor dezelfde
+  // toepassing): bepaalt of we hier "week X van Y" of een startdatum tonen.
+  const raceStatus  = useRace && racePlan ? raceScheduleStatus(racePlan, new Date()) : null;
 
   // Werkelijk totaal km van het schema (voor de voortgangsring)
   const planTotalKm = activePlan.reduce((sum, w) => sum + w.totalKm, 0);
@@ -187,7 +192,11 @@ export default function DashboardScreen() {
             <Text style={styles.greeting}>
               {getGreeting()}, {profile.name} 👋
             </Text>
-            <Text style={styles.goal}>{planLabel} · week {currentWeek} van {totalWeeks}</Text>
+            <Text style={styles.goal}>
+              {raceStatus?.status === 'voor' && racePlan
+                ? `${planLabel} · start ${formatRaceDate(racePlan.startDate)}`
+                : `${planLabel} · week ${currentWeek} van ${totalWeeks}`}
+            </Text>
           </View>
         </View>
 
@@ -399,11 +408,24 @@ export default function DashboardScreen() {
             <ScaleIn>
               <Text style={styles.weekCompleteEmoji}>🎉</Text>
             </ScaleIn>
-            <Text style={styles.weekCompleteTitle}>Week {currentWeek - 1} afgerond!</Text>
+            {/* Wedstrijdschema: currentWeek schuift NIET op door voltooiing
+                (die is kalender-verankerd, zie appStore.ts/raceWeekForDate),
+                dus "deze week" is hier gewoon currentWeek zelf — anders dan
+                bij het trainingsschema, waar currentWeek bij het tonen van
+                deze kaart al naar de VOLGENDE week is opgeschoven. */}
+            <Text style={styles.weekCompleteTitle}>
+              {useRace
+                ? (currentWeek < totalWeeks ? `Week ${currentWeek} klaar!` : 'Laatste week klaar!')
+                : `Week ${currentWeek - 1} afgerond!`}
+            </Text>
             <Text style={styles.weekCompleteSub}>
-              {currentWeek <= totalWeeks
-                ? `Goed werk. Week ${currentWeek} start ${getNextMondayLabel()}.`
-                : 'Je hebt het hele schema afgerond. Gefeliciteerd!'}
+              {useRace
+                ? (currentWeek < totalWeeks
+                    ? 'Mooi gedaan. Je schema volgt de kalender, dus de volgende week begint vanzelf.'
+                    : 'Dit was de laatste week van je schema. Succes bij de wedstrijd!')
+                : (currentWeek <= totalWeeks
+                    ? `Goed werk. Week ${currentWeek} start ${getNextMondayLabel()}.`
+                    : 'Je hebt het hele schema afgerond. Gefeliciteerd!')}
             </Text>
           </FadeSlideIn>
         )}

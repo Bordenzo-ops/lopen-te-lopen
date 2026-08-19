@@ -6,6 +6,7 @@ import { getTrainingPlan, remapWeekDays } from '../data/trainingPlans';
 import type { GoalType, Session, TrainingWeek } from '../data/trainingPlans';
 import type { RacePlan } from '../data/buildRacePlan';
 import { resolveActivePlan } from '../data/activePlan';
+import { raceWeekForDate } from '../data/raceSchedule';
 import { ensureAnonymousSession } from '../services/authService';
 import { syncAll } from '../services/syncService';
 import { isPremiumActive as fetchPremiumActive } from '../services/purchaseService';
@@ -204,13 +205,24 @@ interface AppState {
   completedSessions: CompletedSession[];
   /** Bewust overgeslagen sessies (telt als afgehandeld, niet als prestatie) */
   skippedSessions: SkippedSession[];
-  /**
-   * Weekvoortgang van het trainingsschema (sjabloon of eigen vrij schema) en
-   * het wedstrijdschema, volledig losgekoppeld: wisselen van modus neemt geen
-   * weeknummer van de andere modus mee. Gebruik `selectCurrentWeek` om op
-   * basis van `schemaMode` het juiste veld te lezen.
+  /** Weekvoortgang van het trainingsschema (sjabloon of eigen vrij schema): een
+   * doelgericht schema zonder deadline, dat op voltooiing loopt. Zie
+   * completeSession/skipSession — dit veld schuift op zodra alle sessies van
+   * de week afgehandeld zijn (voltooid of bewust overgeslagen).
    */
   currentWeekTraining: number;
+  /**
+   * LET OP: dit veld is voor het WEDSTRIJDSCHEMA niet meer leidend. Het
+   * wedstrijdschema is kalender-verankerd: de racedatum ligt vast, dus moet
+   * de week-met-racedag in het schema altijd samenvallen met de echte
+   * racedag. completeSession/skipSession hogen dit veld daarom bewust niet
+   * meer op — zie het commentaar daar. `selectCurrentWeek` leidt het actuele
+   * weeknummer in race-modus af via `raceWeekForDate(racePlan, new Date())`
+   * (raceSchedule.ts) en valt alleen op dit veld terug als er (nog) geen
+   * racePlan is. Het veld blijft bestaan en gepersisteerd voor
+   * achterwaartse compatibiliteit met de opslagmigratie hieronder (versie 1)
+   * en wordt nog gereset naar 1 bij een nieuw wedstrijdschema/onboarding/reset.
+   */
   currentWeekRace: number;
 
   // Actieve loop-sessie (niet persistent, crash-safe)
@@ -774,11 +786,13 @@ export const useAppStore = create<AppState>()(
       setHasHydrated: (v) => set({ _hasHydrated: v }),
       // Een nieuw (of gewist) wedstrijdschema reset altijd de doeltijd, zodat
       // een tempo van een vorige wedstrijd nooit blijft hangen. Wedstrijd-
-      // schema's zijn kalender-verankerd (week 1 = aankomende maandag,
-      // laatste week = racedatum), dus we resetten ook currentWeekRace naar
-      // 1 — anders zou de gebruiker in de nieuwe race weken vóór lopen op de
-      // kalender. Geldt ook bij het wissen (plan = null): zonder racePlan
-      // heeft currentWeekRace toch geen betekenis.
+      // schema's zijn kalender-verankerd (de laatste week valt altijd samen
+      // met de racedatum, teruggerekend — zie buildRacePlan.ts en
+      // raceWeekForDate in raceSchedule.ts), dus het weeknummer wordt in
+      // race-modus live afgeleid en NIET meer uit currentWeekRace gelezen
+      // (zie selectCurrentWeek). We resetten currentWeekRace hier toch nog
+      // naar 1, puur voor de zeldzame terugvalsituatie zonder racePlan en
+      // om nooit een stokoud getal te laten rondslingeren.
       setRacePlan: (plan) => set({ racePlan: plan, raceTargetSeconds: null, currentWeekRace: 1 }),
       setRaceTargetSeconds: (seconds) => set({ raceTargetSeconds: seconds }),
       setComfortableKm: (km) => set({ comfortableKm: km }),
@@ -827,7 +841,7 @@ export const useAppStore = create<AppState>()(
 
       completeSession: (result, weekSessions) => {
         const {
-          activeSession, completedSessions, skippedSessions, currentWeekTraining, currentWeekRace,
+          activeSession, completedSessions, skippedSessions, currentWeekTraining,
           racePlan, schemaMode, profile, customPlan,
         } = get();
         if (!activeSession) return;
@@ -868,24 +882,35 @@ export const useAppStore = create<AppState>()(
         // vrij schema) telt meteen als af.
         const weekDone = isWeekHandled(weekSessions, updatedCompleted, updatedSkipped);
 
-        // Hoog het weekveld van de ACTIEVE modus op, geklemd binnen het
-        // actieve schema (sjabloon, vrij schema of wedstrijdschema).
-        const currentWeek = schemaMode === 'race' ? currentWeekRace : currentWeekTraining;
-        const totalWeeks = profile
-          ? resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal, trainingDays: profile.trainingDays }).totalWeeks
-          : currentWeek; // fallback: niet ophogen
-
-        const nextWeek = weekDone
-          ? Math.min(currentWeek + 1, totalWeeks)
-          : currentWeek;
+        // Alleen de TRAININGSMODUS hoogt currentWeekTraining op zodra de week
+        // afgehandeld is — een doelgericht schema zonder deadline mag gewoon
+        // op voltooiing lopen. De WEDSTRIJDMODUS doet dit bewust NIET meer:
+        // dat schema is kalender-verankerd (zie raceWeekForDate in
+        // raceSchedule.ts en selectCurrentWeek onderaan dit bestand). Het
+        // weeknummer daar volgt uitsluitend de kalenderweek, teruggerekend
+        // vanaf de racedatum. Zou currentWeekRace hier nog meebewegen, dan
+        // zou een gemiste of ingehaalde training het hele schema alsnog laten
+        // opschuiven t.o.v. de kalender — precies het probleem dat dit
+        // oplost: de week-met-racedag moet altijd samenvallen met de echte
+        // racedag. Sessies uit een overgeslagen kalenderweek blijven daardoor
+        // gewoon onafgehandeld staan (niet voltooid, niet overgeslagen); zie
+        // de UI in schedule.tsx/dashboard.tsx voor hoe dat neutraal getoond
+        // wordt, zonder een "je bent achter"-boodschap.
+        let nextWeekTraining = currentWeekTraining;
+        if (schemaMode === 'training') {
+          const totalWeeks = profile
+            ? resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal, trainingDays: profile.trainingDays }).totalWeeks
+            : currentWeekTraining; // fallback: niet ophogen
+          nextWeekTraining = weekDone
+            ? Math.min(currentWeekTraining + 1, totalWeeks)
+            : currentWeekTraining;
+        }
 
         set({
           completedSessions: updatedCompleted,
           skippedSessions: updatedSkipped,
           activeSession: null,
-          ...(schemaMode === 'race'
-            ? { currentWeekRace: nextWeek }
-            : { currentWeekTraining: nextWeek }),
+          ...(schemaMode === 'training' ? { currentWeekTraining: nextWeekTraining } : {}),
         });
 
         // Best-effort sync van de nieuwe sessie naar de cloud
@@ -953,7 +978,7 @@ export const useAppStore = create<AppState>()(
 
       skipSession: (sessionId, weekNumber, weekSessions) => {
         const {
-          skippedSessions, completedSessions, currentWeekTraining, currentWeekRace,
+          skippedSessions, completedSessions, currentWeekTraining,
           racePlan, schemaMode, profile, customPlan,
         } = get();
 
@@ -975,20 +1000,23 @@ export const useAppStore = create<AppState>()(
         // "elke sessie afgehandeld" en telt dus meteen als af.
         const weekDone = isWeekHandled(weekSessions, completedSessions, updatedSkipped);
 
-        const currentWeek = schemaMode === 'race' ? currentWeekRace : currentWeekTraining;
-        const totalWeeks = profile
-          ? resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal, trainingDays: profile.trainingDays }).totalWeeks
-          : currentWeek;
-
-        const nextWeek = weekDone
-          ? Math.min(currentWeek + 1, totalWeeks)
-          : currentWeek;
+        // Zelfde regel als in completeSession hierboven: alleen de
+        // trainingsmodus schuift currentWeekTraining op. Het wedstrijdschema
+        // is kalender-verankerd en blijft currentWeekRace ongemoeid (zie het
+        // commentaar bij completeSession en bij currentWeekRace zelf).
+        let nextWeekTraining = currentWeekTraining;
+        if (schemaMode === 'training') {
+          const totalWeeks = profile
+            ? resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal, trainingDays: profile.trainingDays }).totalWeeks
+            : currentWeekTraining;
+          nextWeekTraining = weekDone
+            ? Math.min(currentWeekTraining + 1, totalWeeks)
+            : currentWeekTraining;
+        }
 
         set({
           skippedSessions: updatedSkipped,
-          ...(schemaMode === 'race'
-            ? { currentWeekRace: nextWeek }
-            : { currentWeekTraining: nextWeek }),
+          ...(schemaMode === 'training' ? { currentWeekTraining: nextWeekTraining } : {}),
         });
       },
 
@@ -1195,9 +1223,25 @@ export const useHasHydrated = () => useAppStore(s => s._hasHydrated);
  * Geeft het weeknummer van de ACTIEVE modus terug (training of race), zodat
  * schermen niet zelf hoeven te kiezen tussen currentWeekTraining en
  * currentWeekRace.
+ *
+ * Training-modus: ongewijzigd, het gepersisteerde currentWeekTraining (loopt
+ * op voltooiing, geen kalenderbinding — een doelgericht schema zonder
+ * deadline).
+ *
+ * Race-modus: kalender-verankerd. Het weeknummer wordt LIVE afgeleid via
+ * raceWeekForDate(racePlan, vandaag) — niet uit het gepersisteerde
+ * currentWeekRace, dat sinds deze wijziging niet meer bijgewerkt wordt (zie
+ * het commentaar daar en bij completeSession/skipSession). Zonder racePlan
+ * (nog geen wedstrijd gekozen) is er geen kalender om op te rekenen; dan valt
+ * dit terug op currentWeekRace, puur zodat de selector nooit crasht — de UI
+ * toont in die situatie toch de "kies een wedstrijd"-melding (schedule.tsx).
  */
-export const selectCurrentWeek = (state: AppState): number =>
-  state.schemaMode === 'race' ? state.currentWeekRace : state.currentWeekTraining;
+export const selectCurrentWeek = (state: AppState): number => {
+  if (state.schemaMode === 'race') {
+    return state.racePlan ? raceWeekForDate(state.racePlan, new Date()) : state.currentWeekRace;
+  }
+  return state.currentWeekTraining;
+};
 
 /**
  * Aantal routes dat deze week al gepland is. Geeft 0 terug zodra er een
