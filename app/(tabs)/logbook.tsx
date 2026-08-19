@@ -3,13 +3,14 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
-import { Share2, CalendarX2 } from 'lucide-react-native';
+import { Share2, CalendarX2, ChevronRight } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
 import type { CompletedSession } from '../../src/store/appStore';
 import { RunCalendar } from '../../src/components/ui/RunCalendar';
 import { ShareRunSheet } from '../../src/components/ui/ShareRunSheet';
+import { RunDetailSheet, sourceLabel } from '../../src/components/ui/RunDetailSheet';
 import { formatPacePerKm, formatDuration } from '../../src/data/paceModel';
 import { getPeriodStats, type PeriodType, type PeriodStats } from '../../src/utils/periodStats';
 import { resolveActivePlan } from '../../src/data/activePlan';
@@ -21,15 +22,6 @@ const periodOptions: { value: PeriodType; label: string; shareLabel: string }[] 
   { value: 'quarter', label: 'Kwartaal',  shareLabel: 'Deel je kwartaal' },
   { value: 'year',    label: 'Jaar',      shareLabel: 'Deel je jaar' },
 ];
-
-const sourceLabel: Record<CompletedSession['source'], string> = {
-  app:           'App',
-  strava:        'Strava',
-  garmin:        'Garmin',
-  apple_health:  'Apple Health',
-  google_fit:    'Google Fit',
-  mi_fitness:    'Mi Fitness',
-};
 
 export default function LogbookScreen() {
   const profile = useAppStore(s => s.profile);
@@ -53,6 +45,7 @@ export default function LogbookScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showPeriodShare, setShowPeriodShare] = useState(false);
   const [runToShare, setRunToShare] = useState<CompletedSession | null>(null);
+  const [runToDetail, setRunToDetail] = useState<CompletedSession | null>(null);
 
   // Groepeer voltooide runs per dag (key = 'yyyy-MM-dd') voor de kalender en
   // het dagdetail hieronder.
@@ -176,7 +169,14 @@ export default function LogbookScreen() {
           ) : selectedRuns.length > 0 ? (
             <View style={styles.dayDetailList}>
               {selectedRuns.map((run, idx) => (
-                <View key={`${run.sessionId}-${idx}`} style={styles.runRow}>
+                <TouchableOpacity
+                  key={`${run.sessionId}-${idx}`}
+                  style={styles.runRow}
+                  onPress={() => setRunToDetail(run)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Bekijk details van de run op ${format(new Date(run.completedAt), 'd MMMM, HH:mm', { locale: nl })}, ${run.actualDistanceKm.toFixed(1)} kilometer`}
+                >
                   <View style={styles.runRowInfo}>
                     <Text style={styles.runRowDate}>
                       {format(new Date(run.completedAt), 'd MMMM, HH:mm', { locale: nl })}
@@ -208,13 +208,14 @@ export default function LogbookScreen() {
                   >
                     <Share2 size={18} color={colors.brandPrimary} strokeWidth={2} />
                   </TouchableOpacity>
-                </View>
+                  <ChevronRight size={18} color={colors.textTertiary} strokeWidth={2} />
+                </TouchableOpacity>
               ))}
             </View>
           ) : (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>
-                Tik op een dag met een run om hem te bekijken en te delen.
+                Tik op een dag met een run om hem te bekijken.
               </Text>
             </View>
           )}
@@ -231,6 +232,14 @@ export default function LogbookScreen() {
           runnerName={profile.name}
           maxHeartRate={profile.maxHeartRate}
           onClose={() => setRunToShare(null)}
+        />
+      )}
+
+      {runToDetail && (
+        <RunDetailSheet
+          visible={!!runToDetail}
+          session={runToDetail}
+          onClose={() => setRunToDetail(null)}
         />
       )}
 
@@ -319,7 +328,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
 
   dayDetailList: { gap: spacing[1] },
   runRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[0.5],
     backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: spacing[1.5],
     borderWidth: 1, borderColor: colors.borderSubtle,
   },
