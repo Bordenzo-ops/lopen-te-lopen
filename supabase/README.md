@@ -9,7 +9,7 @@ De app blijft volledig offline werken: deze backend is additief.
 - `migrations/0002_runs.sql`: tabel `runs` (voltooide hardloopsessies), met Row Level Security.
 - `migrations/0003_events.sql`: tabel `events` (funnel-analytics) plus de views `funnel_weekly` en `events_weekly`. Toegepast op de live database op 4 augustus 2026.
 - `migrations/0004_app_stats.sql`: functie `app_stats()`, het telwerk achter de edge function `stats`. Toegepast op 4 augustus 2026.
-- `migrations/0005_events_rls_fix.sql`: repareert de RLS van `events` (elke upsert liep op 42501 stuk, waardoor er sinds 4 augustus geen enkel analytics-event binnenkwam) en zet alle policies op rol `authenticated` met `(select auth.uid())`. NOG NIET TOEGEPAST.
+- `migrations/0005_events_rls_fix.sql`: repareert de RLS van `events` (elke upsert liep op 42501 stuk, waardoor er sinds 4 augustus geen enkel analytics-event binnenkwam) en zet alle policies op rol `authenticated` met `(select auth.uid())`. Toegepast op de live database op 7 september 2026.
 
 Alle tabellen hebben RLS aan: een ingelogde gebruiker ziet en schrijft uitsluitend zijn eigen rijen.
 
