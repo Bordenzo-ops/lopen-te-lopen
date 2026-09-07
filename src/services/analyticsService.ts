@@ -148,7 +148,12 @@ export async function flushEvents(): Promise<void> {
 
       const { error } = await supabase
         .from('events')
-        .upsert(rows, { onConflict: 'user_id,client_event_id' });
+        // ignoreDuplicates vertaalt naar ON CONFLICT DO NOTHING. Events zijn
+        // onveranderlijk: een herhaalde flush mag een bestaande rij niet
+        // overschrijven. Scheelt bovendien een UPDATE-policy op de tabel; de
+        // SELECT-policy uit migratie 0005 blijft nodig, want ON CONFLICT moet
+        // de unieke index kunnen arbitreren en heeft daarvoor leesrecht nodig.
+        .upsert(rows, { onConflict: 'user_id,client_event_id', ignoreDuplicates: true });
 
       // Bij een fout (netwerk, RLS, tijdelijke storing) stoppen we en laten
       // de resterende wachtrij intact voor de volgende flush.
