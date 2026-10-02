@@ -15,7 +15,9 @@
  *    token, in plaats van de anon key.
  *  - Whitelist op voiceId: alleen de twee coachstemmen zijn toegestaan.
  *  - Tekstlimiet verlaagd naar 500 tekens (coachingzinnen zijn kort).
- *  - Eenvoudige in-memory rate limit per gebruiker: max 30 verzoeken/minuut.
+ *  - Dagelijkse limiet per gebruiker (strenger voor anonieme gebruikers) plus
+ *    een globale noodrem, bijgehouden in de database (migratie 0006). Vereist
+ *    SUPABASE_SERVICE_ROLE_KEY (standaard beschikbaar in edge functions).
  *
  * Deploy:
  *   supabase functions deploy tts
@@ -49,26 +51,39 @@ const ALLOWED_VOICE_IDS = new Set(['7qdUFMklKPaaAVMsBTBt', 'pNInz6obpgDQGcFmaJgB
 // Maximale tekstlengte per verzoek (coachingzinnen zijn kort, 500 is ruim genoeg)
 const MAX_TEXT_LENGTH = 500;
 
-// Eenvoudige in-memory rate limit per user-id: max 30 verzoeken per minuut.
-// Dit is per edge function-instantie en geen verdeelde/persistente limiet,
-// maar volstaat als eerste verdedigingslinie tegen misbruik of bugs die
-// veel verzoeken afvuren.
-const RATE_LIMIT_MAX = 30;
-const RATE_LIMIT_WINDOW_MS = 60 * 1000;
-const requestLog = new Map<string, number[]>();
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
-function isRateLimited(userId: string): boolean {
-  const now = Date.now();
-  const timestamps = requestLog.get(userId) ?? [];
-  // Oude entries buiten het venster opruimen
-  const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  if (recent.length >= RATE_LIMIT_MAX) {
-    requestLog.set(userId, recent);
-    return true;
-  }
-  recent.push(now);
-  requestLog.set(userId, recent);
-  return false;
+// Dagelijkse limieten (UTC-dag), bijgehouden in de database (migratie 0006,
+// functie tts_consume). De app roept deze function sinds de stempakketten niet
+// meer aan (sinds 19-07-2026, vóór de eerste publieke release); deze limieten
+// zijn dus puur een schadebeperking tegen misbruik. Anonieme gebruikers worden
+// helemaal geweigerd, zie de check na de JWT-verificatie.
+const LIMITS = {
+  anonymous: { calls: 0, chars: 0 },
+  registered: { calls: 20, chars: 5000 },
+  globalChars: 5000, // noodrem over alle gebruikers samen
+};
+
+type ConsumeResult = 'ok' | 'user_limit' | 'global_limit';
+
+// Reserveert een aanroep in de database. Faalt de database, dan geven we
+// 'error' terug en weigeren we het verzoek (liever geen stem dan open credits).
+async function consumeQuota(
+  userId: string,
+  chars: number,
+  isAnonymous: boolean,
+): Promise<ConsumeResult | 'error'> {
+  const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  const limit = isAnonymous ? LIMITS.anonymous : LIMITS.registered;
+  const { data, error } = await admin.rpc('tts_consume', {
+    p_user: userId,
+    p_chars: chars,
+    p_max_calls: limit.calls,
+    p_max_chars: limit.chars,
+    p_max_global_chars: LIMITS.globalChars,
+  });
+  if (error || typeof data !== 'string') return 'error';
+  return data as ConsumeResult;
 }
 
 const CORS_HEADERS = {
@@ -117,11 +132,14 @@ serve(async (req: Request) => {
   }
 
   const userId = userData.user.id;
+  const isAnonymous = userData.user.is_anonymous === true;
 
-  if (isRateLimited(userId)) {
+  // Geen enkele app-versie gebruikt deze function; een anoniem account is
+  // gratis aan te maken, dus die krijgt hier nooit toegang.
+  if (isAnonymous) {
     return new Response(
-      JSON.stringify({ error: 'Te veel verzoeken, probeer het over een minuut opnieuw.' }),
-      { status: 429, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+      JSON.stringify({ error: 'Niet beschikbaar.' }),
+      { status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
     );
   }
 
@@ -153,6 +171,24 @@ serve(async (req: Request) => {
 
   // Begrens de tekst (coachingzinnen zijn kort, 500 tekens is ruim voldoende)
   const safeText = text.slice(0, MAX_TEXT_LENGTH);
+
+  // Dagelijkse limiet per gebruiker en globaal (pas na validatie, zodat
+  // ongeldige verzoeken geen quotum kosten).
+  const quota = SUPABASE_SERVICE_ROLE_KEY
+    ? await consumeQuota(userId, safeText.length, isAnonymous)
+    : 'error';
+  if (quota === 'error') {
+    return new Response(
+      JSON.stringify({ error: 'TTS tijdelijk niet beschikbaar.' }),
+      { status: 503, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+    );
+  }
+  if (quota !== 'ok') {
+    return new Response(
+      JSON.stringify({ error: 'Daglimiet voor de coachstem bereikt, probeer het morgen opnieuw.' }),
+      { status: 429, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json', 'Retry-After': '3600' } },
+    );
+  }
 
   try {
     const elevenResp = await fetch(
