@@ -28,7 +28,7 @@ const goalMeta: Record<GoalType, { icon: React.ReactNode; tagline: string }> = {
   '5km':           { icon: <Target size={26} color={colors.brandLight} strokeWidth={2} />,   tagline: 'Ideaal als eerste doel' },
   '10km':          { icon: <Dumbbell size={26} color={colors.brandLight} strokeWidth={2} />, tagline: 'De klassieke uitdaging' },
   '15km':          { icon: <Flame size={26} color={colors.brandLight} strokeWidth={2} />,    tagline: 'Voor de 10 Engelse mijl' },
-  'half_marathon': { icon: <Medal size={26} color={colors.brandLight} strokeWidth={2} />,    tagline: 'Het ultieme doel' },
+  'half_marathon': { icon: <Medal size={26} color={colors.brandLight} strokeWidth={2} />,    tagline: 'Op weg naar de marathon' },
   'marathon':      { icon: <Trophy size={26} color={colors.brandLight} strokeWidth={2} />,   tagline: 'De ultieme uitdaging' },
 };
 
