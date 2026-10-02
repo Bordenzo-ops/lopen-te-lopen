@@ -127,6 +127,51 @@ const ENC_MESSAGES = [
   'Vertrouw op je benen, het gaat goed.',
   'Je loopt met gemak, blijf zo lekker bezig.',
   'Genieten van dit tempo, hou het erin.',
+  // Index 40-79: fase G-uitbreiding (augustus 2026, laatste ronde vóór het
+  // aflopen van het ElevenLabs-abonnement). Dit is veruit de vaakst gehoorde
+  // lijst — hij klinkt bij ELKE kilometer — dus hier levert extra variatie het
+  // meeste op. Geen codewijziging nodig: kmSplitUtterance rouleert al modulo
+  // ENC_MESSAGES.length.
+  'Prachtig tempo, hou dit vast.',
+  'Je benen doen precies wat je vraagt.',
+  'Lekker gelijkmatig, ga zo door.',
+  'Dat ziet er sterk uit, volhouden.',
+  'Je hebt er weer een te pakken.',
+  'Rustig ademen, sterk doorlopen.',
+  'Mooie pas, blijf ontspannen.',
+  'Je bouwt dit prima op, ga door.',
+  'Weer een kilometer in de tas.',
+  'Sterk, je houdt het goed vol.',
+  'Dit tempo staat je goed.',
+  'Blijf soepel lopen, het gaat prima.',
+  'Je maakt er een mooie training van.',
+  'Goed volgehouden, nog even zo door.',
+  'Je zit lekker in je ritme.',
+  'Kracht genoeg, blijf zo lopen.',
+  'Dat is er weer een, sterk werk.',
+  'Je loopt beheerst, precies goed.',
+  'Mooi stabiel, hou die lijn vast.',
+  'Hier word je sneller van, ga door.',
+  'Je hebt de smaak te pakken.',
+  'Zo doe je dat, blijf lekker gaan.',
+  'Nog steeds sterk, knap gedaan.',
+  'Je loopt met vertrouwen, mooi.',
+  'Dit is precies goed, hou vol.',
+  'Weer een stukje sterker.',
+  'Blijf ontspannen, het komt goed.',
+  'Lekker gelopen, ga zo verder.',
+  'Je hebt dit ritme te pakken.',
+  'Sterke benen vandaag, gebruik ze.',
+  'Mooi doorgelopen, hou dit vast.',
+  'Je doet het echt goed vandaag.',
+  'Nog altijd sterk onderweg.',
+  'Dat gaat de goede kant op.',
+  'Je houdt het knap gelijkmatig.',
+  'Blijf in je eigen tempo, prima zo.',
+  'Een mooie kilometer, ga door.',
+  'Je bent goed bezig, hou vol.',
+  'Sterk hoor, laat het lopen.',
+  'Dit smaakt naar meer, ga zo door.',
 ];
 
 // ── 4/5. Resterend / afgelegd — stappen van 0,5 km, 0,5..42 km ──────────────
@@ -140,6 +185,26 @@ const KM_RANGE_MAX = 42;
 const TIME_FINE_MAX = 90;
 const TIME_STEP_ABOVE = 5;
 const TIME_MAX = 300;
+
+// Uurnotatie voor lange sessies (augustus 2026). Twee problemen tegelijk
+// opgelost:
+//
+//  1. TIME_MAX klemde op 300 minuten. Wie een marathon in vijf en een half uur
+//     liep, kreeg letterlijk "In 300 minuten" te horen — een verkeerd getal,
+//     precies bij de doelgroep die de app aanspreekt ("van bank naar
+//     marathon"; een eerste marathon duurt vaak langer dan vijf uur).
+//  2. "In tweehonderdvijfenzestig minuten" is een onnatuurlijke manier om
+//     4 uur 25 te zeggen.
+//
+// Vanaf HOUR_FORM_FROM_MIN spreekt de finishmelding daarom in uren, tot en met
+// TIME_HOUR_MAX_MIN. De bestaande minuutclips (time_1..time_300) blijven
+// gewoon in de catalogus: ze zijn al gegenereerd en betaald, en time_95 tot
+// time_115 zijn nog steeds in gebruik voor sessies tussen anderhalf en twee
+// uur. Alleen time_120..time_300 raken hierdoor buiten gebruik; die weghalen
+// zou geen credits opleveren en wel het risico geven dat een oudere
+// app-versie naar een verdwenen clip grijpt.
+const HOUR_FORM_FROM_MIN = 120;
+const TIME_HOUR_MAX_MIN = 420; // 7 uur
 
 // ── 7. Zones — bestaande ZONE_DESCRIPTIONS (useVoiceGuidance) ──────────────
 const ZONE_DESCRIPTIONS: Record<string, string> = {
@@ -168,6 +233,11 @@ const HR_TEXTS: Record<'high' | 'low' | 'ok', string[]> = {
     'Even gas terugnemen, je hartslag loopt op. Zoek je ritme weer.',
     'Je hartslag piekt net iets te veel. Haal de vaart er even uit.',
     'Bouw het rustig af, je hartslag mag wat zakken.',
+    // Fase G-uitbreiding (augustus 2026)
+    'Je hartslag zit aan de hoge kant. Neem het een tandje rustiger.',
+    'Wat rustiger aan, dan zakt je hartslag vanzelf.',
+    'Je gaat iets te hard voor deze zone. Bouw af.',
+    'Even inhouden, geef je hartslag de kans te dalen.',
   ],
   low: [
     'Je hebt nog ruimte. Je mag iets versnellen.',
@@ -175,6 +245,11 @@ const HR_TEXTS: Record<'high' | 'low' | 'ok', string[]> = {
     'Er zit meer in. Voel je vrij om te versnellen.',
     'Je zit ruim onder je zone. Zet er gerust een tandje bij.',
     'Nog volop energie over, je mag best wat harder.',
+    // Fase G-uitbreiding (augustus 2026)
+    'Je zit onder je zone. Er mag een schepje bovenop.',
+    'Je hartslag blijft laag, je kunt gerust aanzetten.',
+    'Nog rustig aan het lopen, geef gerust wat meer.',
+    'Je hebt duidelijk nog wat over. Versnel gerust.',
   ],
   ok: [
     'Mooi zo, precies goed.',
@@ -182,6 +257,11 @@ const HR_TEXTS: Record<'high' | 'low' | 'ok', string[]> = {
     'Goed zo, je zit weer helemaal in het juiste ritme.',
     'Precies goed zo, hou deze zone vast.',
     'Dit is je zone, blijf lekker zo lopen.',
+    // Fase G-uitbreiding (augustus 2026)
+    'Precies in je zone, mooi zo.',
+    'Zo is het goed, blijf hier zitten.',
+    'Je hartslag zit precies goed nu.',
+    'Prima zo, dit is de zone die je zoekt.',
   ],
 };
 
@@ -308,18 +388,33 @@ const GREET_TEXTS: Record<'morning' | 'afternoon' | 'evening', string[]> = {
     'Goedemorgen! Tijd om de dag sportief te beginnen.',
     'Goedemorgen! Mooi begin van de dag, deze training.',
     'Goedemorgen! Frisse lucht en een goede loop, daar gaan we.',
+    // Fase G-uitbreiding (augustus 2026)
+    'Goedemorgen! Even de benen wakker maken.',
+    'Goedemorgen! De ochtend is helemaal van jou.',
+    'Goedemorgen! Rustig opstarten en genieten.',
+    'Goedemorgen! Fijne start van je dag.',
   ],
   afternoon: [
     'Goedemiddag! Klaar voor je training?',
     'Goedemiddag! Mooi moment voor een run.',
     'Goedemiddag! Even je hoofd leegmaken met een training.',
     'Goedemiddag! Tijd voor een frisse onderbreking van de dag.',
+    // Fase G-uitbreiding (augustus 2026)
+    'Goedemiddag! Lekker moment om te lopen.',
+    'Goedemiddag! Even weg van alles, daar gaan we.',
+    'Goedemiddag! Tijd om de benen te strekken.',
+    'Goedemiddag! Fijn dat je er weer bent.',
   ],
   evening: [
     'Goedenavond! Klaar om nog even te lopen?',
     'Goedenavond! Laten we deze dag sportief afsluiten.',
     'Goedenavond! Mooi moment om de dag uit te lopen.',
     'Goedenavond! Nog even bewegen voor het rustig wordt.',
+    // Fase G-uitbreiding (augustus 2026)
+    'Goedenavond! Even lekker de benen strekken.',
+    'Goedenavond! Rustig moment voor een goede loop.',
+    'Goedenavond! Fijne afsluiter van je dag.',
+    'Goedenavond! Nog een mooie training voor het slapen.',
   ],
 };
 
@@ -337,6 +432,15 @@ const FINISH_CLOSERS: string[] = [
   'Dat was topsport van jou!',
   'Mooi afgerond, goed gedaan!',
   'Weer een streepje erbij, knap!',
+  // Fase G-uitbreiding (augustus 2026)
+  'Sterk afgerond!',
+  'Netjes gedaan!',
+  'Weer een training in de boeken!',
+  'Daar mag je trots op zijn!',
+  'Mooi volgehouden!',
+  'Goed werk geleverd!',
+  'Dat was er weer een, knap!',
+  'Klasse gelopen!',
 ];
 
 // ── 15. Race-felicitaties — "Gefeliciteerd! Je hebt {race} uitgelopen!" ────
@@ -574,6 +678,85 @@ const EXTRA_RACE_VOICE_NAMES: string[] = [
   // gebruikt daarom bewust de zelfgekozen naam "Dordrecht Halve Marathon";
   // deze regel houdt de al betaalde clip van de oude naam in het manifest.
   "Boels Rental Run",
+  // ── Staart van de kalender (17-08-2026, laatste ronde vóór het aflopen van
+  // het abonnement) ────────────────────────────────────────────────────────
+  // Regionale wegwedstrijden die eerder bewust zijn overgeslagen omdat ze
+  // speculatief waren: de kans dat ze ooit in de app komen is kleiner dan bij
+  // de grote evenementen. Dat argument verviel op de deadline — credits die
+  // toch verdampen kosten niets meer, en een naam die nu niet is ingesproken
+  // kan daarna nooit meer. Bron: de halve-marathonkalender van Runners.nl
+  // (zie Race-stemvoorraad-aug-2026.md). Alleen WEGwedstrijden: trails en
+  // crossen (Mastboscross, Veluwezoomtrail) hebben afstanden die niet in
+  // RaceDistance passen, dus die zouden nooit in de racekiezer belanden.
+  // Alleen de evenementnaam, zonder afstandsvariant: dat past binnen het
+  // restbudget en dekt de gevallen waarin de naam zelf de wedstrijd is.
+  "Marathon Sneek",
+  "Halve van Haarlem",
+  "Halve Marathon Oldenzaal",
+  "Marathon Brabant",
+  "TT Marathon Assen",
+  "Halve van het Gooi",
+  "Halve van Monster",
+  "Winter Marathon Leeuwarden",
+  "Derde Kerstdagloop Arnhem",
+  "Halve van Maassluis",
+  "Halve van Cadzand-Bad",
+  "Groenehartloop",
+  "3Bergenloop",
+  "Leekster Lente Loop",
+  "Lentemarathon Amstelveen",
+  "Stevensloop Nijmegen",
+  "Westlandse Halve Marathon",
+  "Halve van Hengelo",
+  "Vestinglopen Gorinchem",
+  "Halve Marathon Harderwijk",
+  "Heuvelland Marathon",
+  "Halve Marathon van Haren",
+  "2Bruggenloop Kampen",
+  "Halve van Den Helder",
+  "Halve van Helmond",
+  "Vuurtorenloop Vlieland",
+  "Halve van Nijkerk",
+  "Bijlmerrun Amsterdam",
+  "IJsselstein Loop",
+  "Halve Marathon Groningen",
+  "Brabantse Wal Marathon",
+  "Heuvelrugloop",
+  "Halve Marathon Ermelo",
+  "Halve Marathon Zwolle",
+  "Vuurtorenloop Hoek van Holland",
+  "Midzomermarathon Apeldoorn",
+  "Halve Marathon Nootdorp",
+  "Halve van Vroomshoop",
+  "Kustloop Vrouwenpolder",
+  "Roldertorenrun",
+  // ── Vlaamse staart (17-08-2026) ──────────────────────────────────────────
+  // In de eerste ronde bleef Vlaanderen onderbelicht omdat ik de namen niet
+  // betrouwbaar geverifieerd kreeg. Deze acht wel: vier komen uit de
+  // EnergyVision Running Tour (de reeks stadslopen die Knokke, Genk, Gent,
+  // Brugge, Mechelen en Hasselt verbindt), de rest uit de Vlaamse
+  // loopkalender. Waalse wedstrijden bewust NIET opgenomen: die hebben Franse
+  // namen, en een Nederlandstalige coach die "de Semi-Marathon de Nivelles"
+  // uitspreekt klinkt verkeerd. Estafettes (Brugse Ekiden) vallen af, want de
+  // app kent geen aflossingsafstanden.
+  "Knokke Run",
+  "Knokke Run - 5 km",
+  "Knokke Run - 10 km",
+  "Genk Loopt",
+  "Genk Loopt - 5 km",
+  "Genk Loopt - 10 km",
+  "Stadsloop Gent",
+  "Stadsloop Gent - 5 km",
+  "Stadsloop Gent - 10 km",
+  "Stadsloop Gent - Halve Marathon",
+  "Dwars door Hasselt",
+  "Dwars door Hasselt - 5 km",
+  "Dwars door Hasselt - 10 km",
+  "Dwars door Hasselt - Halve Marathon",
+  "Halve Marathon van Mechelen",
+  "Haachtse Loop",
+  "Druivenrace Overijse",
+  "Coastrun Middelkerke",
 ];
 
 /** Vangnetclip als een wedstrijdnaam zelf niet in het pakket zit. */
@@ -655,6 +838,11 @@ const IV_GET_READY_TEXTS: string[] = [
   'Zet je schrap, we gaan zo weer aan.',
   'Nog even, dan gaan we er weer voor.',
   'Klaar maken, de volgende komt eraan.',
+  // Fase G-uitbreiding (augustus 2026)
+  'Nog heel even, maak je klaar.',
+  'Bereid je voor, de volgende komt zo.',
+  'Even scherp nu, we gaan bijna aan.',
+  'Klaarstaan, hij komt eraan.',
 ];
 
 const IV_GO_TEXTS: string[] = [
@@ -664,6 +852,11 @@ const IV_GO_TEXTS: string[] = [
   'Aanzetten! Voel de kracht in je benen.',
   'Erop! Laat zien wat je kan.',
   'Nu vol gas, dit is jouw moment.',
+  // Fase G-uitbreiding (augustus 2026)
+  'Nu! Zet je af en ga.',
+  'Aan de bak, dit is jouw interval.',
+  'Versnellen, blijf soepel lopen.',
+  'Erop en erover, gaan!',
 ];
 
 const IV_WORK_END_TEXTS: string[] = [
@@ -671,6 +864,11 @@ const IV_WORK_END_TEXTS: string[] = [
   'Bijna, laatste tien tellen. Doorzetten.',
   'Tien seconden nog, geef alles.',
   'Bijna klaar met deze, hou vol.',
+  // Fase G-uitbreiding (augustus 2026)
+  'Laatste tien seconden, alles geven.',
+  'Nog even, tien tellen. Vasthouden.',
+  'Tien seconden, dan mag je herstellen.',
+  'Bijna binnen, doorbijten.',
 ];
 
 const IV_RECOVER_TEXTS: string[] = [
@@ -680,6 +878,11 @@ const IV_RECOVER_TEXTS: string[] = [
   'Knap. Even bijkomen, schud je armen los.',
   'Sterk werk. Rustig ademen, laat het los.',
   'Goed zo. Loop rustig door en herstel even.',
+  // Fase G-uitbreiding (augustus 2026)
+  'Mooi werk. Laat je ademhaling weer rustig worden.',
+  'Sterk. Loop los en verzamel je krachten.',
+  'Goed bezig. Even herstellen, dan gaan we weer.',
+  'Knap gedaan. Schud je benen los en adem uit.',
 ];
 
 // ── 17. Warming-up & cooling-down — losse routine (CP3) ─────────────────────
@@ -692,30 +895,100 @@ const IV_RECOVER_TEXTS: string[] = [
 // Zinnen mogen hier langer zijn (±60-80 tekens, zie het creditplan) omdat het
 // er maar 15 zijn. Stapduren (voor de timer in de UI) staan in
 // src/data/warmupCooldown.ts, niet hier — dit bestand bevat alleen teksten.
-const WU_INTRO_TEXT = 'We beginnen met een korte warming-up. Volg de stappen rustig op je eigen tempo.';
-const WU_DONE_TEXT = 'Mooi zo, je bent los en warm. Veel plezier met je training!';
-const WU_STEP_TEXTS: string[] = [
-  'Begin met een minuut rustig dribbelen ter plaatse.',
-  'Draai losjes met beide armen, eerst naar voren, dan naar achteren.',
-  'Til om de beurt je knieën vijf keer flink op, allebei de kanten.',
-  'Zwaai je benen om de beurt losjes naar voren en naar achteren.',
-  'Doe drie lichte uitvalspassen per been om je benen wakker te maken.',
-  'Rond af met dertig seconden rustig joggen op de plek.',
+// VARIANTEN (fase G, augustus 2026): elke stap heeft nu drie formuleringen die
+// per uitvoering van de routine rouleren, zodat wie twee keer per week een
+// warming-up doet niet elke keer letterlijk hetzelfde hoort. Index 0 van elke
+// rij is de OORSPRONKELIJKE tekst en moet daar blijven staan: die houdt zijn
+// bestaande clip-id ('wu_intro', 'wu_step_3', 'wu_done') en dus zijn al
+// gegenereerde clip. Varianten krijgen een achtervoegsel ('wu_step_3_1').
+const WU_INTRO_TEXTS: string[] = [
+  'We beginnen met een korte warming-up. Volg de stappen rustig op je eigen tempo.',
+  'We doen eerst een korte warming-up. Neem alle tijd, dit is geen wedstrijd.',
+  'Even losmaken voordat je gaat lopen. Volg de stappen rustig mee.',
+];
+const WU_DONE_TEXTS: string[] = [
+  'Mooi zo, je bent los en warm. Veel plezier met je training!',
+  'Je bent warm en los. Veel plezier met je training!',
+  'Klaar om te lopen. Maak er een mooie training van!',
+];
+const WU_STEP_VARIANTS: string[][] = [
+  [
+    'Begin met een minuut rustig dribbelen ter plaatse.',
+    'Dribbel een minuut rustig op de plek en kom op gang.',
+    'Start met een minuutje licht huppelen ter plaatse.',
+  ],
+  [
+    'Draai losjes met beide armen, eerst naar voren, dan naar achteren.',
+    'Maak grote cirkels met je armen, eerst vooruit en dan achteruit.',
+    'Zwaai je armen los in beide richtingen, rustig en groot.',
+  ],
+  [
+    'Til om de beurt je knieën vijf keer flink op, allebei de kanten.',
+    'Trek je knieën vijf keer per been stevig omhoog.',
+    'Hef om en om je knieën hoog op, vijf keer aan elke kant.',
+  ],
+  [
+    'Zwaai je benen om de beurt losjes naar voren en naar achteren.',
+    'Zwaai je benen om de beurt rustig heen en weer.',
+    'Laat je benen om en om los naar voren en achteren slingeren.',
+  ],
+  [
+    'Doe drie lichte uitvalspassen per been om je benen wakker te maken.',
+    'Maak drie rustige uitvalspassen met elk been.',
+    'Stap drie keer per been in een lichte uitvalspas.',
+  ],
+  [
+    'Rond af met dertig seconden rustig joggen op de plek.',
+    'Sluit af met een half minuutje rustig joggen ter plaatse.',
+    'Rond af met dertig tellen licht dribbelen op de plek.',
+  ],
 ];
 
-const CD_INTRO_TEXT = 'Tijd om rustig af te sluiten. Volg de stappen op je gemak.';
-const CD_DONE_TEXT = 'Goed gedaan. Je spieren komen weer tot rust.';
+const CD_INTRO_TEXTS: string[] = [
+  'Tijd om rustig af te sluiten. Volg de stappen op je gemak.',
+  'We sluiten rustig af. Neem de stappen op je gemak.',
+  'Tijd om tot rust te komen. Volg de stappen rustig mee.',
+];
+const CD_DONE_TEXTS: string[] = [
+  'Goed gedaan. Je spieren komen weer tot rust.',
+  'Mooi afgesloten. Je spieren komen tot rust.',
+  'Goed gedaan. Rust lekker uit, tot de volgende keer.',
+];
 // De drie rekstappen zijn eenzijdig: ze rekken één been tegelijk. Ze duren
 // elk dertig seconden (zie COOLDOWN_STEP_DURATIONS_SEC in
 // src/data/warmupCooldown.ts), dus de tekst noemt zelf het wisselmoment na
 // vijftien seconden. Zonder die zin zou een loper die de stem letterlijk
 // volgt maar één been rekken.
-const CD_STEP_TEXTS: string[] = [
-  'Loop nog drie minuten rustig uit en laat je hartslag geleidelijk zakken.',
-  'Rek je kuiten: duw een hiel in de grond en leun rustig naar voren. Wissel na vijftien seconden van been.',
-  'Rek je hamstrings: strek een been en buig langzaam voorover. Wissel na vijftien seconden van been.',
-  'Rek je quadriceps: pak je enkel vast en trek je hiel richting je bil. Wissel na vijftien seconden van been.',
-  'Adem een paar keer rustig diep in en uit, en voel hoe je ontspant.',
+// Zelfde variantenopzet als bij de warming-up hierboven: index 0 blijft de
+// oorspronkelijke tekst met zijn bestaande clip-id ('cd_step_2'). Let op dat
+// ELKE variant van de drie rekstappen het wisselmoment blijft noemen — die
+// stappen rekken één been tegelijk bij een timer van dertig seconden.
+const CD_STEP_VARIANTS: string[][] = [
+  [
+    'Loop nog drie minuten rustig uit en laat je hartslag geleidelijk zakken.',
+    'Loop nog een paar minuten heel rustig uit en kom tot rust.',
+    'Wandel of jog drie minuten rustig door om af te koelen.',
+  ],
+  [
+    'Rek je kuiten: duw een hiel in de grond en leun rustig naar voren. Wissel na vijftien seconden van been.',
+    'Rek je kuiten door je hiel in de grond te duwen en naar voren te leunen. Wissel na vijftien seconden van been.',
+    'Zet een been naar achteren met je hiel op de grond en leun voorover. Wissel na vijftien seconden van been.',
+  ],
+  [
+    'Rek je hamstrings: strek een been en buig langzaam voorover. Wissel na vijftien seconden van been.',
+    'Strek een been voor je uit en buig rustig voorover om je hamstring te rekken. Wissel na vijftien seconden van been.',
+    'Zet een hiel voor je neer en zak langzaam voorover vanuit je heupen. Wissel na vijftien seconden van been.',
+  ],
+  [
+    'Rek je quadriceps: pak je enkel vast en trek je hiel richting je bil. Wissel na vijftien seconden van been.',
+    'Trek je hiel richting je bil om de voorkant van je bovenbeen te rekken. Wissel na vijftien seconden van been.',
+    'Pak je voet vast achter je en houd je knieën naast elkaar. Wissel na vijftien seconden van been.',
+  ],
+  [
+    'Adem een paar keer rustig diep in en uit, en voel hoe je ontspant.',
+    'Adem een paar keer diep in en langzaam uit, en laat de spanning los.',
+    'Sluit af met rustig ademhalen: diep in, en langer uit.',
+  ],
 ];
 
 // ── 18. Techniek-cues tijdens lange duurlopen (CP7) ──────────────────────────
@@ -732,6 +1005,21 @@ const TECH_TEXTS: string[] = [
   'Voel je voeten, licht en snel contact met de grond.',
   'Ontspan je kaak en je handen, dat scheelt energie.',
   'Blijf rechtop, ook als je moe wordt. Kleine pas, hoge cadans.',
+  // Fase G-uitbreiding (augustus 2026). Een lange duurloop hoort er maximaal
+  // zes per sessie (useTechniqueCoaching.ts), dus met acht teksten kwam elke
+  // marathontraining bijna de hele lijst door.
+  'Houd je schouders laag en los, dat scheelt spanning.',
+  'Korte, snelle passen kosten minder kracht dan grote stappen.',
+  'Adem uit op het ritme van je voeten, dat geeft rust.',
+  'Laat je heupen meedoen, loop vanuit je bekken.',
+  'Zwaai je armen naar voren en achteren, niet dwars voor je langs.',
+  'Ontspan je vingers, alsof je iets breekbaars vasthoudt.',
+  'Kijk een meter of twintig vooruit, niet naar je voeten.',
+  'Loop rechtop, alsof een touwtje je hoofd omhoog trekt.',
+  'Controleer of je ademhaling nog rustig is, en pas zo nodig aan.',
+  'Houd je cadans hoog, ook als je moe begint te worden.',
+  'Laat je onderrug ontspannen, span niet onnodig aan.',
+  'Schud je armen even los als je merkt dat je aanspant.',
 ];
 
 // ── 19. Mentale pep-talk vóór een race of lange duurloop (CP7) ──────────────
@@ -745,6 +1033,15 @@ const PEP_TEXTS: string[] = [
   'Je bent klaar voor dit moment. Vertrouw op je training.',
   'Elke kilometer die je al hebt gelopen, bracht je hier. Ga ervoor.',
   'Dit is jouw moment. Geniet ervan en geef wat je hebt.',
+  // Fase G-uitbreiding (augustus 2026)
+  'Je hebt de trainingen gedaan. Nu pluk je de vruchten.',
+  'Rustig beginnen, sterk eindigen. Dat is het plan.',
+  'Je lijf is er klaar voor. Laat je hoofd meedoen.',
+  'Denk aan alle kilometers die je hiervoor al maakte.',
+  'Vandaag hoef je alleen te doen wat je allang kunt.',
+  'Een kilometer tegelijk. Meer is het niet.',
+  'Je hebt hier lang naar uitgekeken. Geniet ervan.',
+  'Vertrouw op je voorbereiding en loop je eigen race.',
 ];
 
 // ── Catalogus-enumeratie ─────────────────────────────────────────────────────
@@ -806,6 +1103,17 @@ export function allPhrases(): CatalogPhrase[] {
   }
   for (let m = TIME_FINE_MAX + TIME_STEP_ABOVE; m <= TIME_MAX; m += TIME_STEP_ABOVE) {
     phrases.push({ id: `time_${m}`, text: `In ${m} minuten.` });
+  }
+  // 6b. Tijd in uren voor lange sessies (zie de toelichting bij
+  // HOUR_FORM_FROM_MIN). Enkelvoud bij precies één minuut is hier niet nodig:
+  // de stap is vijf minuten, dus "1 minuut" komt niet voor.
+  for (let total = HOUR_FORM_FROM_MIN; total <= TIME_HOUR_MAX_MIN; total += TIME_STEP_ABOVE) {
+    const hours = Math.floor(total / 60);
+    const minutes = total % 60;
+    phrases.push({
+      id: `time_h${hours}_${minutes}`,
+      text: minutes === 0 ? `In ${hours} uur.` : `In ${hours} uur en ${minutes} minuten.`,
+    });
   }
 
   // 7. Zones
@@ -906,18 +1214,22 @@ export function allPhrases(): CatalogPhrase[] {
     phrases.push({ id: `iv_recover_${i}`, text });
   });
 
-  // 17. Warming-up & cooling-down (losse routine)
-  phrases.push({ id: 'wu_intro', text: WU_INTRO_TEXT });
-  WU_STEP_TEXTS.forEach((text, i) => {
-    phrases.push({ id: `wu_step_${i}`, text });
-  });
-  phrases.push({ id: 'wu_done', text: WU_DONE_TEXT });
+  // 17. Warming-up & cooling-down (losse routine), met varianten per stap.
+  // Variant 0 houdt het kale id ('wu_step_2') zodat de al gegenereerde clips
+  // blijven gelden; variant 1+ krijgt een achtervoegsel ('wu_step_2_1').
+  const pushVariants = (baseId: string, texts: string[]) => {
+    texts.forEach((text, v) => {
+      phrases.push({ id: v === 0 ? baseId : `${baseId}_${v}`, text });
+    });
+  };
 
-  phrases.push({ id: 'cd_intro', text: CD_INTRO_TEXT });
-  CD_STEP_TEXTS.forEach((text, i) => {
-    phrases.push({ id: `cd_step_${i}`, text });
-  });
-  phrases.push({ id: 'cd_done', text: CD_DONE_TEXT });
+  pushVariants('wu_intro', WU_INTRO_TEXTS);
+  WU_STEP_VARIANTS.forEach((texts, i) => pushVariants(`wu_step_${i}`, texts));
+  pushVariants('wu_done', WU_DONE_TEXTS);
+
+  pushVariants('cd_intro', CD_INTRO_TEXTS);
+  CD_STEP_VARIANTS.forEach((texts, i) => pushVariants(`cd_step_${i}`, texts));
+  pushVariants('cd_done', CD_DONE_TEXTS);
 
   // 18. Techniek-cues
   TECH_TEXTS.forEach((text, i) => {
@@ -1026,17 +1338,42 @@ export function finishUtterance(
 ): PhraseUtterance {
   const distId = `dist_${halfStepSuffix(roundHalfClamped(distanceKm, KM_RANGE_MIN, KM_RANGE_MAX))}`;
 
+  // Clip-tijd: tot anderhalf uur op de minuut nauwkeurig, daarboven op vijf
+  // minuten, en vanaf twee uur in uren (zie HOUR_FORM_FROM_MIN). De klem ligt
+  // nu op zeven uur in plaats van vijf; daaronder viel een marathon van een
+  // beginnende loper eerder buiten bereik en klonk er een verkeerde tijd.
   const totalMinutes = durationSeconds / 60;
-  let timeMin = totalMinutes <= TIME_FINE_MAX
-    ? Math.round(totalMinutes)
-    : Math.round(totalMinutes / TIME_STEP_ABOVE) * TIME_STEP_ABOVE;
-  timeMin = clamp(timeMin, 1, TIME_MAX);
-  const timeId = `time_${timeMin}`;
+  let timeId: string;
+  let useHourForm = false;
+  if (totalMinutes <= TIME_FINE_MAX) {
+    timeId = `time_${clamp(Math.round(totalMinutes), 1, TIME_FINE_MAX)}`;
+  } else {
+    const rounded = clamp(
+      Math.round(totalMinutes / TIME_STEP_ABOVE) * TIME_STEP_ABOVE,
+      TIME_FINE_MAX + TIME_STEP_ABOVE,
+      TIME_HOUR_MAX_MIN,
+    );
+    useHourForm = rounded >= HOUR_FORM_FROM_MIN;
+    timeId = useHourForm
+      ? `time_h${Math.floor(rounded / 60)}_${rounded % 60}`
+      : `time_${rounded}`;
+  }
 
   const km = distanceKm.toFixed(2);
   const mins = Math.floor(durationSeconds / 60);
   const secs = durationSeconds % 60;
-  const timeStr = secs > 0 ? `${mins} minuten en ${secs} seconden` : `${mins} minuten`;
+  // Vangnettekst (telefoonstem): dezelfde VORM als de clip, maar met de
+  // exacte tijd in plaats van de op vijf minuten afgeronde. Zonder die
+  // koppeling zou een sessie van 118 minuten als clip "In 2 uur" klinken en
+  // als vangnet "118 minuten en 12 seconden" — twee gebruikers die dezelfde
+  // run doen, horen dan een heel andere formulering. In uurvorm vervallen de
+  // seconden bewust: op die lengte zijn ze ruis, en de exacte tijd staat toch
+  // in het sessieoverzicht.
+  const timeStr = useHourForm
+    ? (mins % 60 === 0
+      ? `${Math.floor(mins / 60)} uur`
+      : `${Math.floor(mins / 60)} uur en ${mins % 60} minuten`)
+    : secs > 0 ? `${mins} minuten en ${secs} seconden` : `${mins} minuten`;
 
   const idx = ((variant % FINISH_CLOSERS.length) + FINISH_CLOSERS.length) % FINISH_CLOSERS.length;
   const closerId = idx === 0 ? 'well_done' : `finish_var_${idx}`;
@@ -1357,9 +1694,23 @@ export function intervalCueUtterance(
 }
 
 /** Aantal stappen in de warming-up-routine (CP3) — voor de UI-stepper. */
-export const WU_STEP_COUNT = WU_STEP_TEXTS.length;
+export const WU_STEP_COUNT = WU_STEP_VARIANTS.length;
 /** Aantal stappen in de cooling-down-routine (CP3) — voor de UI-stepper. */
-export const CD_STEP_COUNT = CD_STEP_TEXTS.length;
+export const CD_STEP_COUNT = CD_STEP_VARIANTS.length;
+
+/**
+ * Kiest variant `variant` uit een rij formuleringen en bouwt het bijbehorende
+ * clip-id: variant 0 houdt het kale id (dat is de oorspronkelijke tekst met
+ * zijn al gegenereerde clip), variant 1+ krijgt een achtervoegsel. Rouleert
+ * modulo de daadwerkelijke rijlengte en verwerkt ook negatieve waarden, net
+ * als de andere rouleerfuncties in dit bestand — een rij verlengen vergt dus
+ * geen codewijziging.
+ */
+function variantUtterance(baseId: string, texts: string[], variant: number): PhraseUtterance {
+  const n = texts.length;
+  const v = ((variant % n) + n) % n;
+  return { ids: [v === 0 ? baseId : `${baseId}_${v}`], fallbackText: texts[v] };
+}
 
 /**
  * Eén moment van de losstaande warming-up-routine (CP3, zie sectie 17
@@ -1367,23 +1718,29 @@ export const CD_STEP_COUNT = CD_STEP_TEXTS.length;
  * 'done' aan het eind. Een stapindex buiten bereik klemt naar de dichtstbij-
  * zijnde geldige stap, zodat deze functie nooit een niet-bestaande clip-id
  * kan opleveren.
+ *
+ * `variant` (fase G) kiest de formulering en blijft binnen één uitvoering van
+ * de routine gelijk — zie RoutineRunner, die 'm eenmalig bij het openen van
+ * het scherm vastlegt. Zo hoort een gebruiker die vaak een warming-up doet
+ * niet elke keer exact dezelfde zinnen.
  */
-export function warmupUtterance(step: 'intro' | number | 'done'): PhraseUtterance {
-  if (step === 'intro') return { ids: ['wu_intro'], fallbackText: WU_INTRO_TEXT };
-  if (step === 'done') return { ids: ['wu_done'], fallbackText: WU_DONE_TEXT };
-  const idx = clamp(Math.round(step), 0, WU_STEP_TEXTS.length - 1);
-  return { ids: [`wu_step_${idx}`], fallbackText: WU_STEP_TEXTS[idx] };
+export function warmupUtterance(step: 'intro' | number | 'done', variant: number = 0): PhraseUtterance {
+  if (step === 'intro') return variantUtterance('wu_intro', WU_INTRO_TEXTS, variant);
+  if (step === 'done') return variantUtterance('wu_done', WU_DONE_TEXTS, variant);
+  const idx = clamp(Math.round(step), 0, WU_STEP_VARIANTS.length - 1);
+  return variantUtterance(`wu_step_${idx}`, WU_STEP_VARIANTS[idx], variant);
 }
 
 /**
  * Eén moment van de losstaande cooling-down-routine (CP3). Zelfde vorm als
- * warmupUtterance hierboven. Bewust een andere naam dan de bestaande
- * intervalCueUtterance('cooldown') — dat is de korte, enkele cue tijdens een
- * intervaltraining (sectie 16), dit is de uitgebreide, losstaande routine.
+ * warmupUtterance hierboven, inclusief `variant`. Bewust een andere naam dan
+ * de bestaande intervalCueUtterance('cooldown') — dat is de korte, enkele cue
+ * tijdens een intervaltraining (sectie 16), dit is de uitgebreide, losstaande
+ * routine.
  */
-export function cooldownRoutineUtterance(step: 'intro' | number | 'done'): PhraseUtterance {
-  if (step === 'intro') return { ids: ['cd_intro'], fallbackText: CD_INTRO_TEXT };
-  if (step === 'done') return { ids: ['cd_done'], fallbackText: CD_DONE_TEXT };
-  const idx = clamp(Math.round(step), 0, CD_STEP_TEXTS.length - 1);
-  return { ids: [`cd_step_${idx}`], fallbackText: CD_STEP_TEXTS[idx] };
+export function cooldownRoutineUtterance(step: 'intro' | number | 'done', variant: number = 0): PhraseUtterance {
+  if (step === 'intro') return variantUtterance('cd_intro', CD_INTRO_TEXTS, variant);
+  if (step === 'done') return variantUtterance('cd_done', CD_DONE_TEXTS, variant);
+  const idx = clamp(Math.round(step), 0, CD_STEP_VARIANTS.length - 1);
+  return variantUtterance(`cd_step_${idx}`, CD_STEP_VARIANTS[idx], variant);
 }

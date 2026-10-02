@@ -41,7 +41,7 @@ const MODE_CONFIG: Record<Mode, {
   title: string;
   stepCount: number;
   durations: number[];
-  utterance: (step: 'intro' | number | 'done') => PhraseUtterance;
+  utterance: (step: 'intro' | number | 'done', variant: number) => PhraseUtterance;
 }> = {
   warmup: {
     title: 'Warming-up',
@@ -66,6 +66,16 @@ export function RoutineRunner({ mode }: { mode: Mode }) {
   const voiceEnabled = profile?.voiceGuidance ?? false;
   const voiceType = profile?.voiceType ?? 'female';
 
+  // Formuleringsvariant voor deze uitvoering van de routine. Elke stap heeft
+  // drie formuleringen (zie WU_STEP_VARIANTS/CD_STEP_VARIANTS in
+  // voicePhrases.ts); zonder rotatie hoor je bij elke warming-up letterlijk
+  // dezelfde zinnen. Zelfde bron als de begroetings- en finishrotatie in
+  // active.tsx: het aantal voltooide sessies. Bewust met useState-initializer
+  // vastgelegd bij het openen van het scherm, zodat de formulering NIET
+  // halverwege de routine verspringt als de store ondertussen verandert —
+  // binnen één warming-up hoor je dus één consistente stijl.
+  const [variant] = useState(() => useAppStore.getState().completedSessions.length);
+
   // Houdt het scherm aan tijdens de routine, net als tijdens een actieve run.
   useKeepAwake();
 
@@ -81,8 +91,8 @@ export function RoutineRunner({ mode }: { mode: Mode }) {
   useEffect(() => {
     if (!voiceEnabled) return;
     const step: 'intro' | number | 'done' = phase === -1 ? 'intro' : isDone ? 'done' : phase;
-    void voiceService.speakPhrases(config.utterance(step), voiceType);
-  }, [phase, voiceEnabled, voiceType, config, isDone]);
+    void voiceService.speakPhrases(config.utterance(step, variant), voiceType);
+  }, [phase, voiceEnabled, voiceType, config, isDone, variant]);
 
   useEffect(() => {
     return () => {
@@ -134,11 +144,14 @@ export function RoutineRunner({ mode }: { mode: Mode }) {
     router.back();
   }, []);
 
+  // Zelfde variant als wat er gesproken wordt: de tekst op het scherm moet
+  // woordelijk overeenkomen met wat de gebruiker hoort, anders leest hij iets
+  // anders dan de coach zegt.
   const stepText = isStep
-    ? config.utterance(phase).fallbackText
+    ? config.utterance(phase, variant).fallbackText
     : phase === -1
-      ? config.utterance('intro').fallbackText
-      : config.utterance('done').fallbackText;
+      ? config.utterance('intro', variant).fallbackText
+      : config.utterance('done', variant).fallbackText;
 
   return (
     <SafeAreaView style={styles.container}>
