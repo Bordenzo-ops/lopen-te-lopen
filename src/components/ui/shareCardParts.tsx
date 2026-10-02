@@ -60,16 +60,35 @@ export function formatDuration(seconds: number): string {
 
 // ── Onderdelen ──────────────────────────────────────────────────────────────
 
-/** Kop: app-icoon + merknaam links, naam van de loper rechts. */
-export function TopBar({ runnerName, light = false }: { runnerName?: string; light?: boolean }) {
+/**
+ * Kop: app-icoon + merknaam links, naam van de loper rechts.
+ *
+ * `transparent` is voor de sticker-variant (WP14): zonder scrim eronder moet
+ * de tekst zichzelf leesbaar houden — wit + een subtiele donkere textShadow
+ * in plaats van de gebruikelijke grijstinten.
+ */
+export function TopBar({
+  runnerName,
+  light = false,
+  transparent = false,
+}: {
+  runnerName?: string;
+  light?: boolean;
+  transparent?: boolean;
+}) {
   return (
     <View style={styles.topBar}>
       <View style={styles.lockup}>
         <Image source={APP_ICON} style={styles.topIcon} />
-        <Text style={[styles.topName, light && styles.topNameLight]}>{BRAND_NAME}</Text>
+        <Text style={[styles.topName, light && styles.topNameLight, transparent && styles.topNameTransparent]}>
+          {BRAND_NAME}
+        </Text>
       </View>
       {runnerName ? (
-        <Text style={[styles.runnerName, light && styles.runnerNameLight]} numberOfLines={1}>
+        <Text
+          style={[styles.runnerName, light && styles.runnerNameLight, transparent && styles.runnerNameTransparent]}
+          numberOfLines={1}
+        >
           {runnerName}
         </Text>
       ) : null}
@@ -77,25 +96,55 @@ export function TopBar({ runnerName, light = false }: { runnerName?: string; lig
   );
 }
 
-/** Voet: merknaam + handle. Het stukje dat nieuwsgierig moet maken. */
-export function BrandFooter({ light = false }: { light?: boolean }) {
+/**
+ * Voet: merknaam + handle. Het stukje dat nieuwsgierig moet maken.
+ *
+ * `compact`: laat `marginTop: 'auto'` vervallen (voor kaarten die met de
+ * inhoud meegroeien in plaats van een vaste `CARD_HEIGHT` te vullen — zie
+ * de transparante sticker-variant in ShareRunCard).
+ */
+export function BrandFooter({
+  light = false,
+  transparent = false,
+  compact = false,
+}: {
+  light?: boolean;
+  transparent?: boolean;
+  compact?: boolean;
+}) {
   return (
-    <View style={styles.brandFooter}>
-      <Text style={[styles.brandName, light && styles.brandNameLight]}>{BRAND_NAME}</Text>
+    <View style={[styles.brandFooter, compact && styles.brandFooterCompact]}>
+      <Text style={[styles.brandName, light && styles.brandNameLight, transparent && styles.brandNameTransparent]}>
+        {BRAND_NAME}
+      </Text>
       <View style={styles.brandDot} />
-      <Text style={[styles.brandHandle, light && styles.brandHandleLight]}>{SOCIAL_HANDLE}</Text>
+      <Text style={[styles.brandHandle, light && styles.brandHandleLight, transparent && styles.brandHandleTransparent]}>
+        {SOCIAL_HANDLE}
+      </Text>
     </View>
   );
 }
 
 /** Eén cel in een statistiekraster van drie kolommen. */
-export function StatCell({ label, value, unit }: { label: string; value: string; unit?: string }) {
+export function StatCell({
+  label,
+  value,
+  unit,
+  transparent = false,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  transparent?: boolean;
+}) {
   return (
     <View style={styles.statCell}>
-      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={[styles.statLabel, transparent && styles.statLabelTransparent]}>{label}</Text>
       <View style={styles.statValueRow}>
-        <Text style={styles.statValue} {...NO_FONT_PADDING}>{value}</Text>
-        {unit && <Text style={styles.statUnit}>{unit}</Text>}
+        <Text style={[styles.statValue, transparent && styles.statValueTransparent]} {...NO_FONT_PADDING}>
+          {value}
+        </Text>
+        {unit && <Text style={[styles.statUnit, transparent && styles.statUnitTransparent]}>{unit}</Text>}
       </View>
     </View>
   );
@@ -163,6 +212,19 @@ export function ArtScrim({ profile = 'hero' }: { profile?: 'hero' | 'texture' })
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
+/**
+ * Tekstschaduw voor de transparante sticker-variant (WP14). Zonder de
+ * donkere ArtScrim staat alle tekst op een onbekende foto — grijstinten
+ * verdwijnen dan. Oplossing: wit + deze subtiele schaduw voor contrast,
+ * en hiërarchie via grootte/gewicht/letterafstand in plaats van grijswaarden
+ * (contrast is geen ontwerpmiddel meer zodra de ondergrond onbekend is).
+ */
+const textShadowTransparent = {
+  textShadowColor: 'rgba(0,0,0,0.55)',
+  textShadowOffset: { width: 0, height: 1 },
+  textShadowRadius: 4,
+} as const;
+
 export const styles = StyleSheet.create({
   /** Basis van beide kaarten. */
   card: {
@@ -172,8 +234,24 @@ export const styles = StyleSheet.create({
     borderRadius: radius['2xl'],
     overflow: 'hidden',
   },
+  /**
+   * Sticker-variant (WP14): geen achtergrond, geen vaste 9:16-hoogte — hij
+   * groeit mee met de inhoud. Losstaand van `card` gehouden (nooit die style
+   * hier hergebruiken via samenvoegen): `card` is gedeeld met SharePeriodCard.
+   */
+  cardTransparent: {
+    width: CARD_WIDTH,
+    backgroundColor: 'transparent',
+  },
   content: {
     flex: 1,
+    paddingHorizontal: PAD_H,
+    paddingTop: 28,
+    paddingBottom: spacing[3],
+  },
+  /** Content-container voor `cardTransparent`: geen `flex: 1`, dus de hoogte
+   *  volgt de inhoud in plaats van een kaart met vaste hoogte te vullen. */
+  contentCompact: {
     paddingHorizontal: PAD_H,
     paddingTop: 28,
     paddingBottom: spacing[3],
@@ -203,6 +281,8 @@ export const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   topNameLight: { color: palette.neutral[900] },
+  // topName is al wit — heeft alleen de schaduw nodig zodra de scrim vervalt.
+  topNameTransparent: { ...textShadowTransparent },
   runnerName: {
     fontFamily: typography.fontFamily.sansSemi,
     fontSize: 9,
@@ -210,6 +290,13 @@ export const styles = StyleSheet.create({
     maxWidth: 110,
   },
   runnerNameLight: { color: palette.neutral[500] },
+  // Lichter gewicht dan topName (sansBold, hoofdletters, letterSpacing 1) houdt
+  // de merknaam bovenaan de hiërarchie ook als beide wit zijn.
+  runnerNameTransparent: {
+    color: palette.neutral[0],
+    fontFamily: typography.fontFamily.sansMedium,
+    ...textShadowTransparent,
+  },
 
   // ── Hero-stat ──
   heroRow: {
@@ -224,11 +311,18 @@ export const styles = StyleSheet.create({
     letterSpacing: -4,
     color: palette.neutral[0],
   },
+  // Al wit — heeft op de sticker-variant alleen de schaduw nodig.
+  heroValueTransparent: { ...textShadowTransparent },
   heroUnit: {
     fontFamily: typography.fontFamily.sansBold,
     fontSize: 21,
     color: palette.neutral[400],
     letterSpacing: -0.4,
+  },
+  // Secundair aan heroValue via gewicht/grootte (21px vs 96px), niet via grijs.
+  heroUnitTransparent: {
+    color: palette.neutral[0],
+    ...textShadowTransparent,
   },
 
   hairline: { marginTop: spacing[1.5] },
@@ -244,6 +338,16 @@ export const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1.1,
   },
+  // Compenseert het verlies van grijs als captionmarkering met meer gewicht
+  // en bredere letterafstand — blijft zo ondanks wit leesbaar als bijschrift.
+  statLabelTransparent: {
+    color: palette.neutral[0],
+    fontFamily: typography.fontFamily.sansBold,
+    letterSpacing: 1.6,
+    textShadowColor: 'rgba(0,0,0,0.55)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
   statValueRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -257,10 +361,20 @@ export const styles = StyleSheet.create({
     letterSpacing: -0.5,
     color: palette.neutral[0],
   },
+  // Al wit — heeft alleen de schaduw nodig.
+  statValueTransparent: { ...textShadowTransparent },
   statUnit: {
     fontFamily: typography.fontFamily.sansMedium,
     fontSize: 9,
     color: palette.neutral[500],
+  },
+  // Blijft secundair aan statValue via het lichtere gewicht/kleinere corps,
+  // niet via grijs.
+  statUnitTransparent: {
+    color: palette.neutral[0],
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
 
   // ── Merkbalk onder ──
@@ -270,6 +384,11 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
   },
+  // Voor kaarten die met de inhoud meegroeien (geen vaste CARD_HEIGHT) —
+  // zie de sticker-variant van ShareRunCard.
+  brandFooterCompact: {
+    marginTop: spacing[3],
+  },
   brandName: {
     fontFamily: typography.fontFamily.sansBold,
     fontSize: 10,
@@ -277,6 +396,8 @@ export const styles = StyleSheet.create({
     letterSpacing: -0.1,
   },
   brandNameLight: { color: palette.neutral[900] },
+  // Al wit — heeft alleen de schaduw nodig.
+  brandNameTransparent: { ...textShadowTransparent },
   brandDot: {
     width: 2,
     height: 2,
@@ -289,4 +410,12 @@ export const styles = StyleSheet.create({
     color: palette.neutral[400],
   },
   brandHandleLight: { color: palette.neutral[500] },
+  // Lichter gewicht dan brandName (sansBold) houdt het handle-teken secundair
+  // ook als beide wit zijn.
+  brandHandleTransparent: {
+    color: palette.neutral[0],
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
 });

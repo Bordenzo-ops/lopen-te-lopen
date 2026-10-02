@@ -18,6 +18,12 @@
  * (1080x1920 = exact 3x deze kaart). Vermenigvuldig de waarden hier met 3 om
  * de twee naast elkaar te leggen.
  *
+ * `variant` (WP14, sticker-deling): `'card'` (standaard) is deze 9:16-achtergrond-
+ * kaart, ongewijzigd. `'transparent'` laat achtergrond/artwork/scrim vervallen en
+ * levert een compacte kaart die met de inhoud meegroeit (geen `CARD_HEIGHT`),
+ * bedoeld om als sticker over de eigen foto van de gebruiker te plakken. Alle
+ * tekst die daar normaal op de donkere scrim leunt, wordt dan wit + textShadow.
+ *
  * Gebruik:
  *   const cardRef = useRef<View>(null);
  *   <ShareRunCard ref={cardRef} session={completed} weekNumber={4} runnerName="Lars" />
@@ -44,6 +50,13 @@ import {
   formatPace,
   styles as shared,
 } from './shareCardParts';
+
+/**
+ * `'card'`     — de bestaande 9:16 achtergrondkaart, ongewijzigd gedrag.
+ * `'transparent'` — sticker-variant (WP14): geen achtergrond/artwork/scrim,
+ * compacte hoogte, bedoeld om over de eigen foto van de gebruiker te plakken.
+ */
+export type ShareRunCardVariant = 'card' | 'transparent';
 
 // ── Routetracé ──────────────────────────────────────────────────────────────
 // Iets breder dan de tekstkolom, zodat de route niet in dezelfde marge staat
@@ -143,6 +156,8 @@ export interface ShareRunCardProps {
   maxHeartRate?: number;
   /** Naam van het actieve schema, bijvoorbeeld "Marathon" of een wedstrijd. */
   planLabel?: string;
+  /** Zie `ShareRunCardVariant`. Standaard `'card'` — bestaand gedrag, ongewijzigd. */
+  variant?: ShareRunCardVariant;
 }
 
 export const ShareRunCard = forwardRef<View, ShareRunCardProps>(function ShareRunCard(
@@ -153,9 +168,11 @@ export const ShareRunCard = forwardRef<View, ShareRunCardProps>(function ShareRu
     totalWeeks = 12,
     maxHeartRate = 190,
     planLabel = 'Trainingsschema',
+    variant = 'card',
   },
   ref,
 ) {
+  const isTransparent = variant === 'transparent';
   const accentColor = zoneColor(session.avgHeartRate, maxHeartRate);
   const route       = session.route ?? [];
   const hasRoute    = route.length > 1;
@@ -183,12 +200,16 @@ export const ShareRunCard = forwardRef<View, ShareRunCardProps>(function ShareRu
   const fastest = session.avgHeartRate ? null : fastestSplitSec(session);
 
   return (
-    <View ref={ref} style={shared.card}>
-      <Image source={ART_TEXTURE} style={StyleSheet.absoluteFill} resizeMode="cover" />
-      <ArtScrim profile="texture" />
+    <View ref={ref} style={isTransparent ? shared.cardTransparent : shared.card}>
+      {!isTransparent && (
+        <>
+          <Image source={ART_TEXTURE} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          <ArtScrim profile="texture" />
+        </>
+      )}
 
-      <View style={shared.content}>
-        <TopBar runnerName={runnerName} />
+      <View style={isTransparent ? shared.contentCompact : shared.content}>
+        <TopBar runnerName={runnerName} transparent={isTransparent} />
 
         {/* ── Routetracé: de held van deze kaart ── */}
         <View style={styles.route}>
@@ -231,7 +252,7 @@ export const ShareRunCard = forwardRef<View, ShareRunCardProps>(function ShareRu
 
         {/* ── Datum + hartslagzone ── */}
         <View style={styles.meta}>
-          <Text style={styles.dateLabel}>{dateStr.toUpperCase()}</Text>
+          <Text style={[styles.dateLabel, isTransparent && styles.dateLabelTransparent]}>{dateStr.toUpperCase()}</Text>
           <View
             style={[
               styles.zoneBadge,
@@ -247,37 +268,41 @@ export const ShareRunCard = forwardRef<View, ShareRunCardProps>(function ShareRu
 
         {/* ── Hero-stat: afstand ── */}
         <View style={[shared.heroRow, styles.heroRow]}>
-          <Text style={shared.heroValue} {...NO_FONT_PADDING}>
+          <Text style={[shared.heroValue, isTransparent && shared.heroValueTransparent]} {...NO_FONT_PADDING}>
             {session.actualDistanceKm.toFixed(2)}
           </Text>
-          <Text style={shared.heroUnit}>km</Text>
+          <Text style={[shared.heroUnit, isTransparent && shared.heroUnitTransparent]}>km</Text>
         </View>
 
         <Hairline style={styles.hairline} />
 
         {/* ── Statistiekraster ── */}
         <View style={styles.statsGrid}>
-          <StatCell label="Tijd"  value={formatDuration(session.durationSeconds)} />
-          <StatCell label="Tempo" value={formatPace(session.avgPaceSecPerKm)} unit="/km" />
+          <StatCell label="Tijd"  value={formatDuration(session.durationSeconds)} transparent={isTransparent} />
+          <StatCell label="Tempo" value={formatPace(session.avgPaceSecPerKm)} unit="/km" transparent={isTransparent} />
           {session.avgHeartRate ? (
-            <StatCell label="Hartslag" value={String(session.avgHeartRate)} unit="bpm" />
+            <StatCell label="Hartslag" value={String(session.avgHeartRate)} unit="bpm" transparent={isTransparent} />
           ) : fastest ? (
-            <StatCell label="Snelste km" value={formatPace(fastest)} unit="/km" />
+            <StatCell label="Snelste km" value={formatPace(fastest)} unit="/km" transparent={isTransparent} />
           ) : null}
         </View>
 
         {/* ── Weekvoortgang: plaatst de run in het trainingsplan ── */}
         <View style={styles.week}>
           <View style={styles.weekRow}>
-            <Text style={styles.weekPlan} numberOfLines={1}>{planLabel}</Text>
-            <Text style={styles.weekNr}>Week {weekNumber} van {totalWeeks}</Text>
+            <Text style={[styles.weekPlan, isTransparent && styles.weekPlanTransparent]} numberOfLines={1}>
+              {planLabel}
+            </Text>
+            <Text style={[styles.weekNr, isTransparent && styles.weekNrTransparent]}>
+              Week {weekNumber} van {totalWeeks}
+            </Text>
           </View>
-          <View style={styles.weekTrack}>
+          <View style={[styles.weekTrack, isTransparent && styles.weekTrackTransparent]}>
             <View style={[styles.weekFill, { width: `${weekProgress * 100}%` as any }]} />
           </View>
         </View>
 
-        <BrandFooter />
+        <BrandFooter transparent={isTransparent} compact={isTransparent} />
       </View>
     </View>
   );
@@ -305,6 +330,17 @@ const styles = StyleSheet.create({
     color: palette.primary[300],
     letterSpacing: 2,
     flexShrink: 1,
+  },
+  // De datum houdt bewust het merkoranje — dat is hier het enige kleuraccent en
+  // het draagt de herkenbaarheid van de kaart. Maar 10px oranje op een onbekende
+  // foto verdwijnt zodra die licht is (denk aan sneeuw of een felle lucht), dus
+  // krijgt hij dezelfde donkere schaduw als de witte teksten. Kleur blijft, de
+  // leesbaarheid komt van de schaduw. De zonebadge hiernaast heeft dit niet nodig:
+  // die zit al in een eigen translucente bak met rand.
+  dateLabelTransparent: {
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   zoneBadge: {
     flexDirection: 'row',
@@ -349,10 +385,28 @@ const styles = StyleSheet.create({
     color: palette.neutral[500],
     flexShrink: 1,
   },
+  // Blijft lichter dan weekNrTransparent (sansMedium vs sansBold) zodat de
+  // hiërarchie overeind blijft ook al zijn beide nu wit.
+  weekPlanTransparent: {
+    color: palette.neutral[0],
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
   weekNr: {
     fontFamily: typography.fontFamily.sansSemi,
     fontSize: 8,
     color: palette.neutral[400],
+  },
+  // Gewicht omhoog naar sansBold (was sansSemi) — dit is het belangrijkste
+  // stukje van de twee ("Week X van Y"), dat moest voorheen ook al uit
+  // sansSemi + iets donkerder grijs blijken; nu draagt het gewicht dat alleen.
+  weekNrTransparent: {
+    color: palette.neutral[0],
+    fontFamily: typography.fontFamily.sansBold,
+    textShadowColor: 'rgba(0,0,0,0.55)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   weekTrack: {
     marginTop: 5,
@@ -360,6 +414,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     backgroundColor: 'rgba(156,163,175,0.22)',
     overflow: 'hidden',
+  },
+  // Een grijze track op een onbekende foto kan onzichtbaar worden; een
+  // translucent witte vulling mét dunne rand blijft op zowel een lichte als
+  // een donkere ondergrond als balk afleesbaar.
+  weekTrackTransparent: {
+    backgroundColor: 'rgba(255,255,255,0.30)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.55)',
   },
   weekFill: {
     height: '100%',

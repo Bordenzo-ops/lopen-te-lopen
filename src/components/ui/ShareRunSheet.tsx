@@ -15,7 +15,7 @@
  *   />
  */
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -26,12 +26,14 @@ import {
   ActivityIndicator,
   ScrollView,
   Platform,
+  type LayoutChangeEvent,
 } from 'react-native';
+import Svg, { Defs, Pattern, Rect } from 'react-native-svg';
 import { Share2, Download, Camera } from 'lucide-react-native';
 import { palette, typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
 import { SheetHandle, SheetCloseButton } from './sheetParts';
-import { ShareRunCard, CARD_WIDTH, CARD_HEIGHT } from './ShareRunCard';
+import { ShareRunCard, CARD_WIDTH, CARD_HEIGHT, type ShareRunCardVariant } from './ShareRunCard';
 import { useShareRun } from '../../hooks/useShareRun';
 import type { CompletedSession } from '../../store/appStore';
 
@@ -47,10 +49,40 @@ interface ShareRunSheetProps {
   onClose: () => void;
 }
 
-// Schaal de card zodat hij past in de preview (max 80% van de schermbreedte)
+// Schaal de card zodat hij past in de preview (max 80% van de schermbreedte).
+// De hoogte is niet langer een vaste constante: de transparante variant heeft
+// geen CARD_HEIGHT en groeit mee met de inhoud (zie previewCardHeight verderop).
 const PREVIEW_SCALE = 0.72;
 const PREVIEW_W = CARD_WIDTH  * PREVIEW_SCALE;
-const PREVIEW_H = CARD_HEIGHT * PREVIEW_SCALE;
+
+// 'card' staat vooraan en is de standaard: bestaand gedrag, niets verandert
+// voor wie de kiezer niet aanraakt.
+const VARIANTS: Array<{ key: ShareRunCardVariant; label: string }> = [
+  { key: 'card',        label: 'Kaart' },
+  { key: 'transparent', label: 'Transparant' },
+];
+
+/**
+ * Dambordpatroon achter de preview bij de transparante variant, zodat
+ * zichtbaar is dát de kaart transparant is (zo doet Strava het ook — zonder
+ * die hint lijkt de kaart stuk). Met react-native-svg getekend, geen nieuwe
+ * afhankelijkheid nodig.
+ */
+function Checkerboard({ width, height }: { width: number; height: number }) {
+  const cell = 12;
+  return (
+    <Svg width={width} height={height} style={StyleSheet.absoluteFill}>
+      <Defs>
+        <Pattern id="checker" width={cell * 2} height={cell * 2} patternUnits="userSpaceOnUse">
+          <Rect width={cell * 2} height={cell * 2} fill={palette.neutral[100]} />
+          <Rect x={0} y={0} width={cell} height={cell} fill={palette.neutral[300]} />
+          <Rect x={cell} y={cell} width={cell} height={cell} fill={palette.neutral[300]} />
+        </Pattern>
+      </Defs>
+      <Rect width={width} height={height} fill="url(#checker)" />
+    </Svg>
+  );
+}
 
 export function ShareRunSheet({
   visible,
@@ -65,6 +97,20 @@ export function ShareRunSheet({
   const { cardRef, isSharing, share, saveToLibrary, captureCard } = useShareRun();
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [variant, setVariant] = useState<ShareRunCardVariant>('card');
+
+  // De transparante variant heeft geen vaste CARD_HEIGHT — hij groeit mee met
+  // de inhoud. De preview meet daarom de werkelijke hoogte van de onzichtbare
+  // full-res kaart (die toch al gerenderd wordt) en schaalt daarnaar; de
+  // kaartvariant blijft ongemoeid op de vaste CARD_HEIGHT.
+  const [transparentHeight, setTransparentHeight] = useState<number | null>(null);
+  const handleOffscreenLayout = useCallback((e: LayoutChangeEvent) => {
+    if (variant === 'transparent') {
+      setTransparentHeight(e.nativeEvent.layout.height);
+    }
+  }, [variant]);
+  const previewCardHeight = variant === 'transparent' ? (transparentHeight ?? CARD_HEIGHT) : CARD_HEIGHT;
+  const previewH = previewCardHeight * PREVIEW_SCALE;
 
   const handleInstagram = useCallback(async () => {
     const result = await share();
@@ -111,21 +157,44 @@ export function ShareRunSheet({
           Klaar voor de 'gram? Jouw stats in één oogopslag.
         </Text>
 
+        {/* Stijlkiezer */}
+        <View style={styles.variantRow}>
+          {VARIANTS.map((v) => {
+            const active = variant === v.key;
+            return (
+              <TouchableOpacity
+                key={v.key}
+                style={[styles.variantChip, active && styles.variantChipActive]}
+                onPress={() => setVariant(v.key)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.variantChipText, active && styles.variantChipTextActive]}>
+                  {v.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
         {/* Card preview — hier wordt de echte card gerenderd (buiten beeld) */}
         <ScrollView
           horizontal
           contentContainerStyle={styles.previewScroll}
           showsHorizontalScrollIndicator={false}
         >
-          {/* Zichtbare geschaalde preview */}
-          <View style={[styles.previewWrapper, { width: PREVIEW_W, height: PREVIEW_H }]}>
+          {/* Zichtbare geschaalde preview. Bij 'transparent' staat er een
+              dambordpatroon achter zodat zichtbaar is dát hij transparant is. */}
+          <View style={[styles.previewWrapper, { width: PREVIEW_W, height: previewH }]}>
+            {variant === 'transparent' && (
+              <Checkerboard width={PREVIEW_W} height={previewH} />
+            )}
             <View
               style={{
                 width:     CARD_WIDTH,
-                height:    CARD_HEIGHT,
+                height:    previewCardHeight,
                 transform: [
                   { translateX: -(CARD_WIDTH * (1 - PREVIEW_SCALE)) / 2 },
-                  { translateY: -(CARD_HEIGHT * (1 - PREVIEW_SCALE)) / 2 },
+                  { translateY: -(previewCardHeight * (1 - PREVIEW_SCALE)) / 2 },
                   { scale: PREVIEW_SCALE },
                 ],
               }}
@@ -138,13 +207,16 @@ export function ShareRunSheet({
                 maxHeartRate={maxHeartRate}
                 totalWeeks={totalWeeks}
                 planLabel={planLabel}
+                variant={variant}
               />
             </View>
           </View>
         </ScrollView>
 
-        {/* Onzichtbare full-res card voor de screenshot */}
-        <View style={styles.offscreen} pointerEvents="none">
+        {/* Onzichtbare full-res card voor de screenshot. Zelfde variant als
+            de preview hierboven — anders deelt de gebruiker iets anders dan
+            hij ziet. */}
+        <View style={styles.offscreen} pointerEvents="none" onLayout={handleOffscreenLayout}>
           <ShareRunCard
             ref={cardRef}
             session={session}
@@ -153,6 +225,7 @@ export function ShareRunSheet({
             maxHeartRate={maxHeartRate}
             totalWeeks={totalWeeks}
             planLabel={planLabel}
+            variant={variant}
           />
         </View>
 
@@ -241,6 +314,36 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     textAlign:  'center',
     marginTop:  4,
     marginBottom: spacing[2],
+  },
+
+  // Stijlkiezer (zelfde opzet als SharePeriodSheet)
+  variantRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing[1],
+    paddingHorizontal: spacing[3],
+    marginBottom: spacing[1.5],
+  },
+  variantChip: {
+    paddingHorizontal: spacing[2],
+    paddingVertical: 8,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+    backgroundColor: colors.bgCard,
+  },
+  variantChipActive: {
+    borderColor: colors.brandPrimary,
+    backgroundColor: colors.brandPrimary + '20',
+  },
+  variantChipText: {
+    fontFamily: typography.fontFamily.sansMedium,
+    fontSize:   typography.fontSize.sm,
+    color:      colors.textSecondary,
+  },
+  variantChipTextActive: {
+    fontFamily: typography.fontFamily.sansSemi,
+    color:      colors.brandPrimary,
   },
 
   previewScroll: {
