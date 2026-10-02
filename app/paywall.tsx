@@ -13,7 +13,7 @@
  * laag via usePremium. Hier staat alleen de paywall zelf.
  */
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -32,7 +32,7 @@ import { colors, typography, spacing, radius, shadows, type ThemeColors } from '
 import { useThemeColors } from '../src/theme/useTheme';
 import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
-import { useAppStore } from '../src/store/appStore';
+import { useAppStore, useHasHydrated } from '../src/store/appStore';
 import {
   getOfferings,
   purchasePackage,
@@ -133,6 +133,9 @@ export default function PaywallScreen() {
   // Al premium? Dan geen verse aankoop meer, maar doorsturen naar de
   // store-beheerpagina om veilig van plan te wisselen of op te zeggen.
   const isPremium = useAppStore(s => s.isPremium);
+  // Wacht op het laden van de opgeslagen state: anders ziet een betalende
+  // gebruiker bij een koude start heel even de koopknoppen.
+  const hydrated = useHasHydrated();
 
   const [loadingOfferings, setLoadingOfferings] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -155,11 +158,11 @@ export default function PaywallScreen() {
   // ook de trial-fase, de besparing en de omgerekende maandprijs uit de
   // echte pakketten. Zonder offering (of zonder maandplan om tegen af te
   // zetten) blijven de fallbackwaarden gewoon staan.
-  useEffect(() => {
-    let active = true;
-    (async () => {
+  const loadOfferings = useCallback(async (isActive: () => boolean = () => true) => {
+    setLoadingOfferings(true);
+    {
       const offering: PurchasesOffering | null = await getOfferings();
-      if (!active) return;
+      if (!isActive()) return;
 
       if (offering) {
         const m = offering.monthly ?? null;
@@ -189,11 +192,16 @@ export default function PaywallScreen() {
         }
       }
       setLoadingOfferings(false);
-    })();
+    }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void loadOfferings(() => active);
     return () => {
       active = false;
     };
-  }, []);
+  }, [loadOfferings]);
 
   // Funnelstap: paywall getoond. Eén keer bij het openen van het scherm.
   useEffect(() => {
@@ -244,13 +252,8 @@ export default function PaywallScreen() {
       await onManageSubscription();
       return;
     }
-    if (!option.pkg) {
-      Alert.alert(
-        'Nog niet beschikbaar',
-        'Abonnementen zijn nog niet ingesteld. Probeer het later opnieuw.',
-      );
-      return;
-    }
+    // Zonder pakket zijn de koopknoppen uitgeschakeld; dit is een vangnet.
+    if (!option.pkg) return;
     // Funnelstap: gebruiker tikt een concreet plan aan om te kopen.
     const plan = option.title === 'Jaarlijks' ? 'yearly' : 'monthly';
     void trackEvent('paywall_plan_tapped', { plan });
@@ -322,6 +325,7 @@ export default function PaywallScreen() {
   };
 
   const anyBusy = busyId !== null || restoring;
+  const noPackages = !monthly.pkg && !yearly.pkg;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -368,7 +372,11 @@ export default function PaywallScreen() {
 
         {/* Al premium: geen koopknoppen, maar een veilige route naar de
             store-beheerpagina om van plan te wisselen of op te zeggen. */}
-        {isPremium ? (
+        {!hydrated ? (
+          <View style={styles.loadingPrices}>
+            <ActivityIndicator color={colors.brandPrimary} />
+          </View>
+        ) : isPremium ? (
           <>
             <Button
               label="Abonnement beheren"
@@ -389,19 +397,33 @@ export default function PaywallScreen() {
                 <ActivityIndicator color={colors.brandPrimary} />
                 <Text style={styles.loadingText}>Prijzen laden</Text>
               </View>
+            ) : noPackages ? (
+              <View style={styles.loadingPrices}>
+                <Text style={styles.loadingText}>
+                  De prijzen konden niet worden geladen. Controleer je internet en probeer het opnieuw.
+                </Text>
+                <Text style={styles.loadingText}>
+                  Ter info: {yearly.price} of {monthly.price}.
+                </Text>
+                <Button
+                  label="Opnieuw proberen"
+                  variant="secondary"
+                  onPress={() => void loadOfferings()}
+                />
+              </View>
             ) : (
               <View style={styles.options}>
                 <PlanCard
                   option={yearly}
                   highlighted
                   busy={busyId === yearly.pkg?.identifier}
-                  disabled={anyBusy}
+                  disabled={anyBusy || !yearly.pkg}
                   onPress={() => onPurchase(yearly)}
                 />
                 <PlanCard
                   option={monthly}
                   busy={busyId === monthly.pkg?.identifier}
-                  disabled={anyBusy}
+                  disabled={anyBusy || !monthly.pkg}
                   onPress={() => onPurchase(monthly)}
                 />
                 {yearly.trialDays && yearly.rawPriceString && (

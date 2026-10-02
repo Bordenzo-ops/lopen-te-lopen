@@ -27,7 +27,7 @@ import Purchases, {
   type SubscriptionOption,
   LOG_LEVEL,
 } from 'react-native-purchases';
-import { getCurrentUser } from './authService';
+import { ensureAnonymousSession } from './authService';
 import { sanitizeEnvValue } from '../utils/env';
 
 /**
@@ -63,6 +63,10 @@ export const FALLBACK_PRICE_MONTHLY = 'EUR 5,99 per maand';
 export const FALLBACK_PRICE_YEARLY = 'EUR 49 per jaar';
 
 let configured = false;
+let initPromise: Promise<void> | null = null;
+
+/** Maximale wachttijd op de (anonieme) Supabase-sessie voordat we toch configureren. */
+const SESSION_WAIT_MS = 4000;
 
 /**
  * Is er een bruikbare RevenueCat-sleutel ingesteld? Zonder sleutel blijft
@@ -72,14 +76,24 @@ export function isPurchasesConfigured(): boolean {
   return REVENUECAT_API_KEY.length > 0;
 }
 
-/**
- * Initialiseer RevenueCat eenmalig. Best-effort: faalt geruisloos terug
- * naar "geen premium" zonder sleutel, netwerk of bij een fout. Koppelt de
- * appUserID aan de Supabase-user-id wanneer die bekend is, zodat aankopen
- * aan hetzelfde account hangen op een nieuw toestel.
- */
-export async function init(): Promise<void> {
-  if (configured) return;
+/** Wacht maximaal `ms` op een promise; geeft anders `fallback` terug. Gooit nooit. */
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise<T>(resolve => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    promise.then(
+      value => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(fallback);
+      },
+    );
+  });
+}
+
+async function runInit(): Promise<void> {
   if (!isPurchasesConfigured()) return;
 
   try {
@@ -87,15 +101,14 @@ export async function init(): Promise<void> {
       Purchases.setLogLevel(LOG_LEVEL.WARN);
     }
 
-    // Koppel aan de Supabase-user-id als die er is, anders laat RevenueCat
-    // zelf een anonieme appUserID genereren.
-    let appUserID: string | undefined;
-    try {
-      const user = await getCurrentUser();
-      appUserID = user?.id ?? undefined;
-    } catch {
-      appUserID = undefined;
-    }
+    // Zorg eerst voor een (anonieme) Supabase-sessie, zodat RevenueCat meteen
+    // met de Supabase-user-id start in plaats van een $RCAnonymousID. Dit is
+    // los van de cloudsync-schakelaar: die bepaalt alleen of data gesynct
+    // wordt. Zonder sessie konden aankopen en analytics-events nooit aan een
+    // gebruiker gekoppeld worden. Met timeout, zodat de app niet blokkeert
+    // bij geen netwerk; identifyUser koppelt dan later alsnog.
+    const session = await withTimeout(ensureAnonymousSession(), SESSION_WAIT_MS, null);
+    const appUserID: string | undefined = session?.user?.id ?? undefined;
 
     Purchases.configure({ apiKey: REVENUECAT_API_KEY, appUserID });
     configured = true;
@@ -106,15 +119,103 @@ export async function init(): Promise<void> {
 }
 
 /**
- * Koppel de RevenueCat-gebruiker alsnog aan de Supabase-user-id, bijvoorbeeld
- * nadat een gebruiker is ingelogd na de eerste app-start. Best-effort.
+ * Initialiseer RevenueCat eenmalig. Best-effort: faalt geruisloos terug
+ * naar "geen premium" zonder sleutel, netwerk of bij een fout. Meerdere
+ * aanroepen delen dezelfde promise, dus elke functie in deze service kan er
+ * veilig op wachten. Koppelt de appUserID aan de Supabase-user-id, zodat
+ * aankopen aan hetzelfde account hangen op een nieuw toestel.
  */
-export async function identifyUser(userId: string): Promise<void> {
-  if (!configured || !userId) return;
+export function init(): Promise<void> {
+  if (configured) return Promise.resolve();
+  if (!initPromise) {
+    initPromise = runInit().then(() => {
+      // Bij een mislukte configuratie een latere poging toestaan.
+      if (!configured) initPromise = null;
+    });
+  }
+  return initPromise;
+}
+
+export interface IdentifyResult {
+  /** Heeft de RevenueCat-gebruiker echt gewisseld? */
+  switched: boolean;
+  /** Was premium actief vóór de wissel? null = onbekend. */
+  wasPremium: boolean | null;
+  /** Is premium actief na de wissel (en eventuele restore)? null = onbekend. */
+  isPremium: boolean | null;
+}
+
+/**
+ * Na een accountwissel: had de gebruiker daarvoor premium en nu niet, dan
+ * probeert deze helper één keer de aankopen van het toestel te herstellen
+ * (Purchases.restorePurchases), zodat een abonnement dat onder het vorige
+ * (anonieme) ID hing meeverhuist. Geeft de actuele premium-status terug, of
+ * null als die onbekend is. Roep daarna refreshPremium() in de store aan.
+ * Best-effort: gooit nooit.
+ */
+export async function reconcileAfterAccountSwitch(
+  prevWasPremium: boolean,
+): Promise<boolean | null> {
+  await init();
+  if (!configured) return null;
+  const current = await isPremiumActive();
+  if (current === null) return null;
+  if (current || !prevWasPremium) return current;
   try {
-    await Purchases.logIn(userId);
+    const info = await Purchases.restorePurchases();
+    return hasPremiumEntitlement(info);
   } catch {
-    // Negeer: aankopen blijven via de anonieme appUserID werken
+    return false;
+  }
+}
+
+/**
+ * Koppel de RevenueCat-gebruiker alsnog aan de Supabase-user-id, bijvoorbeeld
+ * nadat een gebruiker is ingelogd na de eerste app-start. Doet niets als dit
+ * al de actieve gebruiker is. Verloor de gebruiker door de wissel zijn
+ * premium, dan wordt eenmalig herstel geprobeerd (zie
+ * reconcileAfterAccountSwitch). Best-effort.
+ */
+export async function identifyUser(userId: string): Promise<IdentifyResult> {
+  const none: IdentifyResult = { switched: false, wasPremium: null, isPremium: null };
+  await init();
+  if (!configured || !userId) return none;
+  try {
+    if ((await Purchases.getAppUserID()) === userId) return none;
+
+    let wasPremium: boolean | null = null;
+    try {
+      wasPremium = hasPremiumEntitlement(await Purchases.getCustomerInfo());
+    } catch {
+      wasPremium = null;
+    }
+
+    const { customerInfo } = await Purchases.logIn(userId);
+    let isPremium: boolean | null = hasPremiumEntitlement(customerInfo);
+    if (wasPremium && !isPremium) {
+      isPremium = await reconcileAfterAccountSwitch(true);
+    }
+    return { switched: true, wasPremium, isPremium };
+  } catch {
+    // Negeer: aankopen blijven via de huidige appUserID werken
+    return none;
+  }
+}
+
+/**
+ * Vangnet voor een gebruiker die anoniem bij RevenueCat is gebleven (bijv.
+ * omdat er bij de eerste start geen netwerk was): probeert alsnog een
+ * Supabase-sessie te maken en koppelt die. Aanroepen bij app-voorgrond.
+ */
+export async function ensureIdentified(): Promise<void> {
+  await init();
+  if (!configured) return;
+  try {
+    if (!(await Purchases.isAnonymous())) return;
+    const session = await withTimeout(ensureAnonymousSession(), SESSION_WAIT_MS, null);
+    if (session?.user?.id) await identifyUser(session.user.id);
+  } catch {
+    // Stil falen
   }
 }
 
@@ -128,6 +229,7 @@ export async function identifyUser(userId: string): Promise<void> {
  * null terug.
  */
 export async function getOfferings(): Promise<PurchasesOffering | null> {
+  await init();
   if (!configured) return null;
   try {
     const offerings = await Purchases.getOfferings();
@@ -235,6 +337,7 @@ export interface PurchaseResult {
 export async function purchasePackage(
   pkg: PurchasesPackage,
 ): Promise<PurchaseResult> {
+  await init();
   if (!configured) {
     return { ok: false, isPremium: false, message: 'Aankopen zijn nu niet beschikbaar.' };
   }
@@ -248,14 +351,60 @@ export async function purchasePackage(
     };
   } catch (e: any) {
     // RevenueCat markeert een door de gebruiker afgebroken aankoop.
-    if (e?.userCancelled) {
+    if (e?.userCancelled || e?.code === Purchases.PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR) {
       return { ok: false, isPremium: false, cancelled: true };
     }
-    return {
-      ok: false,
-      isPremium: false,
-      message: 'De aankoop is niet gelukt. Probeer het later opnieuw.',
-    };
+
+    switch (e?.code) {
+      case Purchases.PURCHASES_ERROR_CODE.PAYMENT_PENDING_ERROR:
+        return {
+          ok: false,
+          isPremium: false,
+          message:
+            'Je betaling wordt nog verwerkt. Premium wordt vanzelf actief zodra die rond is.',
+        };
+      case Purchases.PURCHASES_ERROR_CODE.PRODUCT_ALREADY_PURCHASED_ERROR:
+      case Purchases.PURCHASES_ERROR_CODE.RECEIPT_ALREADY_IN_USE_ERROR: {
+        // Het abonnement bestaat al: probeer het automatisch te herstellen.
+        try {
+          const info = await Purchases.restorePurchases();
+          if (hasPremiumEntitlement(info)) {
+            return {
+              ok: true,
+              isPremium: true,
+              message: 'Je premium is hersteld.',
+            };
+          }
+        } catch {
+          // Val terug op de melding hieronder
+        }
+        return {
+          ok: false,
+          isPremium: false,
+          message:
+            'Dit abonnement hoort bij een ander account. Tik op Aankopen herstellen.',
+        };
+      }
+      case Purchases.PURCHASES_ERROR_CODE.NETWORK_ERROR:
+        return {
+          ok: false,
+          isPremium: false,
+          message: 'Geen verbinding. Controleer je internet en probeer het opnieuw.',
+        };
+      case Purchases.PURCHASES_ERROR_CODE.STORE_PROBLEM_ERROR:
+        return {
+          ok: false,
+          isPremium: false,
+          message:
+            'De store heeft op dit moment een storing. Probeer het over een paar minuten opnieuw.',
+        };
+      default:
+        return {
+          ok: false,
+          isPremium: false,
+          message: 'De aankoop is niet gelukt. Probeer het later opnieuw.',
+        };
+    }
   }
 }
 
@@ -276,6 +425,7 @@ export async function waitForPremiumActivation(
   attempts = 3,
   delayMs = 1500,
 ): Promise<boolean> {
+  await init();
   if (!configured) return false;
   for (let i = 0; i < attempts; i++) {
     try {
@@ -326,6 +476,7 @@ export async function openManageSubscriptions(): Promise<boolean> {
  * Herstel eerdere aankopen, bijvoorbeeld op een nieuw toestel. Best-effort.
  */
 export async function restorePurchases(): Promise<PurchaseResult> {
+  await init();
   if (!configured) {
     return { ok: false, isPremium: false, message: 'Herstellen is nu niet beschikbaar.' };
   }
@@ -366,6 +517,7 @@ export function hasPremiumEntitlement(customerInfo: CustomerInfo | null): boolea
  * netwerkhapering te verwarren met een verlopen abonnement.
  */
 export async function isPremiumActive(): Promise<boolean | null> {
+  await init();
   if (!configured) return false;
   try {
     const customerInfo = await Purchases.getCustomerInfo();
@@ -381,6 +533,7 @@ export async function isPremiumActive(): Promise<boolean | null> {
  * fout gebeurt er niets en blijft de app gewoon werken.
  */
 export async function logOut(): Promise<void> {
+  await init();
   if (!configured) return;
   try {
     await Purchases.logOut();

@@ -20,6 +20,7 @@ import {
   addPremiumListener,
   removePremiumListener,
   identifyUser,
+  ensureIdentified,
   logOut as logOutPurchases,
 } from '../src/services/purchaseService';
 import { onAuthChange } from '../src/services/authService';
@@ -125,12 +126,20 @@ export default function RootLayout() {
   useEffect(() => {
     void (async () => {
       await initPurchases();
-      await useAppStore.getState().refreshPremium();
+      // Listener direct na init registreren, niet pas na refreshPremium: een
+      // update die tijdens de eerste ophaalronde binnenkomt mag niet missen.
       addPremiumListener((isPremium) => {
         useAppStore.getState().setPremium(isPremium);
       });
+      await useAppStore.getState().refreshPremium();
     })();
+    // Vangnet: bleef RevenueCat anoniem (bijv. geen netwerk bij de eerste
+    // start), dan alsnog een sessie maken en koppelen zodra de app terugkomt.
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void ensureIdentified();
+    });
     return () => {
+      sub.remove();
       removePremiumListener();
     };
   }, []);
@@ -145,13 +154,30 @@ export default function RootLayout() {
   // Na elke identiteitswissel verversen we premium opnieuw: de customerInfo
   // hoort bij de nieuwe (of geen) gebruiker.
   useEffect(() => {
+    // Alleen reageren op een écht gewijzigde user-id: TOKEN_REFRESHED en
+    // INITIAL_SESSION leveren steeds dezelfde gebruiker en mogen geen
+    // herhaalde logIn veroorzaken. undefined = nog geen event gezien.
+    let lastUserId: string | null | undefined;
     const unsubscribe = onAuthChange((session) => {
+      const userId = session?.user?.id ?? null;
+      if (userId === lastUserId) return;
+      const previous = lastUserId;
+      lastUserId = userId;
       void (async () => {
         try {
-          if (session?.user?.id) {
-            await identifyUser(session.user.id);
-          } else {
+          if (userId) {
+            // identifyUser wacht op init, slaat een ongewijzigde gebruiker
+            // over en herstelt eenmalig als premium bij de wissel wegviel.
+            const result = await identifyUser(userId);
+            if (result.isPremium !== null) {
+              useAppStore.getState().setPremium(result.isPremium);
+            }
+          } else if (previous) {
+            // Echte uitlog (er was eerder een gebruiker); een lege
+            // INITIAL_SESSION bij de start raakt RevenueCat niet.
             await logOutPurchases();
+          } else {
+            return;
           }
           await useAppStore.getState().refreshPremium();
         } catch {
