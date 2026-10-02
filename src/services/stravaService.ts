@@ -131,12 +131,18 @@ export async function connectStrava(): Promise<{ ok: boolean; message?: string }
 
   const state = await genereerEnBewaarOAuthState();
 
+  // Scope bewust zo smal mogelijk: de app schrijft alleen runs weg en leest
+  // niets uit het Strava-account. `activity:write` volstaat daarvoor. De
+  // atletennaam die we tonen komt niet uit een read-scope, maar uit het
+  // athlete-object dat Strava sowieso meegeeft bij de token-uitwisseling.
+  // Niet uitbreiden zonder dat een functie het echt nodig heeft: Strava toetst
+  // bij de review op scopes die de app niet gebruikt.
   const authorizeUrl =
     'https://www.strava.com/oauth/authorize' +
     `?client_id=${encodeURIComponent(STRAVA_CLIENT_ID)}` +
     `&redirect_uri=${encodeURIComponent(functionUrl)}` +
     '&response_type=code' +
-    '&scope=activity:write,read' +
+    '&scope=activity:write' +
     '&approval_prompt=auto' +
     `&state=${encodeURIComponent(state)}`;
 

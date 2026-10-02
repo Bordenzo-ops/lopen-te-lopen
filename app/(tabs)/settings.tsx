@@ -25,6 +25,8 @@ import { usePremium } from '../../src/hooks/usePremium';
 import { openManageSubscriptions } from '../../src/services/purchaseService';
 import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
 import { connectStrava, disconnectStrava, isStravaConfigured } from '../../src/services/stravaService';
+import { StravaConnectButton, StravaCompatibleLogo } from '../../src/components/ui/StravaBrand';
+import { PRIVACY_URL } from '../../src/config/legalLinks';
 import { enableHealthConnect, isHealthConnectAvailable } from '../../src/services/healthConnectService';
 import { enableHealthKit, isHealthKitAvailable } from '../../src/services/healthKitService';
 import { HeartRateMonitorSheet } from '../../src/components/ui/HeartRateMonitorSheet';
@@ -372,7 +374,7 @@ export default function SettingsScreen() {
     if (!isStravaConfigured()) {
       Alert.alert(
         'Strava-koppeling nog niet ingesteld',
-        'De Strava-koppeling voor deze app moet nog ingesteld worden. Zie docs/STRAVA_SETUP.md.',
+        'De Strava-koppeling is op dit moment niet beschikbaar. Probeer het later opnieuw.',
       );
       return;
     }
@@ -928,28 +930,27 @@ export default function SettingsScreen() {
             <Text style={styles.sectionLabel}>Koppelingen</Text>
             <View style={styles.card}>
               {!stravaConnected ? (
-                <View style={styles.integrationRow}>
-                  <Activity size={18} color={colors.textSecondary} strokeWidth={2} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.switchLabel}>Strava</Text>
-                    <Text style={styles.switchSub}>
-                      {isStravaConfigured()
-                        ? 'Verbind je account om runs automatisch te uploaden.'
-                        : 'De setup voor Strava moet nog gebeuren. Zie docs/STRAVA_SETUP.md.'}
-                    </Text>
+                <View style={styles.stravaBlock}>
+                  <View style={styles.integrationRow}>
+                    <Activity size={18} color={colors.textSecondary} strokeWidth={2} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.switchLabel}>Strava</Text>
+                      <Text style={styles.switchSub}>
+                        {isStravaConfigured()
+                          ? 'Verbind je account om je voltooide runs naar Strava te sturen. Wij lezen niets uit je Strava-account.'
+                          : 'De Strava-koppeling is op dit moment niet beschikbaar.'}
+                      </Text>
+                    </View>
                   </View>
-                  <TouchableOpacity
-                    onPress={handleConnectStrava}
-                    style={styles.stravaConnectBtn}
-                    activeOpacity={0.85}
-                    disabled={stravaBusy}
-                    accessibilityRole="button"
-                    accessibilityLabel="Verbind met Strava"
-                  >
-                    <Text style={styles.stravaConnectBtnText}>
-                      {stravaBusy ? 'Bezig...' : 'Verbind met Strava'}
-                    </Text>
-                  </TouchableOpacity>
+                  {/* Officiele Strava-knop: verplichte, ongewijzigde asset. Zie
+                      src/components/ui/StravaBrand.tsx. */}
+                  <View style={styles.stravaBrandRow}>
+                    <StravaConnectButton
+                      onPress={handleConnectStrava}
+                      disabled={stravaBusy || !isStravaConfigured()}
+                    />
+                    <StravaCompatibleLogo />
+                  </View>
                 </View>
               ) : (
                 <>
@@ -984,6 +985,9 @@ export default function SettingsScreen() {
                     <Link2 size={16} color={colors.error} strokeWidth={2} />
                     <Text style={styles.dangerLabel}>Ontkoppel</Text>
                   </TouchableOpacity>
+                  <View style={styles.stravaBlockFooter}>
+                    <StravaCompatibleLogo />
+                  </View>
                 </>
               )}
               <Divider />
@@ -1156,12 +1160,12 @@ export default function SettingsScreen() {
                   <View style={styles.accountButtonsRow}>
                     <TouchableOpacity
                       onPress={() => router.push({ pathname: '/account', params: { mode: 'create' } })}
-                      style={[styles.stravaConnectBtn, styles.accountBtnFlex]}
+                      style={[styles.primaryActionBtn, styles.accountBtnFlex]}
                       activeOpacity={0.85}
                       accessibilityRole="button"
                       accessibilityLabel="Account aanmaken"
                     >
-                      <Text style={styles.stravaConnectBtnText}>Account aanmaken</Text>
+                      <Text style={styles.primaryActionBtnText}>Account aanmaken</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => router.push({ pathname: '/account', params: { mode: 'login' } })}
@@ -1186,7 +1190,7 @@ export default function SettingsScreen() {
             <Text style={styles.sectionLabel}>Overige</Text>
             <View style={styles.card}>
               <TouchableOpacity
-                onPress={() => Linking.openURL('https://lopentelopen.nl/privacy-policy.html')}
+                onPress={() => Linking.openURL(PRIVACY_URL)}
                 style={styles.row}
                 activeOpacity={0.7}
               >
@@ -1399,11 +1403,26 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm,
     color: colors.textSecondary, lineHeight: typography.fontSize.sm * 1.5,
   },
-  stravaConnectBtn: {
+  // De Strava-knop en het merklogo staan onder de uitleg in plaats van ernaast:
+  // de officiele knop heeft een vaste breedte (237pt) en mag niet geschaald of
+  // bijgesneden worden. De horizontale padding staat op de merkregel zelf,
+  // omdat integrationRow die al meebrengt.
+  stravaBlock: {
+    paddingBottom: spacing[1.5],
+  },
+  stravaBrandRow: {
+    paddingHorizontal: spacing[2],
+    gap: spacing[1],
+  },
+  stravaBlockFooter: {
+    paddingHorizontal: spacing[2],
+    paddingBottom: spacing[1.5],
+  },
+  primaryActionBtn: {
     backgroundColor: colors.brandPrimary, borderRadius: radius.md,
     paddingHorizontal: spacing[1.5], paddingVertical: spacing[1],
   },
-  stravaConnectBtnText: {
+  primaryActionBtnText: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
     color: '#fff',
   },

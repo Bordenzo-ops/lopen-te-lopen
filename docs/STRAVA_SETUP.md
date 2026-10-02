@@ -4,6 +4,12 @@ Korte setupgids om de Strava-koppeling in "Lopen te Lopen" werkend te
 krijgen. De code staat al klaar (Edge Function, service, UI); dit zijn de
 stappen die alleen jij als accounthouder kunt doen.
 
+> **Athlete-limiet.** Een nieuwe Strava API-app start op 1 atleet
+> ("Single Player Mode"). Via het API-dashboard kun je zelf naar 10 atleten.
+> Daarboven (tot 9.999) is een review van Strava nodig. Zie
+> [STRAVA_COMPLIANCE.md](STRAVA_COMPLIANCE.md) voor het reviewdossier en de
+> merkregels waar de app aan moet blijven voldoen.
+
 ## 1. Strava API-app aanmaken
 
 1. Ga naar https://www.strava.com/settings/api en log in met je Strava-account.

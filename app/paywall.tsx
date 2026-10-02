@@ -46,6 +46,7 @@ import {
   type PurchasesPackage,
 } from '../src/services/purchaseService';
 import { trackEvent } from '../src/services/analyticsService';
+import { PRIVACY_URL, TERMS_URL } from '../src/config/legalLinks';
 
 const GOLD = colors.premium;
 
@@ -53,24 +54,6 @@ const GOLD = colors.premium;
 const FALLBACK_SAVINGS_LABEL = 'Bespaar 32%';
 /** Fallback-maandprijs, afgeleid van de vaste fallbackprijzen hierboven. */
 const FALLBACK_MONTHLY_EQUIVALENT = 'Dat is €4,08 per maand';
-
-// Juridische links wijzen bewust naar de GitHub Pages-spiegel en niet naar
-// lopentelopen.nl. Reden: in augustus 2026 lag het eigen domein dagenlang plat
-// door een storing bij de hoster, en Apple keurde de app af op een
-// onbereikbaar privacybeleid. Een veld in de winkel is in minuten aan te
-// passen, maar een link ín de app vereist een nieuwe build én een nieuwe
-// beoordeling — precies wanneer je die tijd niet hebt. De spiegel wordt door
-// GitHub geserveerd en hangt niet aan één hoster. Beide pagina's staan als
-// bron op branch `master` en worden naar branch `main` gekopieerd, die
-// GitHub Pages voedt; zie de memory "privacybeleid-twee-plekken".
-const LEGAL_BASE = 'https://bordenzo-ops.github.io/lopen-te-lopen';
-
-/** Gebruiksvoorwaarden: op iOS de standaard Apple EULA, op Android onze eigen pagina. */
-const TERMS_URL = Platform.OS === 'ios'
-  ? 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/'
-  : `${LEGAL_BASE}/voorwaarden.html`;
-/** Privacybeleid, gelijk op beide platforms. */
-const PRIVACY_URL = `${LEGAL_BASE}/privacy-policy.html`;
 
 const VOORDELEN = [
   'Onbeperkt routes plannen',

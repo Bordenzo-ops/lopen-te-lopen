@@ -103,7 +103,13 @@
       volledige gelopen route (GPS-punten) als GPX-bestand. Deze koppeling staat standaard uit en
       werkt alleen nadat je Strava zelf via de instellingen hebt verbonden; je kunt de koppeling op
       elk moment weer verbreken, waarna de app jouw toegang bij Strava intrekt. De verbinding is
-      versleuteld (HTTPS). Zie het
+      versleuteld (HTTPS).
+      Het verkeer gaat maar &eacute;&eacute;n kant op: de app vraagt uitsluitend schrijfrechten
+      (<code>activity:write</code>) en <strong>leest geen enkel gegeven uit je Strava-account</strong> &ndash;
+      geen activiteiten, geen vrienden, geen segmenten. De toegangssleutels van je Strava-account worden
+      versleuteld op je eigen toestel bewaard (Keychain op iOS, Keystore op Android). Bij het koppelen
+      geeft onze server ze eenmalig door aan je toestel; ze worden daar niet opgeslagen of gelogd. Wij delen gegevens uit de Strava-koppeling niet met derden en gebruiken ze niet om
+      AI- of machine-learningmodellen te trainen. Zie het
       <a href="https://www.strava.com/legal/privacy" rel="noopener">privacybeleid van Strava</a>.
     </li>
     <li>
