@@ -513,6 +513,12 @@ interface AppState {
   ) => void;
   /** Wist voortgang én de persistente opslag */
   resetProgress: () => Promise<void>;
+  /**
+   * Wist ALLE lokale gebruikersdata (profiel, voortgang, koppelingen,
+   * premium-status) en de persistente opslag. Gebruikt na accountverwijdering:
+   * daarna start de app weer bij de onboarding.
+   */
+  resetAllLocalData: () => Promise<void>;
 
   // ── Vrij schema ("Mijn schema") ──────────────
   /**
@@ -1029,6 +1035,48 @@ export const useAppStore = create<AppState>()(
           activeSession: null,
         });
         // Wis ook de persistente opslag zodat een herstart schoon begint
+        try {
+          await AsyncStorage.removeItem('app-store');
+        } catch (_) {
+          // Negeer storage-fouten bij reset
+        }
+      },
+
+      resetAllLocalData: async () => {
+        set({
+          hasCompletedOnboarding: false,
+          profile: null,
+          completedSessions: [],
+          skippedSessions: [],
+          currentWeekTraining: 1,
+          currentWeekRace: 1,
+          activeSession: null,
+          racePlan: null,
+          customPlan: null,
+          raceTargetSeconds: null,
+          comfortableKm: null,
+          schemaMode: 'training',
+          routePlanCount: 0,
+          routePlanWeekStart: null,
+          savedRoutes: [],
+          stravaConnected: false,
+          stravaAthleteName: undefined,
+          stravaUploadQueue: [],
+          hrMonitorDeviceId: null,
+          hrMonitorDeviceName: null,
+          cloudSyncEnabled: false,
+          isSignedIn: false,
+          syncStatus: 'idle',
+          lastSyncedAt: null,
+          // Geen "premium verlopen"-melding na verwijderen: de gebruiker
+          // heeft dit zelf gedaan.
+          isPremium: false,
+          premiumExpiredNoticePending: false,
+          dashboardUpsellDismissed: false,
+          premiumIntroShownCount: 0,
+          premiumIntroLastShownAt: null,
+          premiumIntroDismissed: false,
+        });
         try {
           await AsyncStorage.removeItem('app-store');
         } catch (_) {

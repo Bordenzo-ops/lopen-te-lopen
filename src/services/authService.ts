@@ -19,7 +19,7 @@
 
 import { Platform } from 'react-native';
 import { getSupabase, isSupabaseConfigured } from './supabaseClient';
-import type { Session, User } from '@supabase/supabase-js';
+import type { Session, User, SignInWithIdTokenCredentials } from '@supabase/supabase-js';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import {
@@ -249,14 +249,14 @@ export async function signInWithGoogle(): Promise<AuthResult> {
       };
     }
 
-    const { data, error } = await supabase.auth.signInWithIdToken({
+    const { session, error } = await linkOrSignInWithIdToken(supabase, {
       provider: 'google',
       token: response.data.idToken,
     });
     if (error) {
       return { ok: false, message: vertaalAuthFout(error.message) };
     }
-    return { ok: true, message: 'Ingelogd met Google.', session: data.session };
+    return { ok: true, message: 'Ingelogd met Google.', session };
   } catch (e: any) {
     // Gebruiker annuleerde zelf (oudere native foutcode): geen fout, stil afhandelen.
     if (e?.code === statusCodes.SIGN_IN_CANCELLED) {
@@ -324,7 +324,7 @@ export async function signInWithApple(): Promise<AuthResult> {
       };
     }
 
-    const { data, error } = await supabase.auth.signInWithIdToken({
+    const { session, error } = await linkOrSignInWithIdToken(supabase, {
       provider: 'apple',
       token: credential.identityToken,
       nonce: rawNonce,
@@ -332,7 +332,7 @@ export async function signInWithApple(): Promise<AuthResult> {
     if (error) {
       return { ok: false, message: vertaalAuthFout(error.message) };
     }
-    return { ok: true, message: 'Ingelogd met Apple.', session: data.session };
+    return { ok: true, message: 'Ingelogd met Apple.', session };
   } catch (e: any) {
     // Gebruiker annuleerde zelf: geen fout, stil afhandelen.
     if (e?.code === 'ERR_REQUEST_CANCELED') {
@@ -345,7 +345,11 @@ export async function signInWithApple(): Promise<AuthResult> {
   }
 }
 
-/** Log uit. Best-effort, faalt stil. */
+/**
+ * Log uit. Best-effort, faalt stil. Start daarna direct een nieuwe anonieme
+ * sessie, zodat cloudsync en analytics blijven werken (de app is
+ * anonymous-first: er hoort altijd een sessie te zijn).
+ */
 export async function signOut(): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;
@@ -354,6 +358,117 @@ export async function signOut(): Promise<void> {
   } catch {
     // Negeer fouten bij uitloggen
   }
+  await ensureAnonymousSession();
+}
+
+/**
+ * Vraagt Apple opnieuw om een authorizationCode, nodig om bij het verwijderen
+ * van een account het Apple-token in te trekken. Geeft null terug als dit
+ * geen Apple-account is, niet op iOS, of de gebruiker annuleert: de
+ * verwijdering gaat dan gewoon door zonder intrekking.
+ */
+export async function requestAppleAuthorizationCode(): Promise<string | null> {
+  if (Platform.OS !== 'ios') return null;
+  try {
+    const user = await getCurrentUser();
+    const isAppleUser = (user?.identities ?? []).some(i => i.provider === 'apple');
+    if (!isAppleUser) return null;
+    if (!(await AppleAuthentication.isAvailableAsync())) return null;
+    const credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [],
+    });
+    return credential.authorizationCode ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Verwijdert het account van de huidige gebruiker definitief, inclusief alle
+ * cloud-data (edge function delete-account). Ook voor anonieme gebruikers.
+ * Stuurt optioneel een Apple authorizationCode mee voor tokenintrekking.
+ *
+ * Bij succes wordt de lokale sessie opgeruimd. De aanroeper wist daarna zelf
+ * de lokale store en logt RevenueCat uit.
+ */
+export async function deleteAccount(
+  appleAuthorizationCode?: string | null,
+): Promise<AuthResult> {
+  if (!isSupabaseConfigured()) {
+    return { ok: false, message: 'Synchronisatie staat niet ingesteld.' };
+  }
+  const supabase = getSupabase();
+  if (!supabase) {
+    return { ok: false, message: 'Synchronisatie staat niet ingesteld.' };
+  }
+
+  try {
+    const session = await getCurrentSession();
+    if (!session) {
+      // Geen sessie betekent: geen cloud-account om te verwijderen.
+      return { ok: true };
+    }
+
+    const { error } = await supabase.functions.invoke('delete-account', {
+      body: appleAuthorizationCode ? { appleAuthorizationCode } : {},
+    });
+    if (error) {
+      return {
+        ok: false,
+        message: 'Account verwijderen lukte niet. Controleer je verbinding en probeer het opnieuw.',
+      };
+    }
+
+    // De gebruiker bestaat niet meer op de server: alleen de lokale sessie wissen.
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {
+      // Negeer: sessie is dan toch ongeldig
+    }
+    return { ok: true };
+  } catch {
+    return {
+      ok: false,
+      message: 'Account verwijderen lukte niet. Controleer je verbinding en probeer het opnieuw.',
+    };
+  }
+}
+
+/**
+ * Koppelt een Apple/Google-identiteit aan de huidige gebruiker als die anoniem
+ * is (linkIdentity: zelfde user-id, dus cloud-data en RevenueCat-abonnement
+ * blijven gekoppeld), en valt anders terug op signInWithIdToken.
+ *
+ * Hoort de identiteit al bij een bestaand account (identity_already_exists,
+ * bijvoorbeeld een terugkerende gebruiker op een nieuw toestel), dan wisselen
+ * we bewust naar dat account via signInWithIdToken met hetzelfde token: een
+ * Apple/Google-idToken is een ondertekende JWT die tot verloop opnieuw
+ * geverifieerd kan worden. De anonieme data van dit toestel blijft dan achter.
+ *
+ * Vereist in het Supabase-dashboard: Authentication, Sign In / Providers,
+ * "Allow manual linking" aan.
+ *
+ * RevenueCat/premium: de globale onAuthChange-listener in app/_layout.tsx
+ * roept identifyUser en refreshPremium aan na elke sessiewijziging, ook na
+ * linkIdentity (USER_UPDATED) en signInWithIdToken (SIGNED_IN).
+ */
+async function linkOrSignInWithIdToken(
+  supabase: NonNullable<ReturnType<typeof getSupabase>>,
+  credentials: SignInWithIdTokenCredentials,
+): Promise<{ session: Session | null; error: { message: string } | null }> {
+  if (await isAnonymous()) {
+    const { data, error } = await supabase.auth.linkIdentity(credentials);
+    if (!error) {
+      return { session: data?.session ?? (await getCurrentSession()), error: null };
+    }
+    // Elke koppelfout valt terug op gewoon inloggen. Bij identity_already_exists
+    // is dat het juiste gedrag (terugkerende gebruiker wisselt naar zijn
+    // bestaande account). Bij andere fouten, zoals "manual linking" dat in het
+    // Supabase-dashboard uitstaat, blijft inloggen zo in elk geval werken.
+  }
+
+  const { data, error } = await supabase.auth.signInWithIdToken(credentials);
+  return { session: data?.session ?? null, error };
 }
 
 /**

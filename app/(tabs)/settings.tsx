@@ -19,10 +19,12 @@ import {
   isAnonymous as checkIsAnonymous,
   signOut as authSignOut,
   onAuthChange,
+  deleteAccount,
+  requestAppleAuthorizationCode,
 } from '../../src/services/authService';
 import { Minus, Plus } from 'lucide-react-native';
 import { usePremium } from '../../src/hooks/usePremium';
-import { openManageSubscriptions } from '../../src/services/purchaseService';
+import { openManageSubscriptions, logOut as logOutPurchases } from '../../src/services/purchaseService';
 import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
 import { connectStrava, disconnectStrava, isStravaConfigured } from '../../src/services/stravaService';
 import { StravaConnectButton, StravaCompatibleLogo } from '../../src/components/ui/StravaBrand';
@@ -276,6 +278,13 @@ export default function SettingsScreen() {
               // De globale onAuthChange-listener (app/_layout.tsx) koppelt
               // RevenueCat los en ververst premium; hier alleen uitloggen
               // en de lokale schermstatus bijwerken.
+              //
+              // Premium expliciet resetten VOOR het uitloggen: anders ziet
+              // setPremium(false) een overgang van actief naar verlopen en
+              // krijgt een uitgelogde betaler ten onrechte de melding
+              // "premium verlopen". signOut start daarna zelf een nieuwe
+              // anonieme sessie, zodat sync en analytics blijven werken.
+              useAppStore.setState({ isPremium: false, premiumExpiredNoticePending: false });
               await authSignOut();
               await refreshAccountStatus();
             } finally {
@@ -285,6 +294,60 @@ export default function SettingsScreen() {
         },
       ],
     );
+  }
+
+  // Account definitief verwijderen (store-eis). Ook voor anonieme gebruikers:
+  // zij hebben ook cloud-data (runs en events). Een lopend abonnement loopt
+  // door bij Apple/Google en moet daar apart worden opgezegd.
+  function handleDeleteAccount() {
+    const storeName = Platform.OS === 'ios' ? 'App Store' : 'Play Store';
+    const anon = !accountEmail;
+    Alert.alert(
+      'Account verwijderen',
+      (anon
+        ? 'Hiermee wis je al je trainingsdata uit de cloud en van dit toestel. '
+        : 'Hiermee verwijder je je account en wis je al je trainingsdata uit de cloud en van dit toestel. ') +
+        'Dit is definitief en kan niet ongedaan worden gemaakt.\n\n' +
+        `Heb je een lopend abonnement? Dat blijft doorlopen en moet je apart opzeggen in de ${storeName}.`,
+      [
+        { text: 'Annuleren', style: 'cancel' },
+        ...(isPremium
+          ? [{ text: 'Abonnement beheren', onPress: () => { void handleManageSubscription(); } }]
+          : []),
+        {
+          text: 'Account verwijderen',
+          style: 'destructive',
+          onPress: () => { void performDeleteAccount(); },
+        },
+      ],
+    );
+  }
+
+  async function performDeleteAccount() {
+    setAccountBusy(true);
+    try {
+      // Apple-gebruikers: vraag een verse authorizationCode voor het intrekken
+      // van het Apple-token. Mislukt of annuleert dit, dan gaan we zonder door.
+      const appleCode = await requestAppleAuthorizationCode();
+      const result = await deleteAccount(appleCode);
+      if (!result.ok) {
+        Alert.alert(
+          'Verwijderen mislukt',
+          result.message ?? 'Account verwijderen lukte niet. Probeer het later opnieuw.',
+        );
+        return;
+      }
+      await logOutPurchases();
+      await useAppStore.getState().resetAllLocalData();
+      router.replace('/');
+    } catch {
+      Alert.alert(
+        'Verwijderen mislukt',
+        'Account verwijderen lukte niet. Probeer het later opnieuw.',
+      );
+    } finally {
+      setAccountBusy(false);
+    }
   }
 
   // Support-ID delen: puur een gemaksknop rond het OS-deelvenster. Delen is
@@ -1183,6 +1246,18 @@ export default function SettingsScreen() {
             <Text style={styles.fieldNote}>
               Een account is niet verplicht: de app blijft ook zonder inloggen volledig werken.
             </Text>
+            <TouchableOpacity
+              onPress={handleDeleteAccount}
+              style={styles.deleteAccountLink}
+              activeOpacity={0.7}
+              disabled={accountBusy}
+              accessibilityRole="button"
+              accessibilityLabel="Account verwijderen"
+            >
+              <Text style={styles.deleteAccountText}>
+                {accountBusy ? 'Bezig...' : 'Account verwijderen'}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* Overige */}
@@ -1466,6 +1541,14 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   dangerLabel: {
     fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.base, color: colors.error,
+  },
+  deleteAccountLink: {
+    minHeight: 44, justifyContent: 'center', alignItems: 'flex-start',
+    paddingHorizontal: spacing[0.5],
+  },
+  deleteAccountText: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm,
+    color: colors.textTertiary, textDecorationLine: 'underline',
   },
   version: {
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
