@@ -1063,7 +1063,7 @@ export default function SettingsScreen() {
               </View>
             </View>
             <Text style={styles.fieldNote}>
-              We vragen pas toestemming voor meldingen als je hierboven een schakelaar aanzet. Alles staat standaard uit en wordt lokaal op je toestel gepland. Heb je toestemming eerder geweigerd, dan kun je die aanzetten via de instellingen van je toestel.
+              We vragen pas toestemming voor meldingen als je hierboven een schakelaar aanzet. Je kiest zelf welke meldingen je krijgt, en alles wordt lokaal op je toestel gepland. Heb je toestemming eerder geweigerd, dan kun je die aanzetten via de instellingen van je toestel.
             </Text>
           </View>
 
