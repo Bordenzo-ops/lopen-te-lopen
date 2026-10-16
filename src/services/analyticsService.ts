@@ -20,6 +20,8 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import { getSupabase } from './supabaseClient';
 import { getCurrentUser } from './authService';
 
@@ -62,6 +64,18 @@ const FLUSH_BATCH = 100;
 /** Voorkomt dat twee flushes tegelijk lopen (dubbele inserts / races). */
 let flushing = false;
 
+/**
+ * Standaard-props die op elk event meegaan, zodat de funnel per platform en
+ * per appversie te analyseren is (bijvoorbeeld de Android-funnel apart).
+ * Props van de aanroeper winnen bij een naamconflict.
+ */
+function defaultProps(): AnalyticsProps {
+  return {
+    platform: Platform.OS === 'ios' ? 'ios' : 'android',
+    app_version: Constants.expoConfig?.version ?? 'unknown',
+  };
+}
+
 /** Genereer een stabiele, unieke id voor één event. */
 function newClientEventId(): string {
   try {
@@ -101,7 +115,7 @@ export async function trackEvent(name: AnalyticsEvent, props: AnalyticsProps = {
     const event: QueuedEvent = {
       clientEventId: newClientEventId(),
       name,
-      props: props ?? {},
+      props: { ...defaultProps(), ...(props ?? {}) },
       occurredAt: new Date().toISOString(),
     };
     const queue = await readQueue();

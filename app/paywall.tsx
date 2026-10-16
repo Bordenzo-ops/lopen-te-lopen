@@ -25,7 +25,7 @@ import {
   Platform,
   Linking,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Check, Crown } from 'lucide-react-native';
 import { colors, typography, spacing, radius, shadows, type ThemeColors } from '../src/theme/tokens';
@@ -46,7 +46,9 @@ import {
   type PurchasesPackage,
 } from '../src/services/purchaseService';
 import { trackEvent } from '../src/services/analyticsService';
+import { getPaywallVariant, type PaywallVariant } from '../src/services/paywallVariant';
 import { PRIVACY_URL, TERMS_URL } from '../src/config/legalLinks';
+import { FINISH_GUARANTEE_TEXT } from '../src/config/finishGuarantee';
 
 const GOLD = colors.premium;
 
@@ -203,10 +205,34 @@ export default function PaywallScreen() {
     };
   }, [loadOfferings]);
 
-  // Funnelstap: paywall getoond. Eén keer bij het openen van het scherm.
+  // A/B-variant: lokaal toegewezen en stabiel per installatie. Zolang de
+  // variant nog niet bekend is tonen we de laadstatus, zodat de kop niet
+  // zichtbaar van A naar B springt.
+  const { source } = useLocalSearchParams<{ source?: string }>();
+  const [variant, setVariant] = useState<PaywallVariant | null>(null);
   useEffect(() => {
-    void trackEvent('paywall_shown');
+    let active = true;
+    void getPaywallVariant().then(v => {
+      if (active) setVariant(v);
+    });
+    return () => {
+      active = false;
+    };
   }, []);
+
+  // Props die op elk paywall-event meegaan.
+  const eventProps = useMemo(
+    () => ({ variant: variant ?? 'A', source: source ?? 'unknown' }),
+    [variant, source],
+  );
+
+  // Funnelstap: paywall getoond. Eén keer, zodra de variant bekend is.
+  const shownRef = React.useRef(false);
+  useEffect(() => {
+    if (!variant || shownRef.current) return;
+    shownRef.current = true;
+    void trackEvent('paywall_shown', eventProps);
+  }, [variant, eventProps]);
 
   // Platform-conditionele tekst voor de fineprint: welk account regelt de opzegging.
   const storeAccountLabel = Platform.OS === 'ios' ? 'App Store-account' : 'Google Play-account';
@@ -256,7 +282,7 @@ export default function PaywallScreen() {
     if (!option.pkg) return;
     // Funnelstap: gebruiker tikt een concreet plan aan om te kopen.
     const plan = option.title === 'Jaarlijks' ? 'yearly' : 'monthly';
-    void trackEvent('paywall_plan_tapped', { plan });
+    void trackEvent('paywall_plan_tapped', { ...eventProps, plan });
     setBusyId(option.pkg.identifier);
     try {
       const result = await purchasePackage(option.pkg);
@@ -281,9 +307,9 @@ export default function PaywallScreen() {
       // markeren we het ook als trial-start (de betaling volgt later).
       // De aankoop is bij de store voltooid, dus tellen we 'm ook mee als
       // het entitlement nog aan het doorkomen is.
-      void trackEvent('purchase_completed', { plan });
+      void trackEvent('purchase_completed', { ...eventProps, plan });
       if (option.trialDays) {
-        void trackEvent('trial_started', { plan, trialDays: option.trialDays });
+        void trackEvent('trial_started', { ...eventProps, plan, trialDays: option.trialDays });
       }
 
       if (premium) {
@@ -326,6 +352,20 @@ export default function PaywallScreen() {
 
   const anyBusy = busyId !== null || restoring;
   const noPackages = !monthly.pkg && !yearly.pkg;
+  const variantB = variant === 'B';
+
+  const benefitsCard = (
+    <Card variant="surface" padding="lg" style={styles.benefitsCard}>
+      {VOORDELEN.map(voordeel => (
+        <View key={voordeel} style={styles.benefitRow}>
+          <View style={styles.benefitIcon}>
+            <Check size={16} color={colors.success} strokeWidth={3} />
+          </View>
+          <Text style={styles.benefitText}>{voordeel}</Text>
+        </View>
+      ))}
+    </Card>
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -350,29 +390,22 @@ export default function PaywallScreen() {
         </View>
 
         <Text style={styles.title} accessibilityRole="header">
-          Lopen te Lopen Premium
+          {variantB && !isPremium ? 'Kom sterk over de finish' : 'Lopen te Lopen Premium'}
         </Text>
         <Text style={styles.subtitle}>
           {isPremium
             ? 'Je hebt Lopen te Lopen Premium. Beheer of wijzig je abonnement in de store.'
+            : variantB
+            ? 'Met Lopen te Lopen Premium train je slimmer toe naar je wedstrijd, met de beste coaching naast je.'
             : 'Haal alles uit je training met onbeperkt plannen en de beste coaching.'}
         </Text>
 
-        {/* Voordelen */}
-        <Card variant="surface" padding="lg" style={styles.benefitsCard}>
-          {VOORDELEN.map(voordeel => (
-            <View key={voordeel} style={styles.benefitRow}>
-              <View style={styles.benefitIcon}>
-                <Check size={16} color={colors.success} strokeWidth={3} />
-              </View>
-              <Text style={styles.benefitText}>{voordeel}</Text>
-            </View>
-          ))}
-        </Card>
+        {/* Voordelen: in variant A boven de prijzen, in variant B eronder. */}
+        {!variantB || isPremium ? benefitsCard : null}
 
         {/* Al premium: geen koopknoppen, maar een veilige route naar de
             store-beheerpagina om van plan te wisselen of op te zeggen. */}
-        {!hydrated ? (
+        {!hydrated || !variant ? (
           <View style={styles.loadingPrices}>
             <ActivityIndicator color={colors.brandPrimary} />
           </View>
@@ -433,6 +466,12 @@ export default function PaywallScreen() {
                 )}
               </View>
             )}
+
+            {FINISH_GUARANTEE_TEXT ? (
+              <Text style={styles.guaranteeText}>{FINISH_GUARANTEE_TEXT}</Text>
+            ) : null}
+
+            {variantB ? benefitsCard : null}
 
             <Button
               label="Aankopen herstellen"
@@ -509,6 +548,7 @@ function PlanCard({ option, highlighted, busy, disabled, onPress }: PlanCardProp
       ]}
     >
       <View style={styles.planInfo}>
+        {highlighted && <Text style={styles.planBestChoice}>BESTE KEUZE</Text>}
         <View style={styles.planTitleRow}>
           <Text style={styles.planTitle}>{option.title}</Text>
           {option.subtitle && (
@@ -687,6 +727,21 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: typography.fontSize.xs,
     color: GOLD,
     letterSpacing: typography.letterSpacing.wide,
+  },
+  planBestChoice: {
+    fontFamily: typography.fontFamily.sansSemi,
+    fontSize: typography.fontSize.xs,
+    color: GOLD,
+    letterSpacing: typography.letterSpacing.wide,
+    marginBottom: 2,
+  },
+  guaranteeText: {
+    fontFamily: typography.fontFamily.sansSemi,
+    fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: spacing[2],
+    paddingHorizontal: spacing[1],
   },
   planTrialText: {
     fontFamily: typography.fontFamily.sansSemi,
