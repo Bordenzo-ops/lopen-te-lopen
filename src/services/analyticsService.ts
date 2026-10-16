@@ -44,7 +44,8 @@ export type AnalyticsEvent =
   | 'race_countdown_shared'
   | 'training_days_changed'
   | 'premium_intro_shown'
-  | 'premium_intro_cta';
+  | 'premium_intro_cta'
+  | 'notification_category_toggled';
 
 /** Kleine, generieke eigenschappen bij een event. Geen persoonsgegevens. */
 export type AnalyticsProps = Record<string, string | number | boolean | null>;

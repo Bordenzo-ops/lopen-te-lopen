@@ -359,6 +359,12 @@ interface AppState {
   /** Gekozen tijdstip (uur, 0-23) voor de dagelijkse trainingsherinnering. Default 8 (08:00). */
   reminderHour: number;
   setReminderHour: (hour: number) => void;
+  /** Wekelijkse voortgangsmelding (zondagavond). Default false: opt-in. */
+  weeklyProgressEnabled: boolean;
+  setWeeklyProgressEnabled: (enabled: boolean) => void;
+  /** Countdown-mijlpalen naar het racedoel (100/50/10 dagen en de dag ervoor). Default false: opt-in. */
+  countdownEnabled: boolean;
+  setCountdownEnabled: (enabled: boolean) => void;
   /**
    * ISO-datum van de laatste keer dat de in-app reviewvraag getoond is, of
    * null als dat nog nooit gebeurd is. Voorkomt dat we vaker dan eens per
@@ -619,6 +625,10 @@ export const useAppStore = create<AppState>()(
       setRemindersEnabled: (enabled) => set({ remindersEnabled: enabled }),
       reminderHour: 8,
       setReminderHour: (hour) => set({ reminderHour: hour }),
+      weeklyProgressEnabled: false,
+      setWeeklyProgressEnabled: (enabled) => set({ weeklyProgressEnabled: enabled }),
+      countdownEnabled: false,
+      setCountdownEnabled: (enabled) => set({ countdownEnabled: enabled }),
       lastReviewPromptAt: null,
       setLastReviewPromptAt: (iso) => set({ lastReviewPromptAt: iso }),
 
@@ -965,15 +975,15 @@ export const useAppStore = create<AppState>()(
             });
         }
 
-        // Best-effort herplannen van de streak-bescherming en het
-        // weekoverzicht. completeSession is de ene plek die altijd geraakt
-        // wordt zodra een sessie voltooid is, ongeacht welk scherm dat doet
-        // (samenvatting, deep link, etc.), dus dit is de eenvoudigste
-        // betrouwbare plek om te herplannen. Alleen als de gebruiker
-        // herinneringen aan heeft staan; faalt verder altijd stil.
-        if (get().remindersEnabled) {
+        // Best-effort herplannen van de lokale meldingen (afgeronde training
+        // verandert de herinnering van vandaag en de weekvoortgang).
+        // completeSession is de ene plek die altijd geraakt wordt zodra een
+        // sessie voltooid is, ongeacht welk scherm dat doet. Alleen als de
+        // gebruiker minstens een categorie aan heeft staan; faalt altijd stil.
+        const { remindersEnabled, weeklyProgressEnabled, countdownEnabled } = get();
+        if (remindersEnabled || weeklyProgressEnabled || countdownEnabled) {
           import('../services/notificationService')
-            .then(({ refreshWeeklyNotifications }) => refreshWeeklyNotifications(updatedCompleted))
+            .then(({ rescheduleNotifications }) => rescheduleNotifications())
             .catch(() => {
               // Stil falen: herinneringen zijn een prettige extra, geen kernfunctie
             });
@@ -1232,6 +1242,8 @@ export const useAppStore = create<AppState>()(
         autoPauseEnabled:       state.autoPauseEnabled,
         remindersEnabled:       state.remindersEnabled,
         reminderHour:           state.reminderHour,
+        weeklyProgressEnabled:  state.weeklyProgressEnabled,
+        countdownEnabled:       state.countdownEnabled,
         lastReviewPromptAt:     state.lastReviewPromptAt,
         routeNotificationsEnabled: state.routeNotificationsEnabled,
         // Laatst bekende premium-status: offline-first zodat een betalende
