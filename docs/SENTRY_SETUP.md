@@ -70,6 +70,22 @@ Sentry een auth-token nodig met schrijfrechten. Dit token hoort nooit in
    echt als EAS-secret stond tijdens de build (secrets die je pas na het
    starten van de build toevoegt, gelden niet met terugwerkende kracht).
 
+## 4. Android: R8 en ProGuard-mapping
+
+Releasebuilds voor Android draaien met R8-minificatie (`app.json`, plugin
+`expo-build-properties`). R8 hernoemt Java/Kotlin-klassen; zonder het
+mapping-bestand zijn native Android-crashes in Sentry onleesbaar. De
+JavaScript-stacktraces (source maps) blijven apart werken.
+
+- `app.json` zet bij de Sentry-plugin `experimental_android.enableAndroidGradlePlugin`
+  aan. Daarmee komt de Sentry Android Gradle Plugin in de build, die het
+  mapping-bestand koppelt aan de app en uploadt.
+- De upload gebeurt alleen als `SENTRY_AUTH_TOKEN` beschikbaar is en
+  `SENTRY_DISABLE_AUTO_UPLOAD` niet op `"true"` staat (zie stap 2). Staat die
+  schakelaar nog aan, dan bouwt de app gewoon, maar zijn Android-crashes
+  geminificeerd. Zet hem dus uit vóór de eerste R8-productiebuild.
+- Native symbolen (NDK) en bronnen worden bewust niet geüpload.
+
 ## Wat de app zelf al doet
 
 - Sentry-init met DSN uit `EXPO_PUBLIC_SENTRY_DSN`; leeg = uitgeschakeld,

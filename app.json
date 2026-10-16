@@ -69,7 +69,10 @@
         "expo-build-properties",
         {
           "android": {
-            "minSdkVersion": 26
+            "minSdkVersion": 26,
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "extraProguardRules": "# Leesbare stacktraces in Sentry: regelnummers en bronbestandsnaam behouden, bestandsnaam geanonimiseerd (mapping-bestand vertaalt terug).\n-keepattributes SourceFile,LineNumberTable\n-renamesourcefileattribute SourceFile\n\n# Generieke attributen voor reflectie-gebruik (Expo-modules Records, annotaties, generieke typen).\n-keepattributes Signature,*Annotation*,InnerClasses,EnclosingMethod\n\n# react-native-ble-plx: JS-brug, foutmapping en RxAndroidBle-aanroepen (incl. reflectie op BluetoothGatt.refresh). De bibliotheek levert zelf geen consumer-regels mee; klein pakket, dus volledig behouden.\n-keep class com.bleplx.** { *; }\n\n# OkHttp/Okio-optionele TLS-providers (via Supabase, RevenueCat, Sentry): niet aanwezig op Android, R8 zou anders op ontbrekende klassen falen.\n-dontwarn org.conscrypt.**\n-dontwarn org.bouncycastle.**\n-dontwarn org.openjsse.**"
           },
           "ios": {
             "extraPods": [
@@ -119,7 +122,15 @@
         "@sentry/react-native",
         {
           "organization": "dronevision-studios",
-          "project": "lopen-te-lopen"
+          "project": "lopen-te-lopen",
+          "experimental_android": {
+            "enableAndroidGradlePlugin": true,
+            "includeProguardMapping": true,
+            "autoUploadProguardMapping": true,
+            "uploadNativeSymbols": false,
+            "autoUploadNativeSymbols": false,
+            "includeNativeSources": false
+          }
         }
       ],
       [
