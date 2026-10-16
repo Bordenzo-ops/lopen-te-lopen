@@ -18,6 +18,11 @@ Schrijft naar:
 | `store-assets/social/deelkaart-story-1080x1920.png` | 1080×1920 | Story/TikTok — toont de deelkaart |
 | `store-assets/social/deelkaart-feed-1080x1350.png` | 1080×1350 | Feed — toont de deelkaart |
 
+App Store Connect Header- en Search Results-assets (twee kopvarianten per formaat,
+variant via `?v=a|b` in `render.mjs`) komen in `store-assets/app-store-header/`:
+`header-{a,b}-5244x2950.png` en `search-{a,b}-3840x1646.png`. Alleen deze baken je
+met `node scripts/brand-assets/render.mjs app-store-header`.
+
 Vereist een geïnstalleerde Chrome of Edge; `render.mjs` zoekt zelf de juiste plek.
 Verder zijn er geen dependencies — de tekst wordt met de Inter-fonts uit
 `node_modules/@expo-google-fonts/inter` gezet.

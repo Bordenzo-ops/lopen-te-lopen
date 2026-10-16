@@ -46,9 +46,18 @@ const TARGETS = [
   { html: 'card-feed.html',       out: 'store-assets/social/deelkaart-feed-1080x1350.png',      w: 1080, h: 1350 },
   { html: 'card-run-story.html',  out: 'store-assets/social/deelkaart-run-story-1080x1920.png', w: 1080, h: 1920 },
   { html: 'card-period-chart-story.html', out: 'store-assets/social/deelkaart-verloop-story-1080x1920.png', w: 1080, h: 1920 },
+
+  // App Store Connect: Header- en Search Results-asset (twee kopvarianten per formaat)
+  { html: 'app-store-header.html', query: 'v=a', out: 'store-assets/app-store-header/header-a-5244x2950.png', w: 5244, h: 2950 },
+  { html: 'app-store-header.html', query: 'v=b', out: 'store-assets/app-store-header/header-b-5244x2950.png', w: 5244, h: 2950 },
+  { html: 'app-store-search.html', query: 'v=a', out: 'store-assets/app-store-header/search-a-3840x1646.png', w: 3840, h: 1646 },
+  { html: 'app-store-search.html', query: 'v=b', out: 'store-assets/app-store-header/search-b-3840x1646.png', w: 3840, h: 1646 },
 ];
 
-for (const t of TARGETS) {
+// Optioneel filter: `node render.mjs app-store` bakt alleen targets waarvan het pad dat bevat.
+const FILTER = process.argv[2];
+
+for (const t of TARGETS.filter((x) => !FILTER || x.out.includes(FILTER))) {
   const outPath = join(ROOT, t.out);
   mkdirSync(dirname(outPath), { recursive: true });
 
@@ -60,7 +69,7 @@ for (const t of TARGETS) {
     '--force-device-scale-factor=1',
     `--screenshot=${outPath}`,
     `--window-size=${t.w},${t.h}`,
-    `file:///${join(HERE, t.html).replace(/\\/g, '/')}`,
+    `file:///${join(HERE, t.html).replace(/\\/g, '/')}${t.query ? `?${t.query}` : ''}`,
   ], { stdio: 'ignore' });
 
   console.log(`✓ ${t.out}  (${t.w}x${t.h})`);

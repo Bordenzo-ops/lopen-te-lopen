@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>App Store Header 5244x2950</title>
+<link rel="stylesheet" href="brand.css">
+<style>
+  /* Veilige zone (aanname): Apple kan bijsnijden, dus alle tekst en de
+     schoen staan binnen het middelste ~70% x ~75% van het beeld
+     (x 790..4450, y 370..2580). Daarbuiten alleen achtergrond. */
+  html, body, .canvas { width: 5244px; height: 2950px; }
+
+  /* De plaat (5244x2225) is kleiner dan het canvas; een mask laat hem aan
+     boven- en rechterrand zacht wegvloeien, zodat er nergens een rechte rand staat. */
+  .art {
+    inset: auto;
+    left: -700px; top: 575px; width: 5600px; height: 2375px;
+    background: url('plates/wide.jpg') center / 100% 100% no-repeat;
+    -webkit-mask-image:
+      linear-gradient(180deg, transparent 0%, #000 45%),
+      linear-gradient(90deg, #000 0%, #000 91%, transparent 100%);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
+  }
+  .scrim {
+    background: linear-gradient(90deg, #0A0F1A 0%, #0A0F1A 24%, rgba(10,15,26,0.93) 38%, rgba(10,15,26,0.55) 50%, rgba(10,15,26,0) 62%);
+  }
+
+  .content {
+    position: absolute; left: 860px; top: 0; bottom: 0; width: 2300px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .brand { display: flex; align-items: center; gap: 44px; }
+  .brand .icon { width: 190px; height: 190px; border-radius: 26%; display: block; }
+  .brand .name { font-size: 78px; font-weight: 700; letter-spacing: -0.01em; }
+
+  .rule { width: 220px; height: 20px; margin: 150px 0 80px; }
+
+  h1 { font-size: 290px; font-weight: 800; line-height: 0.98; letter-spacing: -0.045em; }
+  h1 em { font-style: normal; color: var(--orange-lite); }
+
+  .sub {
+    margin-top: 110px; font-size: 92px; font-weight: 500; line-height: 1.38;
+    color: #D1D5DB;
+  }
+  .meta {
+    margin-top: 110px; display: flex; align-items: center; gap: 44px;
+    font-size: 54px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .dot { width: 18px; height: 18px; border-radius: 999px; background: var(--orange); }
+</style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="art"></div>
+    <div class="scrim"></div>
+    <div class="content">
+      <div class="brand">
+        <img class="icon" src="../../assets/icon.png" alt="">
+        <span class="name">Lopen te Lopen</span>
+      </div>
+      <div class="rule"></div>
+      <h1 id="h"></h1>
+      <p class="sub" id="s"></p>
+      <div class="meta"><span>Schema's</span><i class="dot"></i><span>Audiocoaching</span><i class="dot"></i><span>Hartslagzones</span></div>
+    </div>
+  </div>
+<script>
+  // Variant via ?v=a of ?v=b (zie render.mjs).
+  const V = {
+    a: { h: 'Van je eerste<br>kilometer tot<br><em>marathon</em>.',
+         s: 'Je persoonlijke hardloopcoach,<br>met schema\'s van 5 km tot marathon.' },
+    b: { h: 'Een coach<br>in je oor,<br><em>elke run</em>.',
+         s: 'Je persoonlijke hardloopcoach,<br>met schema\'s van 5 km tot marathon.' },
+  };
+  const v = V[new URLSearchParams(location.search).get('v')] || V.a;
+  document.getElementById('h').innerHTML = v.h;
+  document.getElementById('s').innerHTML = v.s;
+</script>
+</body>
+</html>
