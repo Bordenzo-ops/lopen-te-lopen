@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, Alert }
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ChevronDown, ChevronRight, CalendarDays, Pencil, Check, Trash2, Plus } from 'lucide-react-native';
-import Animated, { FadeIn, FadeOut, ReduceMotion } from 'react-native-reanimated';
+import Animated, { FadeInUp, FadeOut, ReduceMotion } from 'react-native-reanimated';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore, selectIsSessionCompleted, selectCurrentWeek } from '../../src/store/appStore';
@@ -24,7 +24,7 @@ import { trackEvent } from '../../src/services/analyticsService';
 // Zachte fade + korte slide (8px) voor het uit-/inklappen van een weekblok.
 // `.reduceMotion` zorgt dat de systeeminstelling voor verminderde beweging
 // automatisch gerespecteerd wordt (dan verschijnt/verdwijnt de lijst direct).
-const sessionListEntering = FadeIn.duration(260)
+const sessionListEntering = FadeInUp.duration(260)
   .withInitialValues({ opacity: 0, transform: [{ translateY: -8 }] })
   .reduceMotion(ReduceMotion.System);
 const sessionListExiting = FadeOut.duration(180).reduceMotion(ReduceMotion.System);

@@ -1,10 +1,10 @@
 # Lopen te Lopen
 
-Nederlandstalige hardloopcoach voor iOS en Android (React Native met Expo SDK 56). De app maakt een trainingsschema richting een wedstrijd, met de marathon als einddoel, coacht tijdens het lopen met gesproken aanwijzingen en volgt routes, hartslag en voortgang. De app werkt offline; account, synchronisatie en premium zijn aanvullingen. Live in de App Store en Google Play.
+Nederlandstalige hardloopcoach voor iOS en Android (React Native met Expo SDK 57). De app maakt een trainingsschema richting een wedstrijd, met de marathon als einddoel, coacht tijdens het lopen met gesproken aanwijzingen en volgt routes, hartslag en voortgang. De app werkt offline; account, synchronisatie en premium zijn aanvullingen. Live in de App Store en Google Play.
 
 ## Starten
 
-Vereisten: een recente Node LTS (er is geen `engines`-veld; de Expo SDK 56-tooling bepaalt de ondergrens) en npm.
+Vereisten: een recente Node LTS (er is geen `engines`-veld; de Expo SDK 57-tooling bepaalt de ondergrens) en npm.
 
 ```
 npm install
