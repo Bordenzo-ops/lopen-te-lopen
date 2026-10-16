@@ -246,6 +246,7 @@ const ROLLING_WINDOW_DAYS = 14;
 const TRAINING_ID_PREFIX = 'lt-training-';
 const WEEKLY_ID_PREFIX = 'lt-weekly-';
 const COUNTDOWN_ID_PREFIX = 'lt-countdown-';
+const STREAK_ID_PREFIX = 'lt-streak-';
 
 /** Vaste identifiers van eerdere versies (streak-bescherming, weekoverzicht, herhalende dagen). */
 const LEGACY_IDS = [
@@ -256,6 +257,7 @@ const LEGACY_IDS = [
 
 const NOTIFICATION_TITLE = 'Lopen te Lopen';
 const WEEKLY_HOUR = 19;          // zondagavond
+const STREAK_HOUR = 18;          // zondagavond, een uur voor het weekbericht
 const COUNTDOWN_HOUR = 10;
 const COUNTDOWN_DAY_BEFORE_HOUR = 18;
 
@@ -267,6 +269,7 @@ const DATA_KIND = {
   training: 'training-reminder',
   weekly: 'weekly-progress',
   countdown: 'countdown',
+  streak: 'streak-protection',
 } as const;
 
 /** Expo Router-paden waar een tik op een melding naartoe leidt. */
@@ -426,6 +429,35 @@ function buildWeeklyProgress(state: StoreState, weeks: TrainingWeek[], now: Date
   return out;
 }
 
+/**
+ * Reeks vasthouden: elke zondag in het venster om 18:00 een duwtje, maar alleen
+ * als er in die schemaweek (ma-zo) nog geen training is voltooid. Zo blijft de
+ * melding weg voor wie al gelopen heeft; na een voltooide training volgt een
+ * herplanning (completeSession) die de melding van die week weer verwijdert.
+ */
+function buildStreakProtection(state: StoreState, now: Date): PlannedNotification[] {
+  const out: PlannedNotification[] = [];
+
+  for (let offset = 0; offset < ROLLING_WINDOW_DAYS; offset++) {
+    const day = addDays(now, offset);
+    if (isoWeekday(day) !== 7) continue;
+    const fireAt = atHour(day, STREAK_HOUR);
+    if (fireAt.getTime() <= now.getTime() + 60_000) continue;
+
+    const weekKey = weekStartISO(day);
+    if (state.completedSessions.some(c => weekStartISO(new Date(c.completedAt)) === weekKey)) continue;
+
+    out.push({
+      identifier: `${STREAK_ID_PREFIX}${formatLocalISODate(day)}`,
+      title: NOTIFICATION_TITLE,
+      body: 'Nog geen run deze week. Een korte loop telt ook!',
+      date: fireAt,
+      data: { kind: DATA_KIND.streak, route: ROUTE_TRAINING },
+    });
+  }
+  return out;
+}
+
 /** Countdown-mijlpalen naar het racedoel (alleen met een gekozen wedstrijd). */
 function buildCountdown(state: StoreState, now: Date): PlannedNotification[] {
   if (state.schemaMode !== 'race' || !state.racePlan) return [];
@@ -465,6 +497,7 @@ async function cancelOwnNotifications(N: NotificationsModule): Promise<void> {
         id.startsWith(TRAINING_ID_PREFIX) ||
         id.startsWith(WEEKLY_ID_PREFIX) ||
         id.startsWith(COUNTDOWN_ID_PREFIX) ||
+        id.startsWith(STREAK_ID_PREFIX) ||
         LEGACY_IDS.includes(id),
       );
   } catch {
@@ -487,9 +520,10 @@ async function runReschedule(): Promise<void> {
   const wantsTraining = state.remindersEnabled;
   const wantsWeekly = state.weeklyProgressEnabled;
   const wantsCountdown = state.countdownEnabled;
+  const wantsStreak = state.streakEnabled;
 
   await cancelOwnNotifications(N);
-  if (!wantsTraining && !wantsWeekly && !wantsCountdown) return;
+  if (!wantsTraining && !wantsWeekly && !wantsCountdown && !wantsStreak) return;
   if (!state.profile || !state.hasCompletedOnboarding) return;
   // Zonder toestemming plannen we niets (de OS zou het toch weigeren).
   if (!(await hasNotificationPermission())) return;
@@ -507,6 +541,7 @@ async function runReschedule(): Promise<void> {
     ...(wantsTraining ? buildTrainingReminders(state, weeks, now) : []),
     ...(wantsWeekly ? buildWeeklyProgress(state, weeks, now) : []),
     ...(wantsCountdown ? buildCountdown(state, now) : []),
+    ...(wantsStreak ? buildStreakProtection(state, now) : []),
   ];
 
   for (const n of planned) {
@@ -568,7 +603,7 @@ export function resolveNotificationTapRoute(response: NotificationTapResponse | 
   const data = response?.notification?.request?.content?.data;
   if (!data || typeof data !== 'object') return null;
   const { kind, route } = data as Record<string, unknown>;
-  if (kind !== DATA_KIND.training && kind !== DATA_KIND.weekly && kind !== DATA_KIND.countdown) return null;
+  if (kind !== DATA_KIND.training && kind !== DATA_KIND.weekly && kind !== DATA_KIND.countdown && kind !== DATA_KIND.streak) return null;
   if (route !== ROUTE_TRAINING && route !== ROUTE_PROGRESS) return null;
 
   // Dezelfde tik kan zowel via de listener als via getLastNotificationResponse binnenkomen.

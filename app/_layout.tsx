@@ -118,7 +118,7 @@ export default function RootLayout() {
     return () => sub.remove();
   }, []);
 
-  // Lokale meldingen (trainingsherinnering, weekvoortgang, countdown) opnieuw
+  // Lokale meldingen (trainingsherinnering, weekvoortgang, countdown, reeks) opnieuw
   // plannen zodra de store geladen is, bij terugkeer naar de voorgrond en bij
   // elke wijziging die de inhoud raakt: schema, doel, trainingsdagen, voltooide
   // of overgeslagen trainingen en de schakelaars in Instellingen. Gebundeld met
@@ -150,6 +150,7 @@ export default function RootLayout() {
         state.remindersEnabled !== prev.remindersEnabled ||
         state.weeklyProgressEnabled !== prev.weeklyProgressEnabled ||
         state.countdownEnabled !== prev.countdownEnabled ||
+        state.streakEnabled !== prev.streakEnabled ||
         state.reminderHour !== prev.reminderHour
       ) {
         schedule(1000);

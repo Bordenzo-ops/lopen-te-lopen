@@ -366,6 +366,13 @@ interface AppState {
   countdownEnabled: boolean;
   setCountdownEnabled: (enabled: boolean) => void;
   /**
+   * Reeks vasthouden: zondag 18:00 een duwtje als er die week nog niet gelopen is.
+   * Default false (opt-in); bestaande gebruikers met herinneringen aan krijgen
+   * true via de migratie naar versie 2, omdat dit voorheen onder die schakelaar viel.
+   */
+  streakEnabled: boolean;
+  setStreakEnabled: (enabled: boolean) => void;
+  /**
    * ISO-datum van de laatste keer dat de in-app reviewvraag getoond is, of
    * null als dat nog nooit gebeurd is. Voorkomt dat we vaker dan eens per
    * 90 dagen om een winkelbeoordeling vragen.
@@ -629,6 +636,8 @@ export const useAppStore = create<AppState>()(
       setWeeklyProgressEnabled: (enabled) => set({ weeklyProgressEnabled: enabled }),
       countdownEnabled: false,
       setCountdownEnabled: (enabled) => set({ countdownEnabled: enabled }),
+      streakEnabled: false,
+      setStreakEnabled: (enabled) => set({ streakEnabled: enabled }),
       lastReviewPromptAt: null,
       setLastReviewPromptAt: (iso) => set({ lastReviewPromptAt: iso }),
 
@@ -980,8 +989,8 @@ export const useAppStore = create<AppState>()(
         // completeSession is de ene plek die altijd geraakt wordt zodra een
         // sessie voltooid is, ongeacht welk scherm dat doet. Alleen als de
         // gebruiker minstens een categorie aan heeft staan; faalt altijd stil.
-        const { remindersEnabled, weeklyProgressEnabled, countdownEnabled } = get();
-        if (remindersEnabled || weeklyProgressEnabled || countdownEnabled) {
+        const { remindersEnabled, weeklyProgressEnabled, countdownEnabled, streakEnabled } = get();
+        if (remindersEnabled || weeklyProgressEnabled || countdownEnabled || streakEnabled) {
           import('../services/notificationService')
             .then(({ rescheduleNotifications }) => rescheduleNotifications())
             .catch(() => {
@@ -1197,9 +1206,16 @@ export const useAppStore = create<AppState>()(
       // training- en wedstrijdvoortgang volledig losstaan. De migratie
       // hieronder kopieert het bestaande weeknummer naar beide nieuwe
       // velden, zodat bestaande gebruikers hun voortgang behouden.
-      version: 1,
+      //
+      // Versie 2: streakEnabled (reeks vasthouden) is een eigen schakelaar
+      // geworden. Voor 1.5.0 viel de streak-melding onder de ene
+      // herinneringsschakelaar, dus wie die aan had houdt hem aan.
+      version: 2,
       migrate: (persistedState: any, version: number): any => {
-        const state = (persistedState ?? {}) as Record<string, unknown> & { currentWeek?: number };
+        let state = (persistedState ?? {}) as Record<string, unknown> & { currentWeek?: number };
+        if (version < 2 && typeof state.streakEnabled !== 'boolean') {
+          state = { ...state, streakEnabled: state.remindersEnabled === true };
+        }
         if (version < 1) {
           const week = typeof state.currentWeek === 'number' ? state.currentWeek : 1;
           const rest = { ...state };
@@ -1244,6 +1260,7 @@ export const useAppStore = create<AppState>()(
         reminderHour:           state.reminderHour,
         weeklyProgressEnabled:  state.weeklyProgressEnabled,
         countdownEnabled:       state.countdownEnabled,
+        streakEnabled:          state.streakEnabled,
         lastReviewPromptAt:     state.lastReviewPromptAt,
         routeNotificationsEnabled: state.routeNotificationsEnabled,
         // Laatst bekende premium-status: offline-first zodat een betalende

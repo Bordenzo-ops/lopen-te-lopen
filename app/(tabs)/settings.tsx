@@ -4,7 +4,7 @@ import {
   Alert, TextInput, KeyboardAvoidingView, Platform, Linking, Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone, Cloud, Activity, Bell, HeartPulse, ChevronRight, Mail, LogOut, Crown, Info, Watch, CalendarCheck, Flag } from 'lucide-react-native';
+import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone, Cloud, Activity, Bell, HeartPulse, ChevronRight, Mail, LogOut, Crown, Info, Watch, CalendarCheck, Flag, Flame } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
@@ -221,6 +221,8 @@ export default function SettingsScreen() {
   const setWeeklyProgressEnabled = useAppStore(s => s.setWeeklyProgressEnabled);
   const countdownEnabled         = useAppStore(s => s.countdownEnabled);
   const setCountdownEnabled      = useAppStore(s => s.setCountdownEnabled);
+  const streakEnabled            = useAppStore(s => s.streakEnabled);
+  const setStreakEnabled         = useAppStore(s => s.setStreakEnabled);
   const racePlan                 = useAppStore(s => s.racePlan);
   const schemaMode               = useAppStore(s => s.schemaMode);
 
@@ -528,13 +530,14 @@ export default function SettingsScreen() {
    * en wijzen we de weg naar de systeeminstellingen.
    */
   async function handleToggleNotificationCategory(
-    category: 'training' | 'weekly' | 'countdown',
+    category: 'training' | 'weekly' | 'countdown' | 'streak',
     value: boolean,
   ) {
     const setEnabled =
       category === 'training' ? setRemindersEnabled
       : category === 'weekly' ? setWeeklyProgressEnabled
-      : setCountdownEnabled;
+      : category === 'countdown' ? setCountdownEnabled
+      : setStreakEnabled;
 
     if (!value) {
       setEnabled(false);
@@ -1038,6 +1041,24 @@ export default function SettingsScreen() {
                   accessibilityLabel="Countdown naar je doel"
                   trackColor={{ false: colors.borderDefault, true: colors.brandPrimary + '88' }}
                   thumbColor={countdownEnabled ? colors.brandPrimary : colors.textTertiary}
+                />
+              </View>
+              <Divider />
+              <View style={styles.switchRow}>
+                <Flame size={18} color={colors.textSecondary} strokeWidth={2} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.switchLabel}>Reeks vasthouden</Text>
+                  <Text style={styles.switchSub}>
+                    Zondagavond een duwtje als je die week nog niet gelopen hebt
+                  </Text>
+                </View>
+                <Switch
+                  value={streakEnabled}
+                  onValueChange={v => handleToggleNotificationCategory('streak', v)}
+                  disabled={remindersBusy}
+                  accessibilityLabel="Reeks vasthouden"
+                  trackColor={{ false: colors.borderDefault, true: colors.brandPrimary + '88' }}
+                  thumbColor={streakEnabled ? colors.brandPrimary : colors.textTertiary}
                 />
               </View>
             </View>
