@@ -47,8 +47,8 @@ import {
 } from '../src/services/purchaseService';
 import { trackEvent } from '../src/services/analyticsService';
 import { getPaywallVariant, type PaywallVariant } from '../src/services/paywallVariant';
-import { PRIVACY_URL, TERMS_URL } from '../src/config/legalLinks';
-import { FINISH_GUARANTEE_TEXT } from '../src/config/finishGuarantee';
+import { FINISH_GUARANTEE_TERMS_URL, PRIVACY_URL, TERMS_URL } from '../src/config/legalLinks';
+import { FINISH_GUARANTEE_LINK_LABEL, FINISH_GUARANTEE_TEXT } from '../src/config/finishGuarantee';
 
 const GOLD = colors.premium;
 
@@ -468,7 +468,16 @@ export default function PaywallScreen() {
             )}
 
             {FINISH_GUARANTEE_TEXT ? (
-              <Text style={styles.guaranteeText}>{FINISH_GUARANTEE_TEXT}</Text>
+              <Text style={styles.guaranteeText}>
+                {FINISH_GUARANTEE_TEXT}{' '}
+                <Text
+                  style={styles.guaranteeLink}
+                  onPress={() => openLegalLink(FINISH_GUARANTEE_TERMS_URL)}
+                  accessibilityRole="link"
+                >
+                  {FINISH_GUARANTEE_LINK_LABEL}
+                </Text>
+              </Text>
             ) : null}
 
             {variantB ? benefitsCard : null}
@@ -742,6 +751,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing[2],
     paddingHorizontal: spacing[1],
+  },
+  guaranteeLink: {
+    color: GOLD,
+    textDecorationLine: 'underline',
   },
   planTrialText: {
     fontFamily: typography.fontFamily.sansSemi,

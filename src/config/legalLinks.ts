@@ -24,6 +24,13 @@ const LEGAL_BASE = 'https://bordenzo-ops.github.io/lopen-te-lopen';
 export const PRIVACY_URL = `${LEGAL_BASE}/privacy-policy.html`;
 
 /** Gebruiksvoorwaarden: op iOS de standaard Apple EULA, op Android onze eigen pagina. */
+/**
+ * Voorwaarden van de finish-garantie. Bewust op beide platforms onze eigen
+ * pagina: op iOS wijst TERMS_URL naar Apples standaard-EULA, en daar staat
+ * de garantie niet in.
+ */
+export const FINISH_GUARANTEE_TERMS_URL = `${LEGAL_BASE}/voorwaarden.html#finish-garantie`;
+
 export const TERMS_URL = Platform.OS === 'ios'
   ? 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/'
   : `${LEGAL_BASE}/voorwaarden.html`;
