@@ -40,6 +40,9 @@ const distanceLabel: Record<RotterdamRace['distance'], string> = {
   'marathon':      'Marathon',
 };
 
+/** Of de onboarding-paywall in deze appsessie al is getoond. */
+let onboardingPaywallShown = false;
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function GoalScreen() {
@@ -71,6 +74,15 @@ export default function GoalScreen() {
         pathname: '/(onboarding)/profile',
         params: { goal: 'half_marathon', schemaMode: 'race', raceId: selectedRace.id },
       });
+      // Moment van hoogste motivatie: leg de paywall als modal over het
+      // volgende onboardingscherm. Wegtikken (sluiten) brengt de gebruiker
+      // gewoon terug in de onboarding, dus de gratis route blijft werken.
+      // Niet voor wie al toegang heeft, en maar één keer per appsessie zodat
+      // terug-en-opnieuw-kiezen niet irritant wordt.
+      if (!hasAccess && !onboardingPaywallShown) {
+        onboardingPaywallShown = true;
+        router.push({ pathname: '/paywall', params: { source: 'onboarding' } });
+      }
     }
   }
 
