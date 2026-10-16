@@ -11,6 +11,8 @@ De app blijft volledig offline werken: deze backend is additief.
 - `migrations/0004_app_stats.sql`: functie `app_stats()`, het telwerk achter de edge function `stats`. Toegepast op 4 augustus 2026.
 - `migrations/0005_events_rls_fix.sql`: repareert de RLS van `events` (elke upsert liep op 42501 stuk, waardoor er sinds 4 augustus geen enkel analytics-event binnenkwam) en zet alle policies op rol `authenticated` met `(select auth.uid())`. Toegepast op de live database op 7 september 2026.
 
+- `migrations/0007_entitlements.sql`: tabel `entitlements` (premium per gebruiker, gevoed door de edge function `revenuecat-webhook`) en `revenuecat_events`. Nog niet toegepast.
+
 Alle tabellen hebben RLS aan: een ingelogde gebruiker ziet en schrijft uitsluitend zijn eigen rijen.
 
 ## Migraties toepassen

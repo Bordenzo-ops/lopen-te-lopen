@@ -235,6 +235,85 @@ authenticatie-werkpakket.
 
 ---
 
+## Webhook naar Supabase
+
+Voor een server-side bron van waarheid over premium stuurt RevenueCat elk
+abonnementsevent naar de edge function `revenuecat-webhook`. Die houdt de tabel
+`public.entitlements` bij (een rij per Supabase-gebruiker: `is_active`,
+`product_id`, `store`, `period_type`, `expires_at`, ...). Een databasetrigger
+zet daarna `profiles.is_premium`. De app zelf schrijft `is_premium` niet meer
+(ook oudere app-versies niet: een trigger negeert het).
+
+- Migratie: `supabase/migrations/0007_entitlements.sql`
+- Function: `supabase/functions/revenuecat-webhook/index.ts` (draait met
+  `--no-verify-jwt` en controleert de `Authorization`-header zelf tegen het
+  secret `REVENUECAT_WEBHOOK_AUTH`)
+- Ruwe events staan in `public.revenuecat_events` (id = RevenueCat event-id,
+  dus idempotent; `subscriber_attributes` worden niet bewaard).
+
+### Instellen
+
+1. Migratie toepassen: Supabase Dashboard, SQL Editor, plak de inhoud van
+   `0007_entitlements.sql`, Run. (Vanuit PowerShell kopieer je hem met
+   `type supabase\migrations\0007_entitlements.sql | clip`.)
+2. Secret aanmaken. Genereer een sterke waarde, bijvoorbeeld met Node:
+   `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+   Zet hem met `npx supabase secrets set REVENUECAT_WEBHOOK_AUTH=<waarde> --project-ref zefiknynxppgbhiiunre`
+   (of Dashboard, Edge Functions, Secrets). Bewaar de waarde even; je plakt
+   hem zo ook in RevenueCat.
+3. Deployen: `npx supabase functions deploy revenuecat-webhook --project-ref zefiknynxppgbhiiunre --no-verify-jwt`
+4. In RevenueCat: Project, **Integrations**, **Webhooks**, **+ New**:
+   - Webhook URL: `https://zefiknynxppgbhiiunre.supabase.co/functions/v1/revenuecat-webhook`
+   - Authorization header value: `Bearer <waarde van REVENUECAT_WEBHOOK_AUTH>`
+   - Environment: sandbox en productie, events: alle.
+   - Opslaan, daarna **Send test event**. Verwacht 200; in Supabase, Edge
+     Functions, Logs staat dan `revenuecat-webhook <id> TEST test`.
+5. Optioneel, alleen voor het `TRANSFER`-event (herstel op een ander account):
+   zet `REVENUECAT_API_KEY` (secret API key v1, `sk_...`, RevenueCat, Project
+   settings, API keys) als Supabase-secret. Zonder deze sleutel verliest de
+   bron-gebruiker zijn entitlement en krijgt de bestemming het bij zijn
+   eerstvolgende event.
+
+### Hoe events vertaald worden
+
+- `is_active` = het entitlement `premium` hoort bij het event **en**
+  `expiration_at_ms` ligt in de toekomst. `EXPIRATION` zet altijd op false.
+- `CANCELLATION`, `BILLING_ISSUE` (tot het einde van de grace period) en
+  `SUBSCRIPTION_PAUSED` trekken de toegang niet in; die loopt door tot de
+  verloopdatum. Een refund zet de verloopdatum in het verleden en dus op false.
+- De gebruiker wordt bepaald via `app_user_id`, dan `original_app_user_id`, dan
+  de aliassen; alleen uuid's die in `auth.users` bestaan. Events zonder bekende
+  gebruiker krijgen 200 en staan ruw in `revenuecat_events`.
+- Te laat aankomende events overschrijven een nieuwer event niet.
+
+### Premium controleren in een edge function (bijv. `tts`)
+
+`tts` is hiervoor nog niet aangepast. Met de service-role client:
+
+```ts
+const { data } = await supabase
+  .from('entitlements')
+  .select('is_active, expires_at')
+  .eq('user_id', user.id)
+  .maybeSingle();
+const isPremium = !!data?.is_active && (!data.expires_at || new Date(data.expires_at) > new Date());
+```
+
+### Actieve abonnees tellen (SQL Editor)
+
+```sql
+select store, period_type, environment, count(*) as actief
+from public.entitlements
+where is_active and (expires_at is null or expires_at > now())
+group by store, period_type, environment
+order by store, period_type;
+```
+
+Let op: `SANDBOX` (TestFlight, license testers) staat in dezelfde tabel; filter
+op `environment = 'PRODUCTION'` voor echte abonnees.
+
+---
+
 ## Probleemoplossing
 
 | Symptoom | Oorzaak / oplossing |
