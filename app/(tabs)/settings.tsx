@@ -4,11 +4,11 @@ import {
   Alert, TextInput, KeyboardAvoidingView, Platform, Linking, Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone, Cloud, Activity, Bell, HeartPulse, ChevronRight, Mail, LogOut, Crown, Info, Watch } from 'lucide-react-native';
+import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone, Cloud, Activity, Bell, HeartPulse, ChevronRight, Mail, LogOut, Crown, Info, Watch, CalendarCheck, Flag } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
-import { zoneInfo, DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
+import { zoneInfo } from '../../src/data/trainingPlans';
 import * as voiceService from '../../src/services/voiceService';
 import type { VoiceType } from '../../src/config/voiceConfig';
 import { VOICES, voiceDefinition } from '../../src/config/voiceConfig';
@@ -35,10 +35,9 @@ import { HeartRateMonitorSheet } from '../../src/components/ui/HeartRateMonitorS
 import { CoachExplainerSheet } from '../../src/components/ui/CoachExplainerSheet';
 import {
   requestNotificationPermission,
-  scheduleTrainingReminders,
-  cancelAllReminders,
-  refreshWeeklyNotifications,
+  rescheduleNotifications,
 } from '../../src/services/notificationService';
+import { trackEvent } from '../../src/services/analyticsService';
 
 /** Beschikbare tijdstippen voor de trainingsherinnering (geen picker-package nodig). */
 const REMINDER_HOURS = [7, 8, 12, 18] as const;
@@ -213,12 +212,17 @@ export default function SettingsScreen() {
   const routeNotificationsEnabled    = useAppStore(s => s.routeNotificationsEnabled);
   const setRouteNotificationsEnabled = useAppStore(s => s.setRouteNotificationsEnabled);
   const [routeNotificationsBusy, setRouteNotificationsBusy] = useState(false);
-  const completedSessions   = useAppStore(s => s.completedSessions);
-  const remindersEnabled    = useAppStore(s => s.remindersEnabled);
+  const remindersEnabled   = useAppStore(s => s.remindersEnabled);
   const setRemindersEnabled = useAppStore(s => s.setRemindersEnabled);
   const reminderHour        = useAppStore(s => s.reminderHour);
   const setReminderHour     = useAppStore(s => s.setReminderHour);
   const [remindersBusy, setRemindersBusy] = useState(false);
+  const weeklyProgressEnabled    = useAppStore(s => s.weeklyProgressEnabled);
+  const setWeeklyProgressEnabled = useAppStore(s => s.setWeeklyProgressEnabled);
+  const countdownEnabled         = useAppStore(s => s.countdownEnabled);
+  const setCountdownEnabled      = useAppStore(s => s.setCountdownEnabled);
+  const racePlan                 = useAppStore(s => s.racePlan);
+  const schemaMode               = useAppStore(s => s.schemaMode);
 
   // Account (e-mail, optioneel): niet ingelogd/anoniem toont "aanmaken"/
   // "inloggen", ingelogd met e-mail toont het e-mailadres en "uitloggen".
@@ -518,28 +522,44 @@ export default function SettingsScreen() {
     }
   }
 
-  async function handleToggleReminders(value: boolean) {
+  /**
+   * Zet een meldingscategorie aan of uit. Toestemming wordt pas gevraagd op het
+   * moment dat een categorie AAN gaat; bij weigering springt de schakelaar terug
+   * en wijzen we de weg naar de systeeminstellingen.
+   */
+  async function handleToggleNotificationCategory(
+    category: 'training' | 'weekly' | 'countdown',
+    value: boolean,
+  ) {
+    const setEnabled =
+      category === 'training' ? setRemindersEnabled
+      : category === 'weekly' ? setWeeklyProgressEnabled
+      : setCountdownEnabled;
+
     if (!value) {
-      setRemindersEnabled(false);
-      void cancelAllReminders();
+      setEnabled(false);
+      void trackEvent('notification_category_toggled', { category, enabled: false });
+      void rescheduleNotifications();
       return;
     }
     setRemindersBusy(true);
     try {
       const granted = await requestNotificationPermission();
       if (!granted) {
-        setRemindersEnabled(false);
+        setEnabled(false);
         Alert.alert(
-          'Meldingen niet toegestaan',
-          'We konden geen toestemming krijgen voor meldingen. Je kunt dit later alsnog inschakelen via de instellingen van je toestel.',
+          'Meldingen staan uit',
+          'Zonder toestemming kunnen we geen meldingen sturen. Je kunt dit alsnog aanzetten via de instellingen van je toestel (Lopen te Lopen > Meldingen) en daarna de schakelaar hier opnieuw aanzetten.',
+          [
+            { text: 'Niet nu', style: 'cancel' },
+            { text: 'Open instellingen', onPress: () => { void Linking.openSettings(); } },
+          ],
         );
         return;
       }
-      setRemindersEnabled(true);
-      await scheduleTrainingReminders(profile?.trainingDays ?? DEFAULT_TRAINING_DAYS, reminderHour);
-      // Bereken direct de actuele streak- en weekoverzicht-status, zodat de
-      // gebruiker niet hoeft te wachten tot de volgende voltooide sessie.
-      await refreshWeeklyNotifications(completedSessions);
+      setEnabled(true);
+      void trackEvent('notification_category_toggled', { category, enabled: true });
+      await rescheduleNotifications();
     } finally {
       setRemindersBusy(false);
     }
@@ -570,7 +590,7 @@ export default function SettingsScreen() {
   async function handleChangeReminderHour(hour: number) {
     setReminderHour(hour);
     if (remindersEnabled) {
-      await scheduleTrainingReminders(profile?.trainingDays ?? DEFAULT_TRAINING_DAYS, hour);
+      await rescheduleNotifications();
     }
   }
 
@@ -942,12 +962,12 @@ export default function SettingsScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.switchLabel}>Trainingsherinneringen</Text>
                   <Text style={styles.switchSub}>
-                    Een melding op je trainingsdagen, plus een seintje als je dreigt je wekelijkse streak te missen
+                    Een melding op je trainingsdagen, zoals "Vandaag: 8 km rustig"
                   </Text>
                 </View>
                 <Switch
                   value={remindersEnabled}
-                  onValueChange={handleToggleReminders}
+                  onValueChange={v => handleToggleNotificationCategory('training', v)}
                   disabled={remindersBusy}
                   accessibilityLabel="Trainingsherinneringen"
                   trackColor={{ false: colors.borderDefault, true: colors.brandPrimary + '88' }}
@@ -982,9 +1002,47 @@ export default function SettingsScreen() {
                   </View>
                 </>
               )}
+              <Divider />
+              <View style={styles.switchRow}>
+                <CalendarCheck size={18} color={colors.textSecondary} strokeWidth={2} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.switchLabel}>Wekelijkse voortgang</Text>
+                  <Text style={styles.switchSub}>
+                    Zondagavond een overzicht, zoals "Deze week 3 van 4 trainingen gedaan"
+                  </Text>
+                </View>
+                <Switch
+                  value={weeklyProgressEnabled}
+                  onValueChange={v => handleToggleNotificationCategory('weekly', v)}
+                  disabled={remindersBusy}
+                  accessibilityLabel="Wekelijkse voortgang"
+                  trackColor={{ false: colors.borderDefault, true: colors.brandPrimary + '88' }}
+                  thumbColor={weeklyProgressEnabled ? colors.brandPrimary : colors.textTertiary}
+                />
+              </View>
+              <Divider />
+              <View style={styles.switchRow}>
+                <Flag size={18} color={colors.textSecondary} strokeWidth={2} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.switchLabel}>Countdown naar je doel</Text>
+                  <Text style={styles.switchSub}>
+                    {schemaMode === 'race' && racePlan
+                      ? `Een melding bij 100, 50 en 10 dagen en de dag voor ${racePlan.race.name}`
+                      : 'Een melding bij 100, 50 en 10 dagen en de dag voor je wedstrijd. Werkt zodra je een wedstrijd als doel hebt gekozen.'}
+                  </Text>
+                </View>
+                <Switch
+                  value={countdownEnabled}
+                  onValueChange={v => handleToggleNotificationCategory('countdown', v)}
+                  disabled={remindersBusy}
+                  accessibilityLabel="Countdown naar je doel"
+                  trackColor={{ false: colors.borderDefault, true: colors.brandPrimary + '88' }}
+                  thumbColor={countdownEnabled ? colors.brandPrimary : colors.textTertiary}
+                />
+              </View>
             </View>
             <Text style={styles.fieldNote}>
-              We vragen eenmalig toestemming voor meldingen. Zet je toestemming later uit via je toestelinstellingen, dan werkt deze schakelaar niet meer.
+              We vragen pas toestemming voor meldingen als je hierboven een schakelaar aanzet. Alles staat standaard uit en wordt lokaal op je toestel gepland. Heb je toestemming eerder geweigerd, dan kun je die aanzetten via de instellingen van je toestel.
             </Text>
           </View>
 

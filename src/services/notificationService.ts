@@ -1,8 +1,8 @@
 /**
  * notificationService
  *
- * Lokale (niet-push) meldingen rond trainingsherinneringen, streak-bescherming
- * en het wekelijkse overzicht. Alles draait via expo-notifications, volledig
+ * Lokale (niet-push) meldingen: trainingsherinneringen, wekelijkse voortgang
+ * en countdown-mijlpalen naar het racedoel. Alles draait via expo-notifications, volledig
  * losstaand van een push-server: er wordt nooit iets naar een backend
  * gestuurd, alle triggers zijn tijd- of weekdag-gebaseerd en worden lokaal op
  * het toestel gepland.
@@ -15,24 +15,29 @@
  * Vereist: npx expo install expo-notifications
  *
  * Ontwerpkeuzes:
- * - Eén "Herinneringen"-schakelaar in Instellingen bepaalt of ALLE lokale
- *   meldingen in dit bestand actief zijn (trainingsherinneringen,
- *   streak-bescherming en het weekoverzicht). Ze delen dezelfde OS-permissie
- *   en dezelfde gebruikersintentie ("stuur me herinneringen"), dus een aparte
- *   schakelaar per meldingstype zou de instellingen nodeloos ingewikkeld
- *   maken zonder concrete meerwaarde.
- * - Streak-bescherming en het weekoverzicht zijn allebei EENMALIGE (niet
- *   herhalende) meldingen gepland op "de eerstvolgende zondag". Een
- *   herhalende wekelijkse trigger zou deze week niet meer te annuleren zijn
- *   zodra hij eenmaal gepland staat: door telkens te annuleren en opnieuw
- *   voor de eerstvolgende zondag te plannen (refreshWeeklyNotifications,
- *   aangeroepen na elke voltooide sessie) herstelt dit zichzelf elke week
- *   vanzelf, zonder een achtergrondtaak nodig te hebben.
+ * - Drie categorieen, elk apart aan/uit in Instellingen en standaard UIT:
+ *   trainingsherinneringen (remindersEnabled), wekelijkse voortgang
+ *   (weeklyProgressEnabled) en countdown-mijlpalen (countdownEnabled). Ze
+ *   delen dezelfde OS-permissie, maar die wordt pas gevraagd op het moment
+ *   dat de gebruiker een categorie aanzet.
+ * - Alles wordt door EEN functie gepland: rescheduleNotifications(). Die leest
+ *   de actuele store, annuleert alle eigen meldingen en plant ze opnieuw. Zo
+ *   blijft er nooit een dubbele of verouderde melding staan en hoeft geen
+ *   scherm te weten hoe de planning werkt.
+ * - Trainingsherinneringen en het weekbericht staan als EENMALIGE meldingen
+ *   in een rollend venster van ROLLING_WINDOW_DAYS dagen (geen herhalende
+ *   triggers): de inhoud ("Vandaag: 8 km rustig") hangt van het schema af en
+ *   iOS staat maximaal 64 geplande meldingen toe. Het venster schuift mee bij
+ *   elke herplanning (app-start, terug naar de voorgrond, afgeronde training,
+ *   schema-/doel- of instellingswijziging, zie app/_layout.tsx).
+ * - Countdown-mijlpalen liggen buiten dat venster (tot 100 dagen vooruit),
+ *   maar zijn er maar vier, dus die plannen we altijd allemaal.
  */
 
-import { Linking } from 'react-native';
-import { weekStartISO, type CompletedSession } from '../store/appStore';
-import { DEFAULT_TRAINING_DAYS } from '../data/trainingPlans';
+import { useAppStore, weekStartISO } from '../store/appStore';
+import { resolveActivePlan } from '../data/activePlan';
+import { formatLocalISODate, parseLocalISODate, raceScheduleStatus } from '../data/raceSchedule';
+import type { Session, TrainingWeek } from '../data/trainingPlans';
 
 // ── Eigen minimale typedefinities voor expo-notifications ──────────────────
 // Geen import type van de package: tsc moet ook schoon blijven zonder dat het
@@ -67,15 +72,25 @@ interface NotificationPermissionResponse {
   status: 'granted' | 'denied' | 'undetermined';
 }
 
-interface NotificationWeeklyTrigger {
-  weekday: number;   // 1 = zondag ... 7 = zaterdag (Apple/Expo-conventie)
-  hour: number;
-  minute: number;
-  repeats: true;
+interface NotificationDateTrigger {
+  type: 'date';
+  date: Date;
 }
 
-interface NotificationDateTrigger {
-  date: Date;
+/** Het deel van een geplande melding dat we nodig hebben om de onze terug te vinden. */
+interface ScheduledNotification {
+  identifier: string;
+}
+
+/** Het deel van een tik-op-melding-antwoord dat we nodig hebben. */
+export interface NotificationTapResponse {
+  notification?: {
+    date?: number;
+    request?: {
+      identifier?: string;
+      content?: { data?: unknown };
+    };
+  };
 }
 
 interface ScheduleNotificationRequest {
@@ -84,8 +99,9 @@ interface ScheduleNotificationRequest {
     title?: string;
     body: string;
     sound?: boolean;
+    data?: Record<string, unknown>;
   };
-  trigger: NotificationWeeklyTrigger | NotificationDateTrigger;
+  trigger: NotificationDateTrigger;
 }
 
 interface NotificationsModule {
@@ -96,6 +112,9 @@ interface NotificationsModule {
   requestPermissionsAsync: () => Promise<NotificationPermissionResponse>;
   scheduleNotificationAsync: (request: ScheduleNotificationRequest) => Promise<string>;
   cancelScheduledNotificationAsync: (identifier: string) => Promise<void>;
+  getAllScheduledNotificationsAsync: () => Promise<ScheduledNotification[]>;
+  addNotificationResponseReceivedListener: (listener: (response: NotificationTapResponse) => void) => { remove: () => void };
+  getLastNotificationResponseAsync: () => Promise<NotificationTapResponse | null>;
 }
 
 // Module-level lazy singleton: de require gebeurt maximaal eenmaal.
@@ -204,187 +223,395 @@ export async function requestNotificationPermission(): Promise<boolean> {
   }
 }
 
-// ── Trainingsherinneringen ──────────────────────────────────────────────────
+/**
+ * Is er toestemming om meldingen te sturen? Vraagt NIET zelf toestemming (dat
+ * gebeurt alleen via requestNotificationPermission, op het moment dat de
+ * gebruiker een categorie aanzet).
+ */
+async function hasNotificationPermission(): Promise<boolean> {
+  const N = loadNotificationsModule();
+  if (!N) return false;
+  try {
+    return (await N.getPermissionsAsync()).status === 'granted';
+  } catch {
+    return false;
+  }
+}
 
-const TRAINING_REMINDER_PREFIX = 'training-reminder-';
+// ── Planning ────────────────────────────────────────────────────────────────
 
-/** Vriendelijke, roulerende teksten voor de trainingsherinnering. */
-const TRAINING_MESSAGES = [
-  'Vandaag staat je training klaar. Veel loopplezier!',
-  'Je schema wacht op je. Kleine stap, groot verschil.',
+/** Aantal dagen vooruit dat trainingsherinneringen en weekberichten gepland staan. */
+const ROLLING_WINDOW_DAYS = 14;
+
+const TRAINING_ID_PREFIX = 'lt-training-';
+const WEEKLY_ID_PREFIX = 'lt-weekly-';
+const COUNTDOWN_ID_PREFIX = 'lt-countdown-';
+
+/** Vaste identifiers van eerdere versies (streak-bescherming, weekoverzicht, herhalende dagen). */
+const LEGACY_IDS = [
+  'streak-protection',
+  'week-overview',
+  ...[1, 2, 3, 4, 5, 6, 7].map(d => `training-reminder-${d}`),
 ];
 
-/** Zet ons dagnummer (1=ma..7=zo) om naar Expo's weekday-conventie (1=zo..7=za). */
-function toExpoWeekday(appDay: number): number {
-  return (appDay % 7) + 1;
+const NOTIFICATION_TITLE = 'Lopen te Lopen';
+const WEEKLY_HOUR = 19;          // zondagavond
+const COUNTDOWN_HOUR = 10;
+const COUNTDOWN_DAY_BEFORE_HOUR = 18;
+
+/** Dagen voor de wedstrijd waarop een countdown-melding komt (1 = de dag ervoor). */
+export const COUNTDOWN_MILESTONES = [100, 50, 10, 1] as const;
+
+/** Herkenningswaarde in `content.data.kind`, om een tik op de melding te herleiden. */
+const DATA_KIND = {
+  training: 'training-reminder',
+  weekly: 'weekly-progress',
+  countdown: 'countdown',
+} as const;
+
+/** Expo Router-paden waar een tik op een melding naartoe leidt. */
+const ROUTE_TRAINING = '/(tabs)/dashboard';
+const ROUTE_PROGRESS = '/(tabs)/schedule';
+
+/** Datum op een bepaald uur (lokale tijd). */
+function atHour(date: Date, hour: number): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, 0, 0, 0);
 }
 
-/**
- * Plant wekelijks terugkerende lokale meldingen op de gekozen trainingsdagen,
- * op het gekozen uur. Annuleert eerst alle bestaande trainingsherinneringen,
- * zodat een herhaalde aanroep (bijv. na een gewijzigd tijdstip) nooit
- * dubbele meldingen oplevert.
- */
-export async function scheduleTrainingReminders(
-  trainingDays: number[] | undefined,
-  hour: number = 8,
-): Promise<void> {
-  const N = loadNotificationsModule();
-  if (!N) return;
+function addDays(date: Date, days: number): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days, date.getHours(), 0, 0, 0);
+}
 
-  try {
-    await cancelTrainingReminders();
+/** 1 = maandag ... 7 = zondag, gelijk aan Session.day. */
+function isoWeekday(date: Date): number {
+  const d = date.getDay();
+  return d === 0 ? 7 : d;
+}
 
-    const validDays = (trainingDays ?? []).filter(d => Number.isInteger(d) && d >= 1 && d <= 7);
-    const days = validDays.length > 0 ? validDays : DEFAULT_TRAINING_DAYS;
+function formatKm(km: number): string {
+  return (Number.isInteger(km) ? String(km) : km.toFixed(1)).replace('.', ',');
+}
 
-    for (let i = 0; i < days.length; i++) {
-      const appDay = days[i];
-      const body = TRAINING_MESSAGES[i % TRAINING_MESSAGES.length];
-      try {
-        await N.scheduleNotificationAsync({
-          identifier: `${TRAINING_REMINDER_PREFIX}${appDay}`,
-          content: { title: 'Lopen te Lopen', body, sound: true },
-          trigger: { weekday: toExpoWeekday(appDay), hour, minute: 0, repeats: true },
-        });
-      } catch {
-        // Eén mislukte dag mag de andere dagen niet blokkeren
-      }
-    }
-  } catch {
-    // Stil falen: geen herinneringen is beter dan een crash
+/** Korte omschrijving van een sessie voor in de melding ("8 km rustig"). */
+function describeSession(session: Session): string | null {
+  switch (session.type) {
+    case 'easy': return `${formatKm(session.distanceKm)} km rustig`;
+    case 'long': return `${formatKm(session.distanceKm)} km lange duurloop`;
+    case 'tempo': return `${formatKm(session.distanceKm)} km tempo`;
+    case 'interval': return 'intervaltraining';
+    case 'cross': return 'crosstraining';
+    default: return null; // rust of onbekend: geen melding
   }
 }
 
-/** Annuleert alle geplande trainingsherinneringen (alle 7 mogelijke dagen). */
-export async function cancelTrainingReminders(): Promise<void> {
-  const N = loadNotificationsModule();
-  if (!N) return;
-  for (let day = 1; day <= 7; day++) {
+type StoreState = ReturnType<typeof useAppStore.getState>;
+
+/**
+ * Het schemaweek dat bij een datum hoort. Wedstrijdschema: kalender-verankerd
+ * (null buiten de looptijd van het schema). Trainingsmodus: het schema loopt op
+ * voltooiing, dus altijd de huidige week (currentWeekTraining).
+ */
+function weekForDate(state: StoreState, weeks: TrainingWeek[], date: Date): TrainingWeek | null {
+  let weekNumber: number;
+  if (state.schemaMode === 'race' && state.racePlan) {
+    const status = raceScheduleStatus(state.racePlan, date);
+    if (status.status !== 'bezig') return null;
+    if (date.getTime() > atHour(parseLocalISODate(state.racePlan.race.date), 23).getTime()) return null;
+    weekNumber = status.week;
+  } else {
+    weekNumber = state.currentWeekTraining;
+  }
+  return weeks.find(w => w.weekNumber === weekNumber) ?? null;
+}
+
+/** Is de gebruiker op deze kalenderdag al klaar met een run? */
+function ranOnDate(state: StoreState, date: Date): boolean {
+  const key = formatLocalISODate(date);
+  return state.completedSessions.some(c => formatLocalISODate(new Date(c.completedAt)) === key);
+}
+
+function isSessionHandled(state: StoreState, session: Session): boolean {
+  return (
+    state.completedSessions.some(c => c.sessionId === session.id) ||
+    state.skippedSessions.some(s => s.sessionId === session.id)
+  );
+}
+
+interface PlannedNotification {
+  identifier: string;
+  title: string;
+  body: string;
+  date: Date;
+  data: Record<string, unknown>;
+}
+
+/** Trainingsherinneringen: een melding per schemadag in het venster. */
+function buildTrainingReminders(state: StoreState, weeks: TrainingWeek[], now: Date): PlannedNotification[] {
+  const out: PlannedNotification[] = [];
+  const hour = Number.isInteger(state.reminderHour) ? state.reminderHour : 8;
+  const thisWeekKey = weekStartISO(now);
+  const isRace = state.schemaMode === 'race' && !!state.racePlan;
+
+  for (let offset = 0; offset < ROLLING_WINDOW_DAYS; offset++) {
+    const day = addDays(now, offset);
+    const fireAt = atHour(day, hour);
+    if (fireAt.getTime() <= now.getTime() + 60_000) continue;
+    if (offset === 0 && ranOnDate(state, day)) continue;
+
+    const week = weekForDate(state, weeks, day);
+    if (!week) continue;
+
+    // Bonus-duurloopjes (optional) zijn vrijblijvend: daar sturen we geen melding voor.
+    const session = week.sessions.find(s => s.day === isoWeekday(day) && !s.optional && describeSession(s));
+    if (!session) continue;
+
+    // Afgehandelde sessies krijgen geen melding. In de trainingsmodus geldt dat alleen
+    // voor deze kalenderweek: een volgende week begint met een schone lei.
+    const filterHandled = isRace || weekStartISO(day) === thisWeekKey;
+    if (filterHandled && isSessionHandled(state, session)) continue;
+
+    const isRaceDay = isRace && formatLocalISODate(day) === state.racePlan!.race.date;
+    out.push({
+      identifier: `${TRAINING_ID_PREFIX}${formatLocalISODate(day)}`,
+      title: NOTIFICATION_TITLE,
+      body: isRaceDay
+        ? `Vandaag is het zover: ${state.racePlan!.race.name}. Veel succes en geniet ervan!`
+        : `Vandaag: ${describeSession(session)}`,
+      date: fireAt,
+      data: { kind: DATA_KIND.training, route: ROUTE_TRAINING },
+    });
+  }
+  return out;
+}
+
+/** Wekelijkse voortgang: elke zondagavond in het venster. */
+function buildWeeklyProgress(state: StoreState, weeks: TrainingWeek[], now: Date): PlannedNotification[] {
+  const out: PlannedNotification[] = [];
+  let first = true;
+
+  for (let offset = 0; offset < ROLLING_WINDOW_DAYS; offset++) {
+    const day = addDays(now, offset);
+    if (isoWeekday(day) !== 7) continue;
+    const fireAt = atHour(day, WEEKLY_HOUR);
+    if (fireAt.getTime() <= now.getTime() + 60_000) continue;
+
+    let body = 'Hoe liep je week? Bekijk je voortgang in je schema.';
+    // Alleen de eerstvolgende zondag kennen we de cijfers van; de volgende
+    // krijgt een neutrale tekst en wordt bij de eerstvolgende herplanning scherper.
+    if (first) {
+      first = false;
+      const week = weekForDate(state, weeks, day);
+      if (!week) continue;
+      const weekKey = weekStartISO(day);
+      const done = new Set(
+        state.completedSessions
+          .filter(c => weekStartISO(new Date(c.completedAt)) === weekKey)
+          .map(c => c.sessionId),
+      ).size;
+      const planned = Math.max(week.sessions.filter(s => !s.optional && s.type !== 'rest').length, done);
+      if (planned === 0) continue;
+      if (done === 0) body = 'Deze week nog geen training gedaan. Een korte loop telt ook!';
+      else if (done >= planned) body = `Deze week alle ${planned} trainingen gedaan. Sterk bezig!`;
+      else body = `Deze week ${done} van ${planned} trainingen gedaan.`;
+    }
+
+    out.push({
+      identifier: `${WEEKLY_ID_PREFIX}${formatLocalISODate(day)}`,
+      title: NOTIFICATION_TITLE,
+      body,
+      date: fireAt,
+      data: { kind: DATA_KIND.weekly, route: ROUTE_PROGRESS },
+    });
+  }
+  return out;
+}
+
+/** Countdown-mijlpalen naar het racedoel (alleen met een gekozen wedstrijd). */
+function buildCountdown(state: StoreState, now: Date): PlannedNotification[] {
+  if (state.schemaMode !== 'race' || !state.racePlan) return [];
+  const { name, date } = state.racePlan.race;
+  const raceDay = parseLocalISODate(date);
+  const out: PlannedNotification[] = [];
+
+  for (const days of COUNTDOWN_MILESTONES) {
+    const fireAt = atHour(addDays(raceDay, -days), days === 1 ? COUNTDOWN_DAY_BEFORE_HOUR : COUNTDOWN_HOUR);
+    if (fireAt.getTime() <= now.getTime() + 60_000) continue;
+
+    let body: string;
+    if (days === 1) body = `Morgen is het zover: ${name}. Eet goed, slaap lekker en geniet ervan!`;
+    else if (days === 10) body = `Nog 10 dagen tot ${name}. Blijf scherp en neem voldoende rust.`;
+    else if (days === 50) body = `Nog 50 dagen tot ${name}. Houd je schema vol, je bent goed op weg.`;
+    else body = `Nog ${days} dagen tot ${name}. Elke training brengt je dichterbij de finish!`;
+
+    out.push({
+      identifier: `${COUNTDOWN_ID_PREFIX}${days}`,
+      title: NOTIFICATION_TITLE,
+      body,
+      date: fireAt,
+      data: { kind: DATA_KIND.countdown, route: ROUTE_PROGRESS },
+    });
+  }
+  return out;
+}
+
+/** Annuleert alle meldingen van dit bestand (en van eerdere versies); route-afslagmeldingen blijven ongemoeid. */
+async function cancelOwnNotifications(N: NotificationsModule): Promise<void> {
+  let ids: string[] = [];
+  try {
+    const scheduled = await N.getAllScheduledNotificationsAsync();
+    ids = scheduled
+      .map(n => n.identifier)
+      .filter(id =>
+        id.startsWith(TRAINING_ID_PREFIX) ||
+        id.startsWith(WEEKLY_ID_PREFIX) ||
+        id.startsWith(COUNTDOWN_ID_PREFIX) ||
+        LEGACY_IDS.includes(id),
+      );
+  } catch {
+    ids = LEGACY_IDS;
+  }
+  for (const id of ids) {
     try {
-      await N.cancelScheduledNotificationAsync(`${TRAINING_REMINDER_PREFIX}${day}`);
+      await N.cancelScheduledNotificationAsync(id);
     } catch {
-      // Negeer: identifier bestond waarschijnlijk niet
+      // Negeer: de melding was al weg
     }
   }
 }
 
-// ── Streak-bescherming en weekoverzicht ─────────────────────────────────────
+async function runReschedule(): Promise<void> {
+  const N = loadNotificationsModule();
+  if (!N) return;
 
-const STREAK_PROTECTION_ID = 'streak-protection';
-const WEEK_OVERVIEW_ID = 'week-overview';
+  const state = useAppStore.getState();
+  const wantsTraining = state.remindersEnabled;
+  const wantsWeekly = state.weeklyProgressEnabled;
+  const wantsCountdown = state.countdownEnabled;
 
-/**
- * Berekent de eerstvolgende datum/tijd op zondag om het gevraagde uur. Als
- * "nu" al voorbij dat moment is (bijv. het is al zondagavond na 19:00), wordt
- * een week verder gepland zodat de melding nooit in het verleden ligt.
- */
-function getUpcomingSunday(hour: number, minute: number): Date {
+  await cancelOwnNotifications(N);
+  if (!wantsTraining && !wantsWeekly && !wantsCountdown) return;
+  if (!state.profile || !state.hasCompletedOnboarding) return;
+  // Zonder toestemming plannen we niets (de OS zou het toch weigeren).
+  if (!(await hasNotificationPermission())) return;
+
   const now = new Date();
-  const daysUntilSunday = (7 - now.getDay()) % 7; // 0 als vandaag al zondag is
-  const target = new Date(now);
-  target.setDate(now.getDate() + daysUntilSunday);
-  target.setHours(hour, minute, 0, 0);
-  if (target.getTime() <= now.getTime()) {
-    target.setDate(target.getDate() + 7);
+  const weeks = resolveActivePlan({
+    schemaMode: state.schemaMode,
+    racePlan: state.racePlan,
+    customPlan: state.customPlan,
+    goal: state.profile.goal,
+    trainingDays: state.profile.trainingDays,
+  }).weeks;
+
+  const planned: PlannedNotification[] = [
+    ...(wantsTraining ? buildTrainingReminders(state, weeks, now) : []),
+    ...(wantsWeekly ? buildWeeklyProgress(state, weeks, now) : []),
+    ...(wantsCountdown ? buildCountdown(state, now) : []),
+  ];
+
+  for (const n of planned) {
+    try {
+      await N.scheduleNotificationAsync({
+        identifier: n.identifier,
+        content: { title: n.title, body: n.body, sound: true, data: n.data },
+        trigger: { type: 'date', date: n.date },
+      });
+    } catch {
+      // Eén mislukte melding mag de rest niet blokkeren
+    }
   }
-  return target;
+}
+
+// Serialiseert herplanningen: de planning bestaat uit annuleren + opnieuw
+// plannen, en twee die door elkaar lopen zouden dubbele meldingen kunnen
+// opleveren. Komt er tijdens een lopende ronde nog een verzoek, dan volgt
+// precies een extra ronde met de dan actuele store.
+let rescheduling = false;
+let rescheduleQueued = false;
+
+/**
+ * Plant alle lokale meldingen opnieuw op basis van de actuele store en de
+ * schakelaars in Instellingen. Aan te roepen bij app-start, terug naar de
+ * voorgrond, schema-/doelwijziging, afgeronde training en gewijzigde
+ * instellingen. Faalt altijd stil.
+ */
+export async function rescheduleNotifications(): Promise<void> {
+  if (rescheduling) {
+    rescheduleQueued = true;
+    return;
+  }
+  rescheduling = true;
+  try {
+    do {
+      rescheduleQueued = false;
+      try {
+        await runReschedule();
+      } catch {
+        // Stil falen: geen herinneringen is beter dan een crash
+      }
+    } while (rescheduleQueued);
+  } finally {
+    rescheduling = false;
+  }
+}
+
+// ── Tik op een melding ──────────────────────────────────────────────────────
+
+const handledResponses = new Set<string>();
+
+/**
+ * Geeft het Expo Router-pad waar een tik op een melding naartoe moet, of null
+ * als het geen melding van ons is (bijv. een route-afslagmelding) of al
+ * afgehandeld is.
+ */
+export function resolveNotificationTapRoute(response: NotificationTapResponse | null | undefined): string | null {
+  const data = response?.notification?.request?.content?.data;
+  if (!data || typeof data !== 'object') return null;
+  const { kind, route } = data as Record<string, unknown>;
+  if (kind !== DATA_KIND.training && kind !== DATA_KIND.weekly && kind !== DATA_KIND.countdown) return null;
+  if (route !== ROUTE_TRAINING && route !== ROUTE_PROGRESS) return null;
+
+  // Dezelfde tik kan zowel via de listener als via getLastNotificationResponse binnenkomen.
+  const key = `${response?.notification?.request?.identifier ?? ''}|${response?.notification?.date ?? ''}`;
+  if (handledResponses.has(key)) return null;
+  handledResponses.add(key);
+  return route;
 }
 
 /**
- * Plant (of annuleert) de streak-beschermingsmelding voor aankomende zondag
- * 18:00. Is er deze week al een run voltooid, dan wordt de melding alleen
- * geannuleerd (geen waarschuwing nodig). Anders wordt hij (opnieuw) gepland
- * voor de eerstvolgende zondag.
+ * Luistert naar tikken op meldingen (app op de achtergrond of voorgrond) en
+ * geeft ook de tik terug die de app koud gestart heeft. `navigate` krijgt het
+ * pad. Geeft een functie terug die de luisteraar opruimt.
  */
-export async function refreshStreakProtection(hasSessionThisWeek: boolean): Promise<void> {
+export function listenForNotificationTaps(navigate: (route: string) => void): () => void {
   const N = loadNotificationsModule();
-  if (!N) return;
-  try {
-    await N.cancelScheduledNotificationAsync(STREAK_PROTECTION_ID);
-  } catch {
-    // Negeer: identifier bestond waarschijnlijk niet
-  }
-  if (hasSessionThisWeek) return;
+  if (!N) return () => {};
 
+  let subscription: { remove: () => void } | null = null;
   try {
-    await N.scheduleNotificationAsync({
-      identifier: STREAK_PROTECTION_ID,
-      content: {
-        title: 'Lopen te Lopen',
-        body: 'Nog geen run deze week. Een korte loop telt ook!',
-        sound: true,
-      },
-      trigger: { date: getUpcomingSunday(18, 0) },
+    subscription = N.addNotificationResponseReceivedListener(response => {
+      const route = resolveNotificationTapRoute(response);
+      if (route) navigate(route);
     });
   } catch {
-    // Stil falen
+    subscription = null;
   }
-}
 
-/**
- * Plant (of annuleert) het wekelijkse overzicht voor aankomende zondag 19:00,
- * met de actuele cijfers van deze week. Zonder runs deze week wordt er niets
- * gepland: een overzicht van "0 runs" heeft geen toegevoegde waarde.
- */
-export async function refreshWeekOverview(runsThisWeek: number, kmThisWeek: number): Promise<void> {
-  const N = loadNotificationsModule();
-  if (!N) return;
-  try {
-    await N.cancelScheduledNotificationAsync(WEEK_OVERVIEW_ID);
-  } catch {
-    // Negeer: identifier bestond waarschijnlijk niet
-  }
-  if (runsThisWeek <= 0) return;
-
-  try {
-    const kmLabel = kmThisWeek.toFixed(1).replace('.', ',');
-    const runLabel = runsThisWeek === 1 ? 'run' : 'runs';
-    await N.scheduleNotificationAsync({
-      identifier: WEEK_OVERVIEW_ID,
-      content: {
-        title: 'Lopen te Lopen',
-        body: `Deze week: ${runsThisWeek} ${runLabel}, ${kmLabel} km. Lekker bezig!`,
-        sound: true,
-      },
-      trigger: { date: getUpcomingSunday(19, 0) },
+  N.getLastNotificationResponseAsync()
+    .then(response => {
+      const route = resolveNotificationTapRoute(response);
+      if (route) navigate(route);
+    })
+    .catch(() => {
+      // Stil falen
     });
-  } catch {
-    // Stil falen
-  }
+
+  return () => {
+    try {
+      subscription?.remove();
+    } catch {
+      // Negeer
+    }
+  };
 }
 
-/**
- * Herberekent en herplant de streak-bescherming en het weekoverzicht op basis
- * van alle voltooide sessies. Aan te roepen na elke voltooide sessie (zie
- * completeSession in appStore) en bij het aanzetten van de herinneringen in
- * Instellingen, zodat de cijfers meteen kloppen.
- */
-export async function refreshWeeklyNotifications(completedSessions: CompletedSession[]): Promise<void> {
-  const N = loadNotificationsModule();
-  if (!N) return;
-
-  const thisWeekKey = weekStartISO();
-  const thisWeek = completedSessions.filter(c => weekStartISO(new Date(c.completedAt)) === thisWeekKey);
-  const km = thisWeek.reduce((sum, c) => sum + c.actualDistanceKm, 0);
-
-  await refreshStreakProtection(thisWeek.length > 0);
-  await refreshWeekOverview(thisWeek.length, km);
-}
-
-/** Annuleert alle lokale meldingen uit dit bestand: training, streak en weekoverzicht. */
-export async function cancelAllReminders(): Promise<void> {
-  await cancelTrainingReminders();
-  const N = loadNotificationsModule();
-  if (!N) return;
-  try {
-    await N.cancelScheduledNotificationAsync(STREAK_PROTECTION_ID);
-  } catch {
-    // Negeer
-  }
-  try {
-    await N.cancelScheduledNotificationAsync(WEEK_OVERVIEW_ID);
-  } catch {
-    // Negeer
-  }
-}

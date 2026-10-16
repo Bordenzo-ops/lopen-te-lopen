@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, type Href } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
   useFonts,
@@ -13,7 +13,8 @@ import {
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
-import { useAppStore } from '../src/store/appStore';
+import { useAppStore, useHasHydrated } from '../src/store/appStore';
+import { rescheduleNotifications, listenForNotificationTaps } from '../src/services/notificationService';
 import { useIsLightTheme } from '../src/theme/useTheme';
 import {
   init as initPurchases,
@@ -116,6 +117,69 @@ export default function RootLayout() {
     });
     return () => sub.remove();
   }, []);
+
+  // Lokale meldingen (trainingsherinnering, weekvoortgang, countdown) opnieuw
+  // plannen zodra de store geladen is, bij terugkeer naar de voorgrond en bij
+  // elke wijziging die de inhoud raakt: schema, doel, trainingsdagen, voltooide
+  // of overgeslagen trainingen en de schakelaars in Instellingen. Gebundeld met
+  // een korte vertraging zodat een reeks wijzigingen een herplanning oplevert.
+  // rescheduleNotifications doet niets zonder aangezette categorie of
+  // toestemming en gooit nooit.
+  const hasHydrated = useHasHydrated();
+  useEffect(() => {
+    if (!hasHydrated) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const schedule = (delayMs: number) => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { void rescheduleNotifications(); }, delayMs);
+    };
+    schedule(0);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') schedule(0);
+    });
+    const unsubscribe = useAppStore.subscribe((state, prev) => {
+      if (
+        state.profile?.trainingDays !== prev.profile?.trainingDays ||
+        state.profile?.goal !== prev.profile?.goal ||
+        state.schemaMode !== prev.schemaMode ||
+        state.racePlan !== prev.racePlan ||
+        state.customPlan !== prev.customPlan ||
+        state.completedSessions !== prev.completedSessions ||
+        state.skippedSessions !== prev.skippedSessions ||
+        state.currentWeekTraining !== prev.currentWeekTraining ||
+        state.remindersEnabled !== prev.remindersEnabled ||
+        state.weeklyProgressEnabled !== prev.weeklyProgressEnabled ||
+        state.countdownEnabled !== prev.countdownEnabled ||
+        state.reminderHour !== prev.reminderHour
+      ) {
+        schedule(1000);
+      }
+    });
+    return () => {
+      if (timer) clearTimeout(timer);
+      sub.remove();
+      unsubscribe();
+    };
+  }, [hasHydrated]);
+
+  // Een tik op een van onze meldingen opent het relevante scherm (training van
+  // vandaag of de voortgang). Ook voor een koude start: de korte vertraging
+  // laat de opstart-redirect van index.tsx eerst zijn werk doen, zodat de
+  // navigatie niet door die redirect wordt overschreven.
+  const router = useRouter();
+  useEffect(() => {
+    if (!hasHydrated) return;
+    return listenForNotificationTaps((route) => {
+      if (!useAppStore.getState().hasCompletedOnboarding) return;
+      setTimeout(() => {
+        try {
+          router.navigate(route as Href);
+        } catch {
+          // Navigatie is niet kritiek: de app opent dan gewoon zoals normaal
+        }
+      }, 800);
+    });
+  }, [hasHydrated, router]);
 
   // Initialiseer RevenueCat en ververs de premium-status best-effort op de
   // achtergrond. Faalt stil naar geen premium zonder sleutel of netwerk en
