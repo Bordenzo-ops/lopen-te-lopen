@@ -10,17 +10,20 @@
      (x 790..4450, y 370..2580). Daarbuiten alleen achtergrond. */
   html, body, .canvas { width: 5244px; height: 2950px; }
 
+  /* De plaat (5244x2225) is kleiner dan het canvas; een mask laat hem aan
+     boven- en rechterrand zacht wegvloeien, zodat er nergens een rechte rand staat. */
   .art {
-    background-image: url('plates/wide.jpg');
-    background-size: 5244px auto;
-    background-position: -520px 100%;
+    inset: auto;
+    left: -700px; top: 575px; width: 5600px; height: 2375px;
+    background: url('plates/wide.jpg') center / 100% 100% no-repeat;
+    -webkit-mask-image:
+      linear-gradient(180deg, transparent 0%, #000 45%),
+      linear-gradient(90deg, #000 0%, #000 91%, transparent 100%);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
   }
   .scrim {
-    background:
-      linear-gradient(90deg, #0A0F1A 0%, #0A0F1A 24%, rgba(10,15,26,0.93) 38%, rgba(10,15,26,0.55) 50%, rgba(10,15,26,0) 62%),
-      /* Plaat is 4724px breed en 2225px hoog: laat de randen wegvloeien. */
-      linear-gradient(270deg, #0A0F1A 0%, #0A0F1A 9%, rgba(10,15,26,0) 22%),
-      linear-gradient(180deg, #0A0F1A 0%, #0A0F1A 27%, rgba(10,15,26,0.55) 33%, rgba(10,15,26,0) 46%);
+    background: linear-gradient(90deg, #0A0F1A 0%, #0A0F1A 24%, rgba(10,15,26,0.93) 38%, rgba(10,15,26,0.55) 50%, rgba(10,15,26,0) 62%);
   }
 
   .content {
@@ -67,9 +70,9 @@
   // Variant via ?v=a of ?v=b (zie render.mjs).
   const V = {
     a: { h: 'Van je eerste<br>kilometer tot<br><em>marathon</em>.',
-         s: 'Je persoonlijke hardloopcoach,<br>met schema\'s van 5 km en 10 km.' },
+         s: 'Je persoonlijke hardloopcoach,<br>met schema\'s van 5 km tot marathon.' },
     b: { h: 'Een coach<br>in je oor,<br><em>elke run</em>.',
-         s: 'Je persoonlijke hardloopcoach,<br>van eerste kilometer tot marathon.' },
+         s: 'Je persoonlijke hardloopcoach,<br>met schema\'s van 5 km tot marathon.' },
   };
   const v = V[new URLSearchParams(location.search).get('v')] || V.a;
   document.getElementById('h').innerHTML = v.h;
