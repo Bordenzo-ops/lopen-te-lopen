@@ -10,8 +10,10 @@ import { useAppStore, selectWeeklyKm, selectIsSessionCompleted, selectTotalKm, s
 import { resolveActivePlan } from '../../src/data/activePlan';
 import { raceScheduleStatus } from '../../src/data/raceSchedule';
 import { formatRaceDate } from '../../src/data/rotterdamRaces';
+import { raceCountdown } from '../../src/data/raceDetails';
 import { SessionCard } from '../../src/components/ui/SessionCard';
 import { StatRing } from '../../src/components/ui/StatRing';
+import { RaceCountdownCard } from '../../src/components/ui/RaceCountdownCard';
 import { Button } from '../../src/components/ui/Button';
 import { FadeSlideIn } from '../../src/components/motion/FadeSlideIn';
 import { ScaleIn } from '../../src/components/motion/ScaleIn';
@@ -199,6 +201,14 @@ export default function DashboardScreen() {
             </Text>
           </View>
         </View>
+
+        {/* Countdown naar het gekozen racedoel; tik opent de racepagina. */}
+        {racePlan && !raceCountdown(racePlan.race.date).isPast && (
+          <RaceCountdownCard
+            race={racePlan.race}
+            onPress={() => router.push({ pathname: '/race/[id]', params: { id: racePlan.race.id } })}
+          />
+        )}
 
         {/* Losstaande warming-up/cooling-down-routine (CP3): geen koppeling
             aan een sessie of aan het schema, gewoon los te starten. */}

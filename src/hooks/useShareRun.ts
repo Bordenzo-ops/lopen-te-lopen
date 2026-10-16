@@ -17,7 +17,7 @@ import { Alert, Platform, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import Constants from 'expo-constants';
-import { trackEvent } from '../services/analyticsService';
+import { trackEvent, type AnalyticsEvent, type AnalyticsProps } from '../services/analyticsService';
 import * as InstagramStory from '../../modules/instagram-story';
 import { palette } from '../theme/tokens';
 // Let op: expo-media-library wordt lazy geladen in saveToLibrary().
@@ -56,8 +56,18 @@ export interface ShareResult {
   error?: string;
 }
 
-export function useShareRun() {
+export interface UseShareRunOptions {
+  /** Analytics-event bij een geslaagde share. Standaard 'run_card_shared'. */
+  event?: AnalyticsEvent;
+  /** Extra eigenschappen bij dat event (naast het gebruikte kanaal). */
+  eventProps?: AnalyticsProps;
+}
+
+export function useShareRun(options: UseShareRunOptions = {}) {
   const cardRef = useRef<View>(null);
+  // Ref zodat share() niet bij elke render van identiteit wisselt.
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
   const [isSharing, setIsSharing] = useState(false);
 
   /** Leg de card vast als PNG en geef het bestandspad terug */
@@ -212,7 +222,10 @@ export function useShareRun() {
       // Funnel/groei: elke gedeelde run-kaart is gratis reclame. Alleen bij
       // succes en met het gebruikte kanaal (instagram/generic/saved).
       if (result.success) {
-        void trackEvent('run_card_shared', { method: result.method ?? 'unknown' });
+        void trackEvent(optionsRef.current.event ?? 'run_card_shared', {
+          ...optionsRef.current.eventProps,
+          method: result.method ?? 'unknown',
+        });
       }
       return result;
     } catch (err: any) {
