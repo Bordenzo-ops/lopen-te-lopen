@@ -194,7 +194,7 @@ export function useShareRun(options: UseShareRunOptions = {}) {
       // Kan alsnog gooien (bv. bij 'beperkte toegang' op iOS, waar accessPrivileges
       // 'limited' i.p.v. 'all' is) — daarom volledig binnen deze try/catch.
       await MediaLibrary.Asset.create(imageUri);
-      Alert.alert('Opgeslagen!', 'Je run-kaart staat in je fotobibliotheek. Open Instagram om te delen.');
+      Alert.alert('Opgeslagen!', 'Je kaart staat in je fotobibliotheek. Open Instagram om te delen.');
       return { success: true, method: 'saved' };
     } catch (err: any) {
       // Nooit een onafgehandelde rejection laten ontstaan (zie Sentry ANDROID-5 /
