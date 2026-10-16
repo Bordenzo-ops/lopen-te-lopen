@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>App Store Search Results 3840x1646</title>
+<link rel="stylesheet" href="brand.css">
+<style>
+  /* Veilige zone (aanname): tekst en schoen blijven binnen het middelste
+     ~75% breed x ~70% hoog (x 480..3360, y 250..1400). */
+  html, body, .canvas { width: 3840px; height: 1646px; }
+
+  .art { background-image: url('plates/wide.jpg'); background-size: 3840px auto; background-position: 0 50%; }
+  .scrim {
+    background: linear-gradient(90deg, #0A0F1A 0%, #0A0F1A 30%, rgba(10,15,26,0.92) 42%, rgba(10,15,26,0.5) 54%, rgba(10,15,26,0) 66%);
+  }
+
+  .content {
+    position: absolute; left: 500px; top: 0; bottom: 0; width: 1700px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .brand { display: flex; align-items: center; gap: 30px; }
+  .brand .icon { width: 130px; height: 130px; border-radius: 26%; display: block; }
+  .brand .name { font-size: 56px; font-weight: 700; letter-spacing: -0.01em; }
+  .rule { width: 150px; height: 14px; margin: 70px 0 44px; }
+  h1 { font-size: 190px; font-weight: 800; line-height: 0.98; letter-spacing: -0.045em; }
+  h1 em { font-style: normal; color: var(--orange-lite); }
+  .sub { margin-top: 56px; font-size: 62px; font-weight: 500; line-height: 1.38; color: #D1D5DB; }
+</style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="art"></div>
+    <div class="scrim"></div>
+    <div class="content">
+      <div class="brand">
+        <img class="icon" src="../../assets/icon.png" alt="">
+        <span class="name">Lopen te Lopen</span>
+      </div>
+      <div class="rule"></div>
+      <h1 id="h"></h1>
+      <p class="sub" id="s"></p>
+    </div>
+  </div>
+<script>
+  // Variant via ?v=a of ?v=b (zie render.mjs).
+  const V = {
+    a: { h: 'Van je eerste<br>kilometer tot<br><em>marathon</em>.',
+         s: 'Je persoonlijke hardloopcoach' },
+    b: { h: 'Een coach<br>in je oor,<br><em>elke run</em>.',
+         s: 'Je persoonlijke hardloopcoach' },
+  };
+  const v = V[new URLSearchParams(location.search).get('v')] || V.a;
+  document.getElementById('h').innerHTML = v.h;
+  document.getElementById('s').innerHTML = v.s;
+</script>
+</body>
+</html>
