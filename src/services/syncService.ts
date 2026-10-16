@@ -48,7 +48,8 @@ function profileToRow(userId: string, profile: UserProfile) {
     voice_guidance: profile.voiceGuidance,
     voice_type: profile.voiceType ?? null,
     route_planner_enabled: profile.routePlannerEnabled ?? null,
-    is_premium: profile.isPremium ?? null,
+    // is_premium is niet meer client-side: de RevenueCat-webhook zet het via
+    // public.entitlements (migratie 0007).
     updated_at: new Date().toISOString(),
   };
 }
