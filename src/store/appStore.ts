@@ -7,6 +7,11 @@ import type { GoalType, Session, TrainingWeek } from '../data/trainingPlans';
 import type { RacePlan } from '../data/buildRacePlan';
 import { resolveActivePlan } from '../data/activePlan';
 import { raceWeekForDate } from '../data/raceSchedule';
+import {
+  getSessionAttemptStatus,
+  isWeekHandledInCurrentAttempt,
+  estimateWeekStartedAt,
+} from '../utils/trainingWeek';
 import { ensureAnonymousSession } from '../services/authService';
 import { syncAll } from '../services/syncService';
 import { isPremiumActive as fetchPremiumActive } from '../services/purchaseService';
@@ -211,6 +216,18 @@ interface AppState {
    * de week afgehandeld zijn (voltooid of bewust overgeslagen).
    */
   currentWeekTraining: number;
+  /**
+   * Moment (ISO) waarop de huidige trainingsweek begon: gezet bij elke
+   * wijziging van currentWeekTraining (automatisch ophogen, week afronden,
+   * opnieuw, terug, reset). Twee doelen: (1) een sessie telt in trainingsmodus
+   * alleen als afgehandeld wanneer hij NA dit moment is voltooid/overgeslagen
+   * (poging-logica, zie utils/trainingWeek.ts), zodat een herhaalde week schoon
+   * begint; (2) het dashboard toont de terugkomkaart als dit 7+ dagen geleden
+   * is en de week nog openstaat. null = onbekend (nieuwe installatie vóór
+   * onboarding): dan wordt er niet op tijd gefilterd en is er geen kaart.
+   * Wordt niet naar de cloud gesynct (syncAll doet alleen profiel en runs).
+   */
+  weekStartedAt: string | null;
   /**
    * LET OP: dit veld is voor het WEDSTRIJDSCHEMA niet meer leidend. Het
    * wedstrijdschema is kalender-verankerd: de racedatum ligt vast, dus moet
@@ -563,6 +580,19 @@ interface AppState {
    * doelgebaseerde sjabloon. Klemt currentWeekTraining binnen het sjabloon.
    */
   clearCustomPlan: () => void;
+  /**
+   * Trainingsmodus: schuift door naar de volgende week (hooguit totalWeeks).
+   * Open sessies van de huidige week krijgen GEEN markering, ze blijven
+   * neutraal onafgehandeld. No-op in wedstrijdmodus.
+   */
+  advanceTrainingWeek: () => void;
+  /** Trainingsmodus: begint dezelfde week opnieuw (schone poging). No-op in wedstrijdmodus. */
+  restartTrainingWeek: () => void;
+  /**
+   * Trainingsmodus: één week terug (minimaal 1). Alleen aanroepen vanuit een
+   * expliciete gebruikersactie, de app kiest dit nooit zelf. No-op in wedstrijdmodus.
+   */
+  stepBackTrainingWeek: () => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -573,6 +603,7 @@ export const useAppStore = create<AppState>()(
       completedSessions: [],
       skippedSessions: [],
       currentWeekTraining: 1,
+      weekStartedAt: null,
       currentWeekRace: 1,
       activeSession: null,
       racePlan: null,
@@ -829,6 +860,7 @@ export const useAppStore = create<AppState>()(
           profile,
           hasCompletedOnboarding: true,
           currentWeekTraining: 1,
+          weekStartedAt: new Date().toISOString(),
           currentWeekRace: 1,
         });
         // Best-effort sync, blokkeert de onboarding niet
@@ -867,7 +899,7 @@ export const useAppStore = create<AppState>()(
       completeSession: (result, weekSessions) => {
         const {
           activeSession, completedSessions, skippedSessions, currentWeekTraining,
-          racePlan, schemaMode, profile, customPlan,
+          weekStartedAt, racePlan, schemaMode, profile, customPlan,
         } = get();
         if (!activeSession) return;
 
@@ -905,7 +937,13 @@ export const useAppStore = create<AppState>()(
         // (voltooid ÓF overgeslagen, gededupliceerd op sessionId — zie
         // isWeekHandled hierboven). Een lege week (0 sessies, mogelijk in een
         // vrij schema) telt meteen als af.
-        const weekDone = isWeekHandled(weekSessions, updatedCompleted, updatedSkipped);
+        // Trainingsmodus telt per "poging": alleen sessies na weekStartedAt
+        // tellen mee (zie utils/trainingWeek.ts). Wedstrijdmodus ongewijzigd.
+        const weekDone = schemaMode === 'training'
+          ? isWeekHandledInCurrentAttempt(
+              weekSessions, activeSession.weekNumber, updatedCompleted, updatedSkipped, weekStartedAt,
+            )
+          : isWeekHandled(weekSessions, updatedCompleted, updatedSkipped);
 
         // Alleen de TRAININGSMODUS hoogt currentWeekTraining op zodra de week
         // afgehandeld is — een doelgericht schema zonder deadline mag gewoon
@@ -936,6 +974,11 @@ export const useAppStore = create<AppState>()(
           skippedSessions: updatedSkipped,
           activeSession: null,
           ...(schemaMode === 'training' ? { currentWeekTraining: nextWeekTraining } : {}),
+          // Nieuwe week begonnen (alleen als het weeknummer echt veranderde):
+          // start een nieuwe poging.
+          ...(schemaMode === 'training' && nextWeekTraining !== currentWeekTraining
+            ? { weekStartedAt: new Date().toISOString() }
+            : {}),
         });
 
         // Best-effort sync van de nieuwe sessie naar de cloud
@@ -1003,14 +1046,17 @@ export const useAppStore = create<AppState>()(
 
       skipSession: (sessionId, weekNumber, weekSessions) => {
         const {
-          skippedSessions, completedSessions, currentWeekTraining,
+          skippedSessions, completedSessions, currentWeekTraining, weekStartedAt,
           racePlan, schemaMode, profile, customPlan,
         } = get();
 
-        // Al voltooid of al overgeslagen: niets doen
-        const alreadyHandled =
-          completedSessions.some(c => c.sessionId === sessionId) ||
-          skippedSessions.some(s => s.sessionId === sessionId);
+        // Al voltooid of al overgeslagen: niets doen. In trainingsmodus telt
+        // alleen de huidige poging van de week: een sessie uit een eerdere
+        // poging moet opnieuw overgeslagen kunnen worden.
+        const alreadyHandled = schemaMode === 'training'
+          ? getSessionAttemptStatus(sessionId, weekNumber, completedSessions, skippedSessions, weekStartedAt) !== null
+          : completedSessions.some(c => c.sessionId === sessionId) ||
+            skippedSessions.some(s => s.sessionId === sessionId);
         if (alreadyHandled) return;
 
         const updatedSkipped: SkippedSession[] = [
@@ -1023,7 +1069,11 @@ export const useAppStore = create<AppState>()(
         // completeSession). Zo loopt de gebruiker na een mindere week gewoon
         // door. Een lege week (weekSessions.length === 0) is triviaal altijd
         // "elke sessie afgehandeld" en telt dus meteen als af.
-        const weekDone = isWeekHandled(weekSessions, completedSessions, updatedSkipped);
+        const weekDone = schemaMode === 'training'
+          ? isWeekHandledInCurrentAttempt(
+              weekSessions, weekNumber, completedSessions, updatedSkipped, weekStartedAt,
+            )
+          : isWeekHandled(weekSessions, completedSessions, updatedSkipped);
 
         // Zelfde regel als in completeSession hierboven: alleen de
         // trainingsmodus schuift currentWeekTraining op. Het wedstrijdschema
@@ -1042,6 +1092,35 @@ export const useAppStore = create<AppState>()(
         set({
           skippedSessions: updatedSkipped,
           ...(schemaMode === 'training' ? { currentWeekTraining: nextWeekTraining } : {}),
+          ...(schemaMode === 'training' && nextWeekTraining !== currentWeekTraining
+            ? { weekStartedAt: new Date().toISOString() }
+            : {}),
+        });
+      },
+
+      advanceTrainingWeek: () => {
+        const { schemaMode, profile, racePlan, customPlan, currentWeekTraining } = get();
+        if (schemaMode !== 'training' || !profile) return;
+        const totalWeeks = resolveActivePlan({
+          schemaMode, racePlan, customPlan, goal: profile.goal, trainingDays: profile.trainingDays,
+        }).totalWeeks;
+        set({
+          currentWeekTraining: Math.min(currentWeekTraining + 1, totalWeeks),
+          weekStartedAt: new Date().toISOString(),
+        });
+      },
+
+      restartTrainingWeek: () => {
+        if (get().schemaMode !== 'training') return;
+        set({ weekStartedAt: new Date().toISOString() });
+      },
+
+      stepBackTrainingWeek: () => {
+        const { schemaMode, currentWeekTraining } = get();
+        if (schemaMode !== 'training') return;
+        set({
+          currentWeekTraining: Math.max(1, currentWeekTraining - 1),
+          weekStartedAt: new Date().toISOString(),
         });
       },
 
@@ -1050,6 +1129,7 @@ export const useAppStore = create<AppState>()(
           completedSessions: [],
           skippedSessions: [],
           currentWeekTraining: 1,
+          weekStartedAt: new Date().toISOString(),
           currentWeekRace: 1,
           activeSession: null,
         });
@@ -1068,6 +1148,7 @@ export const useAppStore = create<AppState>()(
           completedSessions: [],
           skippedSessions: [],
           currentWeekTraining: 1,
+          weekStartedAt: null,
           currentWeekRace: 1,
           activeSession: null,
           racePlan: null,
@@ -1127,7 +1208,7 @@ export const useAppStore = create<AppState>()(
             focus: 'Eigen invulling',
             sessions: [],
           }));
-          set({ customPlan: emptyWeeks, currentWeekTraining: 1 });
+          set({ customPlan: emptyWeeks, currentWeekTraining: 1, weekStartedAt: new Date().toISOString() });
         }
       },
 
@@ -1149,9 +1230,12 @@ export const useAppStore = create<AppState>()(
         const renumbered = customPlan
           .filter(w => w.weekNumber !== weekNumber)
           .map((w, i) => ({ ...w, weekNumber: i + 1 }));
+        const clampedWeek = Math.min(currentWeekTraining, Math.max(renumbered.length, 1));
         set({
           customPlan: renumbered,
-          currentWeekTraining: Math.min(currentWeekTraining, Math.max(renumbered.length, 1)),
+          currentWeekTraining: clampedWeek,
+          // Alleen een nieuwe poging als het weeknummer echt verschoof.
+          ...(clampedWeek !== currentWeekTraining ? { weekStartedAt: new Date().toISOString() } : {}),
         });
       },
 
@@ -1195,7 +1279,12 @@ export const useAppStore = create<AppState>()(
       clearCustomPlan: () => {
         const { profile, currentWeekTraining } = get();
         const totalWeeks = profile ? getTrainingPlan(profile.goal).weeks : currentWeekTraining;
-        set({ customPlan: null, currentWeekTraining: Math.min(currentWeekTraining, totalWeeks) });
+        const clampedWeek = Math.min(currentWeekTraining, totalWeeks);
+        set({
+          customPlan: null,
+          currentWeekTraining: clampedWeek,
+          ...(clampedWeek !== currentWeekTraining ? { weekStartedAt: new Date().toISOString() } : {}),
+        });
       },
     }),
     {
@@ -1210,7 +1299,14 @@ export const useAppStore = create<AppState>()(
       // Versie 2: streakEnabled (reeks vasthouden) is een eigen schakelaar
       // geworden. Voor 1.5.0 viel de streak-melding onder de ene
       // herinneringsschakelaar, dus wie die aan had houdt hem aan.
-      version: 2,
+      //
+      // Versie 3: weekStartedAt (start van de huidige trainingsweek, voor de
+      // poging-logica en de terugkomkaart). Bestaande gebruikers krijgen de
+      // vroegste voltooiing/overslag van hun huidige week, anders de laatste van
+      // de week ervoor, anders nu (zie estimateWeekStartedAt). Zo blijft de
+      // voortgang van een bezige week zichtbaar en krijgen vastgelopen
+      // gebruikers de terugkomkaart.
+      version: 3,
       migrate: (persistedState: any, version: number): any => {
         let state = (persistedState ?? {}) as Record<string, unknown> & { currentWeek?: number };
         if (version < 2 && typeof state.streakEnabled !== 'boolean') {
@@ -1220,11 +1316,23 @@ export const useAppStore = create<AppState>()(
           const week = typeof state.currentWeek === 'number' ? state.currentWeek : 1;
           const rest = { ...state };
           delete rest.currentWeek;
-          return {
+          state = {
             ...rest,
             currentWeekTraining: week,
             currentWeekRace: week,
             customPlan: (state as { customPlan?: TrainingWeek[] | null }).customPlan ?? null,
+          };
+        }
+        if (version < 3 && typeof state.weekStartedAt !== 'string') {
+          const week = typeof state.currentWeekTraining === 'number' ? state.currentWeekTraining : 1;
+          state = {
+            ...state,
+            weekStartedAt: estimateWeekStartedAt(
+              Array.isArray(state.completedSessions) ? (state.completedSessions as CompletedSession[]) : [],
+              Array.isArray(state.skippedSessions) ? (state.skippedSessions as SkippedSession[]) : [],
+              week,
+              new Date(),
+            ),
           };
         }
         return state;
@@ -1236,6 +1344,7 @@ export const useAppStore = create<AppState>()(
         completedSessions:      state.completedSessions,
         skippedSessions:        state.skippedSessions,
         currentWeekTraining:    state.currentWeekTraining,
+        weekStartedAt:          state.weekStartedAt,
         currentWeekRace:        state.currentWeekRace,
         racePlan:               state.racePlan,
         customPlan:             state.customPlan,

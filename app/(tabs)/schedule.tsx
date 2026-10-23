@@ -20,6 +20,7 @@ import { formatPacePerKm } from '../../src/data/paceModel';
 import { PressableScale } from '../../src/components/motion/PressableScale';
 import { ScaleIn } from '../../src/components/motion/ScaleIn';
 import { trackEvent } from '../../src/services/analyticsService';
+import { getSessionAttemptStatus } from '../../src/utils/trainingWeek';
 
 // Zachte fade + korte slide (8px) voor het uit-/inklappen van een weekblok.
 // `.reduceMotion` zorgt dat de systeeminstelling voor verminderde beweging
@@ -48,6 +49,10 @@ export default function ScheduleScreen() {
   const updateCustomSession = useAppStore(s => s.updateCustomSession);
   const removeCustomSession = useAppStore(s => s.removeCustomSession);
   const clearCustomPlan = useAppStore(s => s.clearCustomPlan);
+  const weekStartedAt = useAppStore(s => s.weekStartedAt);
+  const advanceTrainingWeek = useAppStore(s => s.advanceTrainingWeek);
+  const restartTrainingWeek = useAppStore(s => s.restartTrainingWeek);
+  const stepBackTrainingWeek = useAppStore(s => s.stepBackTrainingWeek);
   const { paceForType } = useRacePace();
   const [expandedWeek, setExpandedWeek] = useState<number>(currentWeek);
   const [showDayPicker, setShowDayPicker] = useState(false);
@@ -128,6 +133,41 @@ export default function ScheduleScreen() {
           style: 'destructive',
           onPress: () => { clearCustomPlan(); setEditMode(false); },
         },
+      ],
+    );
+  };
+
+  // Handmatige weekbediening (alleen trainingsmodus, huidige week). Altijd
+  // eerst een bevestiging. Open sessies krijgen bij doorgaan geen markering.
+  const handleAdvanceWeek = () => {
+    Alert.alert(
+      'Week afronden?',
+      `Je gaat door naar week ${currentWeek + 1}. Open trainingen van deze week blijven gewoon staan.`,
+      [
+        { text: 'Annuleren', style: 'cancel' },
+        { text: 'Afronden', onPress: advanceTrainingWeek },
+      ],
+    );
+  };
+
+  const handleRestartWeek = () => {
+    Alert.alert(
+      'Week opnieuw?',
+      `Je begint week ${currentWeek} opnieuw, met alle trainingen weer open.`,
+      [
+        { text: 'Annuleren', style: 'cancel' },
+        { text: 'Opnieuw', onPress: restartTrainingWeek },
+      ],
+    );
+  };
+
+  const handleStepBackWeek = () => {
+    Alert.alert(
+      `Terug naar week ${currentWeek - 1}?`,
+      'Handig na een pauze of als het te zwaar voelt.',
+      [
+        { text: 'Annuleren', style: 'cancel' },
+        { text: 'Week terug', onPress: stepBackTrainingWeek },
       ],
     );
   };
@@ -365,17 +405,22 @@ export default function ScheduleScreen() {
           // ze zijn puur een vrijblijvend aanbod (zie ook isWeekHandled in
           // appStore.ts, die dezelfde regel hanteert).
           const weekSessionIds = week.sessions.filter(s => !s.optional).map(s => s.id);
-          const completedCount = weekSessionIds.filter(
-            id => completedSessions.some(c => c.sessionId === id),
-          ).length;
+          // Huidige week in trainingsmodus: status per "poging" (alleen na
+          // weekStartedAt, zie utils/trainingWeek.ts). Andere weken en de
+          // wedstrijdmodus tonen zoals voorheen op sessionId.
+          const attemptMode = schemaMode === 'training' && isCurrent;
+          const statusOf = (id: string): 'completed' | 'skipped' | null => {
+            if (attemptMode) {
+              return getSessionAttemptStatus(id, week.weekNumber, completedSessions, skippedSessions, weekStartedAt);
+            }
+            if (completedSessions.some(c => c.sessionId === id)) return 'completed';
+            if (skippedSessions.some(sk => sk.sessionId === id)) return 'skipped';
+            return null;
+          };
           // Een week telt als afgehandeld zodra elke verplichte sessie voltooid
           // of bewust overgeslagen is, zodat een overgeslagen training de week
           // niet open laat.
-          const handledCount = weekSessionIds.filter(
-            id =>
-              completedSessions.some(c => c.sessionId === id) ||
-              skippedSessions.some(sk => sk.sessionId === id),
-          ).length;
+          const handledCount = weekSessionIds.filter(id => statusOf(id) !== null).length;
           const allDone = handledCount === weekSessionIds.length;
           // week.totalKm bevat bewust alleen de schema-kilometers, zodat de
           // voortgangsstatistieken niet vervuild raken door een vrijblijvend
@@ -439,8 +484,9 @@ export default function ScheduleScreen() {
                   style={styles.sessionList}
                 >
                   {week.sessions.map(session => {
-                    const isCompleted = completedSessions.some(c => c.sessionId === session.id);
-                    const isSkipped = skippedSessions.some(sk => sk.sessionId === session.id);
+                    const status = statusOf(session.id);
+                    const isCompleted = status === 'completed';
+                    const isSkipped = status === 'skipped';
                     const isHandled = isCompleted || isSkipped;
                     const pace = paceForType(session.type);
                     const canEditRow = isCustom && editMode;
@@ -495,6 +541,45 @@ export default function ScheduleScreen() {
                       <Plus size={16} color={colors.brandPrimary} strokeWidth={2.5} />
                       <Text style={styles.addSessionText}>Sessie toevoegen</Text>
                     </TouchableOpacity>
+                  )}
+
+                  {/* Onopvallende weekbediening: alleen trainingsmodus en alleen
+                      bij de huidige week. Afronden niet in de laatste week,
+                      terug niet in week 1. */}
+                  {attemptMode && !editMode && (
+                    <View style={styles.weekControlsRow}>
+                      {currentWeek < planTotal && (
+                        <TouchableOpacity
+                          onPress={handleAdvanceWeek}
+                          style={styles.weekControlBtn}
+                          hitSlop={6}
+                          accessibilityRole="button"
+                          accessibilityLabel="Week afronden"
+                        >
+                          <Text style={styles.weekControlText}>Week afronden</Text>
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity
+                        onPress={handleRestartWeek}
+                        style={styles.weekControlBtn}
+                        hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityLabel="Week opnieuw"
+                      >
+                        <Text style={styles.weekControlText}>Week opnieuw</Text>
+                      </TouchableOpacity>
+                      {currentWeek > 1 && (
+                        <TouchableOpacity
+                          onPress={handleStepBackWeek}
+                          style={styles.weekControlBtn}
+                          hitSlop={6}
+                          accessibilityRole="button"
+                          accessibilityLabel="Week terug"
+                        >
+                          <Text style={styles.weekControlText}>Week terug</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   )}
                 </Animated.View>
               )}
@@ -632,6 +717,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   addSessionText: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
     color: colors.brandPrimary,
+  },
+  weekControlsRow: {
+    flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center',
+    columnGap: spacing[2], borderTopWidth: 1, borderTopColor: colors.borderSubtle,
+    paddingTop: spacing[0.5],
+  },
+  weekControlBtn: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing[1] },
+  weekControlText: {
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.xs,
+    color: colors.textTertiary, textDecorationLine: 'underline',
   },
   customFooter: { gap: spacing[1.5], paddingTop: spacing[1], alignItems: 'center' },
   addWeekBtn: {

@@ -38,6 +38,7 @@ import { useAppStore, weekStartISO } from '../store/appStore';
 import { resolveActivePlan } from '../data/activePlan';
 import { formatLocalISODate, parseLocalISODate, raceScheduleStatus } from '../data/raceSchedule';
 import type { Session, TrainingWeek } from '../data/trainingPlans';
+import { isSessionHandledInCurrentAttempt } from '../utils/trainingWeek';
 
 // ── Eigen minimale typedefinities voor expo-notifications ──────────────────
 // Geen import type van de package: tsc moet ook schoon blijven zonder dat het
@@ -334,6 +335,13 @@ function ranOnDate(state: StoreState, date: Date): boolean {
 }
 
 function isSessionHandled(state: StoreState, session: Session): boolean {
+  // Trainingsmodus: alleen de huidige poging van de huidige week telt (zie
+  // utils/trainingWeek.ts), zodat een herhaalde week weer herinneringen krijgt.
+  if (state.schemaMode === 'training') {
+    return isSessionHandledInCurrentAttempt(
+      session.id, state.currentWeekTraining, state.completedSessions, state.skippedSessions, state.weekStartedAt,
+    );
+  }
   return (
     state.completedSessions.some(c => c.sessionId === session.id) ||
     state.skippedSessions.some(s => s.sessionId === session.id)

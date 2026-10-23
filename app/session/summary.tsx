@@ -43,6 +43,8 @@ export default function SummaryScreen() {
   const [showShare, setShowShare] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const skippedSessions   = useAppStore(s => s.skippedSessions);
+  const currentWeekTraining = useAppStore(s => s.currentWeekTraining);
+  const weekStartedAt      = useAppStore(s => s.weekStartedAt);
   const { hasAccess } = usePremium();
   // Maximaal 1x per 3 voltooide runs: niet opdringerig, wel regelmatig zichtbaar.
   // De hook wordt altijd aangeroepen (rules of hooks); de combinatie met
@@ -213,8 +215,18 @@ export default function SummaryScreen() {
   // sessionId op en mag niet dubbel meetellen.
   const requiredSessions = week?.sessions.filter(s => !s.optional);
   const totalInWeek = requiredSessions?.length ?? 3;
+  // Trainingsmodus, huidige week: alleen de huidige poging telt (zie
+  // utils/trainingWeek.ts), consistent met dashboard en schema. Is de week net
+  // afgerond en doorgeschoven (weekNum !== currentWeekTraining), dan is
+  // weekStartedAt al van de volgende week en tellen alle stempels van weekNum.
+  const attemptStart =
+    schemaMode === 'training' && weekNum === currentWeekTraining ? weekStartedAt : null;
+  const startMs = attemptStart ? Date.parse(attemptStart) : NaN;
+  const inAttempt = (at: string) => Number.isNaN(startMs) || Date.parse(at) >= startMs;
   const completedIds = new Set(
-    completedSessions.filter(c => c.weekNumber === weekNum).map(c => c.sessionId),
+    completedSessions
+      .filter(c => c.weekNumber === weekNum && inAttempt(c.completedAt))
+      .map(c => c.sessionId),
   );
   const completedInWeek = requiredSessions
     ? requiredSessions.filter(s => completedIds.has(s.id)).length
@@ -222,7 +234,9 @@ export default function SummaryScreen() {
   // De week is af volgens isWeekHandled: overgeslagen sessies tellen mee, zodat
   // de samenvatting niet afwijkt van het moment dat de app de week afrondt.
   const skippedIds = new Set(
-    skippedSessions.filter(s => s.weekNumber === weekNum).map(s => s.sessionId),
+    skippedSessions
+      .filter(s => s.weekNumber === weekNum && inAttempt(s.skippedAt))
+      .map(s => s.sessionId),
   );
   const weekDone = requiredSessions
     ? requiredSessions.every(s => completedIds.has(s.id) || skippedIds.has(s.id))

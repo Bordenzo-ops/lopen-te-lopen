@@ -23,6 +23,12 @@ import { usePremium } from '../../src/hooks/usePremium';
 import { useMaybeShowPremiumIntro } from '../../src/hooks/usePremiumIntro';
 import { computeRunStats, computeMilestones } from '../../src/data/achievements';
 import { formatPacePerKm } from '../../src/data/paceModel';
+import { trackEvent } from '../../src/services/analyticsService';
+import {
+  getSessionAttemptStatus,
+  isWeekHandledInCurrentAttempt,
+  getWeekReturnState,
+} from '../../src/utils/trainingWeek';
 import type { GoalType, Session } from '../../src/data/trainingPlans';
 
 const goalLabel: Record<GoalType, string> = {
@@ -39,6 +45,9 @@ export default function DashboardScreen() {
   const completedSessions = useAppStore(s => s.completedSessions);
   const skippedSessions = useAppStore(s => s.skippedSessions);
   const skipSession = useAppStore(s => s.skipSession);
+  const weekStartedAt = useAppStore(s => s.weekStartedAt);
+  const advanceTrainingWeek = useAppStore(s => s.advanceTrainingWeek);
+  const restartTrainingWeek = useAppStore(s => s.restartTrainingWeek);
   const totalKm = useAppStore(selectTotalKm);
   const racePlan   = useAppStore(s => s.racePlan);
   const customPlan = useAppStore(s => s.customPlan);
@@ -114,10 +123,38 @@ export default function DashboardScreen() {
   // totalKm 0 en telt dan gewoon als 0% in plaats van NaN.
   const weekProgress = week && week.totalKm > 0 ? Math.min(100, (weekKm / week.totalKm) * 100) : 0;
 
-  const nextSession = week?.sessions.find(
-    s => !completedSessions.some(c => c.sessionId === s.id) &&
-         !skippedSessions.some(sk => sk.sessionId === s.id),
-  );
+  // Trainingsmodus telt per "poging" van de week: alleen voltooiingen en
+  // overslagen na weekStartedAt tellen mee (zie utils/trainingWeek.ts). Een
+  // herhaalde of teruggezette week begint zo schoon. Wedstrijdmodus ongewijzigd.
+  const isTrainingMode = schemaMode === 'training';
+  const sessionStatus = (sessionId: string): 'completed' | 'skipped' | null => {
+    if (isTrainingMode) {
+      return getSessionAttemptStatus(sessionId, currentWeek, completedSessions, skippedSessions, weekStartedAt);
+    }
+    if (completedSessions.some(c => c.sessionId === sessionId)) return 'completed';
+    if (skippedSessions.some(sk => sk.sessionId === sessionId)) return 'skipped';
+    return null;
+  };
+
+  const nextSession = week?.sessions.find(s => sessionStatus(s.id) === null);
+
+  // Terugkomkaart: alleen in trainingsmodus, als de week al 7+ dagen openstaat.
+  const returnState = isTrainingMode && week
+    ? getWeekReturnState(
+        weekStartedAt,
+        new Date(),
+        isWeekHandledInCurrentAttempt(week.sessions, currentWeek, completedSessions, skippedSessions, weekStartedAt),
+      )
+    : null;
+  const isLastWeek = currentWeek >= totalWeeks;
+
+  const handleReturnChoice = (choice: 'advance' | 'restart') => {
+    const startMs = weekStartedAt ? Date.parse(weekStartedAt) : NaN;
+    const gapDays = Number.isNaN(startMs) ? 0 : Math.round((Date.now() - startMs) / (24 * 60 * 60 * 1000));
+    void trackEvent('week_return_choice', { choice, gapDays, week: currentWeek });
+    if (choice === 'advance') advanceTrainingWeek();
+    else restartTrainingWeek();
+  };
 
   // Sla de huidige sessie bewust over na een korte bevestiging. Geruststellende
   // toon: een keer overslaan is normaal en brengt het doel niet in gevaar.
@@ -353,8 +390,56 @@ export default function DashboardScreen() {
           </View>
         </View>
 
+        {/* Terugkomkaart: vervangt de volgende-sessiekaart. Geruststellend, geen
+            schuldgevoel; de gebruiker kiest zelf hoe het verder gaat. */}
+        {returnState && (
+          <View style={styles.returnCard}>
+            <Text style={styles.returnTitle}>
+              {returnState === 'short' ? 'Vorige week liep anders dan gepland' : 'Fijn dat je er weer bent'}
+            </Text>
+            <Text style={styles.returnText}>
+              {returnState === 'short'
+                ? 'Geen probleem, dat hoort erbij. Hoe wil je verder?'
+                : 'Pak het rustig weer op, op jouw tempo. Hoe wil je beginnen?'}
+            </Text>
+            {returnState === 'short' ? (
+              <>
+                {!isLastWeek && (
+                  <Button
+                    label={`Door naar week ${currentWeek + 1}`}
+                    onPress={() => handleReturnChoice('advance')}
+                    fullWidth
+                  />
+                )}
+                <Button
+                  label="Deze week opnieuw"
+                  onPress={() => handleReturnChoice('restart')}
+                  variant={isLastWeek ? 'primary' : 'secondary'}
+                  fullWidth
+                />
+              </>
+            ) : (
+              <>
+                <Button
+                  label="Deze week opnieuw"
+                  onPress={() => handleReturnChoice('restart')}
+                  fullWidth
+                />
+                {!isLastWeek && (
+                  <Button
+                    label={`Door naar week ${currentWeek + 1}`}
+                    onPress={() => handleReturnChoice('advance')}
+                    variant="secondary"
+                    fullWidth
+                  />
+                )}
+              </>
+            )}
+          </View>
+        )}
+
         {/* Volgende sessie */}
-        {nextSession ? (
+        {returnState ? null : nextSession ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Volgende sessie</Text>
             <SessionCard
@@ -449,8 +534,9 @@ export default function DashboardScreen() {
             <Text style={styles.sectionTitle}>Week {currentWeek} overzicht</Text>
             <View style={styles.sessionList}>
               {week.sessions.map(session => {
-                const isCompleted = completedSessions.some(c => c.sessionId === session.id);
-                const isSkipped = skippedSessions.some(sk => sk.sessionId === session.id);
+                const status = sessionStatus(session.id);
+                const isCompleted = status === 'completed';
+                const isSkipped = status === 'skipped';
                 return (
                   <SessionCard
                     key={session.id}
@@ -594,6 +680,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   upsellCard: {
     backgroundColor: colors.bgCard, borderRadius: radius.xl, padding: spacing[2],
     borderWidth: 1, borderColor: colors.premium + '44', gap: spacing[1.5],
+  },
+  returnCard: {
+    backgroundColor: colors.bgCard, borderRadius: radius.xl, padding: spacing[2],
+    borderWidth: 1, borderColor: colors.brandPrimary + '33', gap: spacing[1.5],
+  },
+  returnTitle: {
+    fontFamily: typography.fontFamily.sansBold, fontSize: typography.fontSize.lg,
+    color: colors.textPrimary,
+  },
+  returnText: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.base,
+    color: colors.textSecondary, lineHeight: typography.fontSize.base * typography.lineHeight.normal,
   },
   upsellHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
   upsellTitle: {

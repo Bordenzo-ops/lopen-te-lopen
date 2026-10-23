@@ -45,7 +45,8 @@ export type AnalyticsEvent =
   | 'training_days_changed'
   | 'premium_intro_shown'
   | 'premium_intro_cta'
-  | 'notification_category_toggled';
+  | 'notification_category_toggled'
+  | 'week_return_choice';
 
 /** Kleine, generieke eigenschappen bij een event. Geen persoonsgegevens. */
 export type AnalyticsProps = Record<string, string | number | boolean | null>;
