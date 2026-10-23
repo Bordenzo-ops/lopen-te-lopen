@@ -16,7 +16,7 @@
  */
 
 import React, { useEffect, useRef, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
@@ -39,7 +39,6 @@ import {
   PREMIUM_INTRO_SUBTITLE,
   PREMIUM_INTRO_BENEFITS,
   PREMIUM_INTRO_GUARANTEE_TITLE,
-  PREMIUM_INTRO_GUARANTEE_TEXT,
   PREMIUM_INTRO_PRICE_LINE,
   PREMIUM_INTRO_PRICE_SUBLINE,
   PREMIUM_INTRO_CTA_PRIMARY,
@@ -47,6 +46,8 @@ import {
   PREMIUM_INTRO_CTA_DISMISS,
   type PremiumIntroIcon,
 } from '../src/config/premiumIntroConfig';
+import { FINISH_GUARANTEE_TERMS_URL } from '../src/config/legalLinks';
+import { FINISH_GUARANTEE_LINK_LABEL, FINISH_GUARANTEE_TEXT } from '../src/config/finishGuarantee';
 
 // Vaste, donkere merkkleuren — bewust NIET via useThemeColors(), zie boven.
 const BG = palette.neutral[950];
@@ -89,6 +90,15 @@ export default function PremiumIntroScreen() {
   const onDismissForever = () => {
     useAppStore.getState().dismissPremiumIntro();
     close();
+  };
+
+  // Best-effort: lukt het openen niet, dan gebeurt er niets.
+  const onOpenGuaranteeTerms = async () => {
+    try {
+      await Linking.openURL(FINISH_GUARANTEE_TERMS_URL);
+    } catch {
+      // Stil falen
+    }
   };
 
   const onCta = () => {
@@ -151,14 +161,25 @@ export default function PremiumIntroScreen() {
           })}
         </View>
 
-        {/* Finish-garantie */}
-        <View style={styles.guaranteeCard}>
-          <ShieldCheck size={26} color={GOLD} strokeWidth={2} />
-          <View style={styles.guaranteeTextWrap}>
-            <Text style={styles.guaranteeTitle}>{PREMIUM_INTRO_GUARANTEE_TITLE}</Text>
-            <Text style={styles.guaranteeText}>{PREMIUM_INTRO_GUARANTEE_TEXT}</Text>
+        {/* Finish-garantie: alleen zichtbaar als finishGuarantee.ts is geactiveerd */}
+        {FINISH_GUARANTEE_TEXT ? (
+          <View style={styles.guaranteeCard}>
+            <ShieldCheck size={26} color={GOLD} strokeWidth={2} />
+            <View style={styles.guaranteeTextWrap}>
+              <Text style={styles.guaranteeTitle}>{PREMIUM_INTRO_GUARANTEE_TITLE}</Text>
+              <Text style={styles.guaranteeText}>
+                {FINISH_GUARANTEE_TEXT}{' '}
+                <Text
+                  style={styles.guaranteeLink}
+                  onPress={onOpenGuaranteeTerms}
+                  accessibilityRole="link"
+                >
+                  {FINISH_GUARANTEE_LINK_LABEL}
+                </Text>
+              </Text>
+            </View>
           </View>
-        </View>
+        ) : null}
 
         <Text style={styles.priceLine}>{PREMIUM_INTRO_PRICE_LINE}</Text>
         <Text style={styles.priceSubline}>{PREMIUM_INTRO_PRICE_SUBLINE}</Text>
@@ -346,6 +367,11 @@ const makeStyles = () => StyleSheet.create({
     fontSize: typography.fontSize.sm,
     color: TEXT_SECONDARY,
     lineHeight: typography.fontSize.sm * typography.lineHeight.normal,
+  },
+  guaranteeLink: {
+    fontFamily: typography.fontFamily.sansSemi,
+    color: GOLD,
+    textDecorationLine: 'underline',
   },
   priceLine: {
     fontFamily: typography.fontFamily.sansSemi,

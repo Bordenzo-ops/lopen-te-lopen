@@ -1,9 +1,11 @@
 /**
  * finishGuarantee
  *
- * Eén garantieregel voor op de paywall (app/paywall.tsx), met een link naar
- * de voorwaarden (FINISH_GUARANTEE_TERMS_URL in legalLinks.ts). Zolang
- * FINISH_GUARANTEE_TEXT leeg is, toont de paywall niets.
+ * Eén garantieregel voor op de paywall (app/paywall.tsx) én de garantiekaart
+ * op het premium-introscherm (app/premium-intro.tsx), met een link naar de
+ * voorwaarden (FINISH_GUARANTEE_TERMS_URL in legalLinks.ts). Dit is de ENE
+ * schakelaar: zolang FINISH_GUARANTEE_TEXT leeg is, tonen beide schermen
+ * niets (de kaart op premium-intro verdwijnt dan volledig).
  *
  * Activeren pas nadat de voorwaardenparagraaf juridisch is getoetst en op
  * voorwaarden.html#finish-garantie staat (alle drie de plekken). Het volledige

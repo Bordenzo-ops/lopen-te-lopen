@@ -38,6 +38,7 @@ import {
   rescheduleNotifications,
 } from '../../src/services/notificationService';
 import { trackEvent } from '../../src/services/analyticsService';
+import Constants from 'expo-constants';
 
 /** Beschikbare tijdstippen voor de trainingsherinnering (geen picker-package nodig). */
 const REMINDER_HOURS = [7, 8, 12, 18] as const;
@@ -1359,7 +1360,9 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          <Text style={styles.version}>Lopen te Lopen v1.0.0</Text>
+          <Text style={styles.version}>
+            {Constants.expoConfig?.version ? `Lopen te Lopen v${Constants.expoConfig.version}` : 'Lopen te Lopen'}
+          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
 

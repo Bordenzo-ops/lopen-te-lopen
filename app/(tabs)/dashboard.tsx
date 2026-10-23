@@ -72,6 +72,12 @@ export default function DashboardScreen() {
     return () => clearTimeout(t);
   }, [maybeShowIntro]);
 
+  // Persoonlijke mijlpalen en records, lokaal berekend uit de voltooide sessies.
+  // Staan vóór de vroege return (Rules of Hooks: profile kan null worden na
+  // "Account verwijderen").
+  const stats = useMemo(() => computeRunStats(completedSessions), [completedSessions]);
+  const milestones = useMemo(() => computeMilestones(stats), [stats]);
+
   if (!profile) return null;
 
   const resolved    = resolveActivePlan({ schemaMode, racePlan, customPlan, goal: profile.goal, trainingDays: profile.trainingDays });
@@ -176,9 +182,6 @@ export default function DashboardScreen() {
   // smalle toestellen naast elkaar passen.
   const ringSize = Math.min(110, Math.floor((width - spacing[3] * 2 - spacing[2] * 2) / 3));
 
-  // Persoonlijke mijlpalen en records, lokaal berekend uit de voltooide sessies.
-  const stats = useMemo(() => computeRunStats(completedSessions), [completedSessions]);
-  const milestones = useMemo(() => computeMilestones(stats), [stats]);
   const reachedMilestones = milestones.filter(m => m.reached);
   const nextMilestone = milestones.find(m => !m.reached);
 

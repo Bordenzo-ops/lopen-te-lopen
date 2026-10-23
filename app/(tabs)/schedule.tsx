@@ -57,6 +57,16 @@ export default function ScheduleScreen() {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
+  // Bewerkmodus is alleen zinvol met een actief vrij schema; verlaat hem
+  // automatisch zodra dat niet meer zo is (schema gewist of van modus gewisseld).
+  // Staat bewust vóór de vroege return hieronder (Rules of Hooks: profile kan
+  // null worden na "Account verwijderen"). Zelfde conditie als isCustom in
+  // resolveActivePlan, maar zonder profiel nodig te hebben.
+  const customActive = schemaMode === 'training' && !!customPlan;
+  useEffect(() => {
+    if (!customActive && editMode) setEditMode(false);
+  }, [customActive, editMode]);
+
   if (!profile) return null;
 
   const trainingDays = profile.trainingDays ?? DEFAULT_TRAINING_DAYS;
@@ -84,12 +94,6 @@ export default function ScheduleScreen() {
   // 'bezig' of 'na' (racedatum al gepasseerd). Bepaalt hieronder welke
   // regel we onder de wedstrijdnaam tonen — zie raceScheduleStatus.
   const raceStatus = useRace && racePlan ? raceScheduleStatus(racePlan, new Date()) : null;
-
-  // Bewerkmodus is alleen zinvol met een actief vrij schema; verlaat hem
-  // automatisch zodra dat niet meer zo is (schema gewist of van modus gewisseld).
-  useEffect(() => {
-    if (!isCustom && editMode) setEditMode(false);
-  }, [isCustom, editMode]);
 
   const handleDeleteSession = (weekNumber: number, session: Session) => {
     Alert.alert(

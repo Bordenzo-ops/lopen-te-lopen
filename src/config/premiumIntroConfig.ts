@@ -56,8 +56,7 @@ export const PREMIUM_INTRO_BENEFITS: PremiumIntroBenefit[] = [
 
 export const PREMIUM_INTRO_GUARANTEE_TITLE = 'Finish-garantie';
 
-export const PREMIUM_INTRO_GUARANTEE_TEXT =
-  'Volg het schema en haal je de finish niet? Je volgende jaar is gratis.';
+// De garantietekst zelf staat bewust in finishGuarantee.ts (de ene schakelaar).
 
 export const PREMIUM_INTRO_PRICE_LINE = '14 dagen gratis, daarna €49 per jaar';
 
