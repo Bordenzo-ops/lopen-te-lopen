@@ -20,7 +20,7 @@ Schrijft naar:
 
 App Store Connect Header- en Search Results-assets (twee kopvarianten per formaat,
 variant via `?v=a|b` in `render.mjs`) komen in `store-assets/app-store-header/`:
-`header-{a,b}-5244x2950.png` en `search-{a,b}-3840x1646.png`. Alleen deze baken je
+`header-{a,b}-5244x2950.png` en `search-{a,b}-3840x2560.png`. Alleen deze baken je
 met `node scripts/brand-assets/render.mjs app-store-header`.
 
 Vereist een geïnstalleerde Chrome of Edge; `render.mjs` zoekt zelf de juiste plek.

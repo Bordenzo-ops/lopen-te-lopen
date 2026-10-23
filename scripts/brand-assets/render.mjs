@@ -50,8 +50,8 @@ const TARGETS = [
   // App Store Connect: Header- en Search Results-asset (twee kopvarianten per formaat)
   { html: 'app-store-header.html', query: 'v=a', out: 'store-assets/app-store-header/header-a-5244x2950.png', w: 5244, h: 2950 },
   { html: 'app-store-header.html', query: 'v=b', out: 'store-assets/app-store-header/header-b-5244x2950.png', w: 5244, h: 2950 },
-  { html: 'app-store-search.html', query: 'v=a', out: 'store-assets/app-store-header/search-a-3840x1646.png', w: 3840, h: 1646 },
-  { html: 'app-store-search.html', query: 'v=b', out: 'store-assets/app-store-header/search-b-3840x1646.png', w: 3840, h: 1646 },
+  { html: 'app-store-search.html', query: 'v=a', out: 'store-assets/app-store-header/search-a-3840x2560.png', w: 3840, h: 2560 },
+  { html: 'app-store-search.html', query: 'v=b', out: 'store-assets/app-store-header/search-b-3840x2560.png', w: 3840, h: 2560 },
 ];
 
 // Optioneel filter: `node render.mjs app-store` bakt alleen targets waarvan het pad dat bevat.
