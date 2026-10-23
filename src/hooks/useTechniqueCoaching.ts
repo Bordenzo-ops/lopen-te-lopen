@@ -17,7 +17,9 @@
  *    cue (rond het 1,5 uur-punt) blijft de hook stil.
  *  - Rouleert door TECH_TEXTS (modulo de lijstlengte, zie
  *    techniqueCueUtterance) zodat een lange duurloop niet steeds dezelfde tip
- *    herhaalt.
+ *    herhaalt. Met `runOffset` (in active.tsx het aantal eerder voltooide
+ *    sessies) start elke run MAX_CUES varianten verderop, anders zouden alleen
+ *    de eerste zes teksten ooit klinken.
  *
  * Gebruik: `onTick(elapsedSeconds)` bij elke seconde van de sessietimer
  * (zelfde ref-patroon als useIntervalCoaching.onTick in active.tsx), alleen
@@ -37,6 +39,7 @@ export function useTechniqueCoaching(
   enabled: boolean,
   isLongRun: boolean,
   voiceType: VoiceType = 'female',
+  runOffset: number = 0,
 ) {
   const cueCountRef = useRef(0);
 
@@ -46,10 +49,10 @@ export function useTechniqueCoaching(
     if (elapsedSeconds < FIRST_CUE_SECONDS) return;
     if ((elapsedSeconds - FIRST_CUE_SECONDS) % INTERVAL_SECONDS !== 0) return;
 
-    const variant = cueCountRef.current;
+    const variant = runOffset * MAX_CUES + cueCountRef.current;
     cueCountRef.current += 1;
     voiceService.speakPhrases(techniqueCueUtterance(variant), voiceType);
-  }, [enabled, isLongRun, voiceType]);
+  }, [enabled, isLongRun, voiceType, runOffset]);
 
   return { onTick };
 }

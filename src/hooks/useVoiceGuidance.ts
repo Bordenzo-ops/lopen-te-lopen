@@ -29,6 +29,7 @@ export function useVoiceGuidance(
   enabled: boolean,
   targetDistanceKm: number,
   voiceType: VoiceType = 'female',
+  runOffset: number = 0,
 ) {
   const lastSpokenKm   = useRef(0);
   const halfwaySpoken  = useRef(false);
@@ -44,7 +45,7 @@ export function useVoiceGuidance(
     const completedKm = Math.floor(distanceKm);
     if (completedKm > 0 && completedKm > lastSpokenKm.current) {
       lastSpokenKm.current = completedKm;
-      voiceService.speakPhrases(kmSplitUtterance(completedKm, paceSecPerKm), voiceType);
+      voiceService.speakPhrases(kmSplitUtterance(completedKm, paceSecPerKm, runOffset), voiceType);
     }
 
     // Halverwege-melding
@@ -58,7 +59,7 @@ export function useVoiceGuidance(
       const remaining = targetDistanceKm - distanceKm;
       voiceService.speakPhrases(halfwayUtterance(remaining), voiceType);
     }
-  }, [enabled, targetDistanceKm, voiceType]);
+  }, [enabled, targetDistanceKm, voiceType, runOffset]);
 
   /**
    * Aanroepen wanneer de hartslagzone verandert.

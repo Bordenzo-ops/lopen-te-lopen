@@ -40,7 +40,11 @@
  * Variant-tellers (go/recover/getReady/workEnd) rouleren net als in
  * useHeartRateCoaching.ts, zodat herhaalde cues van hetzelfde soort niet
  * steeds identiek klinken (zie intervalCueUtterance in voicePhrases.ts, die
- * zelf modulo op de varianten klemt).
+ * zelf modulo op de varianten klemt). Met `runOffset` (in active.tsx het
+ * aantal eerder voltooide sessies) begint elke run IV_VARIANT_STRIDE
+ * varianten verderop; de tellers starten dus niet steeds op 0 en over
+ * opeenvolgende runs klinken ook de latere varianten. De stap 3 is coprime
+ * met de lijstlengtes (8 en 10), dus de beginpunten doorlopen de hele lijst.
  *
  * Zonder `enabled` of zonder `structure` doet de hook niets.
  *
@@ -59,11 +63,17 @@ import { intervalCueUtterance, type PhraseUtterance } from '../config/voicePhras
 import { buildIntervalSegments, intervalStateAt } from '../data/intervals';
 import type { IntervalStructure } from '../data/trainingPlans';
 
+// Aantal varianten dat de variant-tellers per run opschuiven (zie toelichting
+// bovenaan). Geen vaste lijstlengte: de catalogus mag groeien.
+const IV_VARIANT_STRIDE = 3;
+
 export function useIntervalCoaching(
   enabled: boolean,
   structure: IntervalStructure | undefined,
   voiceType: VoiceType = 'female',
+  runOffset: number = 0,
 ) {
+  const variantBase = runOffset * IV_VARIANT_STRIDE;
   // Eenmalig berekend zolang de structure ongewijzigd blijft (die staat vast
   // voor de duur van een sessie, zie de opmerking bij session in active.tsx).
   const segments = useMemo(
@@ -127,10 +137,10 @@ export function useIntervalCoaching(
         } else if (seg.isLastWork) {
           speakUtterance(intervalCueUtterance('go', { isLast: true }));
         } else {
-          speakUtterance(intervalCueUtterance('go', { variant: goVariantRef.current++ }));
+          speakUtterance(intervalCueUtterance('go', { variant: variantBase + goVariantRef.current++ }));
         }
       } else if (seg.phase === 'recovery') {
-        speakUtterance(intervalCueUtterance('recover', { variant: recoverVariantRef.current++ }));
+        speakUtterance(intervalCueUtterance('recover', { variant: variantBase + recoverVariantRef.current++ }));
       } else if (seg.phase === 'cooldown') {
         speakUtterance(intervalCueUtterance('cooldown'));
       }
@@ -152,7 +162,7 @@ export function useIntervalCoaching(
         state.segmentRemainingSec <= 12
       ) {
         flags.add(key);
-        speakUtterance(intervalCueUtterance('getReady', { variant: getReadyVariantRef.current++ }));
+        speakUtterance(intervalCueUtterance('getReady', { variant: variantBase + getReadyVariantRef.current++ }));
       }
     }
 
@@ -165,7 +175,7 @@ export function useIntervalCoaching(
         state.segmentRemainingSec <= 10
       ) {
         flags.add(key);
-        speakUtterance(intervalCueUtterance('workEnd', { variant: workEndVariantRef.current++ }));
+        speakUtterance(intervalCueUtterance('workEnd', { variant: variantBase + workEndVariantRef.current++ }));
       }
     }
 
@@ -181,7 +191,7 @@ export function useIntervalCoaching(
         speakUtterance(intervalCueUtterance('workHalf'));
       }
     }
-  }, [enabled, segments, voiceType]);
+  }, [enabled, segments, voiceType, variantBase]);
 
   return { onTick, reset };
 }

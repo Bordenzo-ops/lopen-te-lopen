@@ -83,8 +83,15 @@ const PACE_SEC_STEP = 5;
 // LET OP: index 0-5 zijn de OORSPRONKELIJKE zes teksten en blijven letterlijk
 // staan — hun clips zijn al gegenereerd. Index 6-23 zijn de fase E-uitbreiding
 // (18 nieuwe teksten, zelfde toon/lengte). De bestaande roulatie
-// `(completedKm - 1) % ENC_MESSAGES.length` in kmSplitUtterance hieronder
-// werkt ongewijzigd door met de langere lijst.
+// `(completedKm - 1 + run-offset) % ENC_MESSAGES.length` in kmSplitUtterance
+// hieronder werkt ongewijzigd door met de langere lijst.
+//
+// Run-offset: zonder offset begint elke run bij index 0, waardoor de latere
+// teksten alleen na een lange afstand klinken (enc_24+ pas na km 25). De
+// aanroeper geeft het aantal eerder voltooide sessies mee; elke run schuift
+// ENC_RUN_STRIDE teksten op. 7 is coprime met de lijstlengte (80), dus de
+// beginpunten doorlopen over runs alle teksten, ook bij korte runs.
+const ENC_RUN_STRIDE = 7;
 const ENC_MESSAGES = [
   'Goed bezig, houd dit tempo aan.',
   'Super! Blijf gelijkmatig lopen.',
@@ -130,8 +137,8 @@ const ENC_MESSAGES = [
   // Index 40-79: fase G-uitbreiding (augustus 2026, laatste ronde vóór het
   // aflopen van het ElevenLabs-abonnement). Dit is veruit de vaakst gehoorde
   // lijst — hij klinkt bij ELKE kilometer — dus hier levert extra variatie het
-  // meeste op. Geen codewijziging nodig: kmSplitUtterance rouleert al modulo
-  // ENC_MESSAGES.length.
+  // meeste op. kmSplitUtterance rouleert modulo ENC_MESSAGES.length, met een
+  // run-offset (zie ENC_RUN_STRIDE) zodat deze teksten ook in korte runs klinken.
   'Prachtig tempo, hou dit vast.',
   'Je benen doen precies wat je vraagt.',
   'Lekker gelijkmatig, ga zo door.',
@@ -1274,9 +1281,13 @@ export type PhraseUtterance = {
  * (seconden op een veelvoud van 5) omdat anders elk denkbaar tempo een eigen
  * clip zou vergen.
  */
-export function kmSplitUtterance(completedKm: number, paceSecPerKm: number): PhraseUtterance {
+export function kmSplitUtterance(
+  completedKm: number,
+  paceSecPerKm: number,
+  runOffset: number = 0,
+): PhraseUtterance {
   const kmId = `km_${clamp(completedKm, KM_SPLIT_MIN, KM_SPLIT_MAX)}`;
-  const encIndex = (completedKm - 1) % ENC_MESSAGES.length;
+  const encIndex = (completedKm - 1 + Math.max(0, runOffset) * ENC_RUN_STRIDE) % ENC_MESSAGES.length;
   const encId = `enc_${encIndex}`;
 
   const ids = [kmId];
@@ -1388,7 +1399,9 @@ export function finishUtterance(
 /** Hartslagzone-overgang: "Zone 3. Tempozone. Uitdagend maar houdbaar." */
 export function zoneUtterance(zone: string): PhraseUtterance {
   const desc = ZONE_DESCRIPTIONS[zone] ?? zone;
-  const fallbackText = `Zone ${zone}. ${desc}`;
+  // Zelfde zinsvorm als de catalogusclip ("Zone 3. ..."), niet "Zone Z3".
+  const zoneLabel = zone in ZONE_DESCRIPTIONS ? zone.replace(/^Z/, '') : zone;
+  const fallbackText = `Zone ${zoneLabel}. ${desc}`;
   // Onbekende/onverwachte zone-waarde: geen catalogusclip, alleen fallback
   // (verdedigend — kan in theorie niet gebeuren, ZONE_IDS dekt Z1..Z5).
   if (!(zone in ZONE_DESCRIPTIONS)) return { ids: [], fallbackText };
@@ -1396,10 +1409,10 @@ export function zoneUtterance(zone: string): PhraseUtterance {
 }
 
 /**
- * Hartslagcoaching: één van de drie types, met een variant (0/1/2) zodat
+ * Hartslagcoaching: één van de drie types, met een variant (0-based) zodat
  * herhaalde meldingen van hetzelfde type niet steeds identiek klinken. De
  * aanroeper (useHeartRateCoaching) rouleert de variant per type. Een
- * ongeldige/ontbrekende variant klemt terug naar 0..2 (modulo), zodat deze
+ * ongeldige/ontbrekende variant klemt terug naar 0..lengte-1 (modulo), zodat deze
  * functie nooit een niet-bestaande clip-id kan opleveren.
  */
 export function hrUtterance(kind: 'high' | 'low' | 'ok', variant: number = 0): PhraseUtterance {

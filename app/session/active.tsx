@@ -307,6 +307,7 @@ export default function ActiveSessionScreen() {
     voiceEnabled,
     session?.distanceKm ?? 0,
     voiceType,
+    completedSessionsCount,
   );
   const {
     onGpsUpdate: onRouteCoachingUpdate,
@@ -329,6 +330,7 @@ export default function ActiveSessionScreen() {
     session?.zone,
     maxHrForZones,
     voiceType,
+    completedSessionsCount,
   );
   // Techniek-cues tijdens lange duurlopen (fase G/CP7) — zuiver tijdgedreven,
   // zie useTechniqueCoaching.ts. Via een ref hieronder aangeroepen vanuit de
@@ -337,6 +339,7 @@ export default function ActiveSessionScreen() {
     voiceEnabled,
     session?.type === 'long',
     voiceType,
+    completedSessionsCount,
   );
   const techniqueOnTickRef = useRef(onTechniqueTick);
   techniqueOnTickRef.current = onTechniqueTick;
@@ -352,13 +355,39 @@ export default function ActiveSessionScreen() {
     () => (session?.interval ? buildIntervalSegments(session.interval) : []),
     [session],
   );
-  const intervalCoaching = useIntervalCoaching(voiceEnabled, session?.interval, voiceType);
+  const intervalCoaching = useIntervalCoaching(
+    voiceEnabled, session?.interval, voiceType, completedSessionsCount,
+  );
   // Refs zodat de secondetimer hieronder (met een leeg dependency-array)
   // altijd de laatste waarden ziet, net als onHeartRateCoachingUpdateRef hierboven.
   const isIntervalRef = useRef(isInterval);
   isIntervalRef.current = isInterval;
   const intervalOnTickRef = useRef(intervalCoaching.onTick);
   intervalOnTickRef.current = intervalCoaching.onTick;
+
+  // handleLocation hieronder leeft in een effect met een leeg dependency-array
+  // en ziet dus alleen de waarden van de EERSTE render. Alles wat daar live
+  // moet zijn, loopt via een ref die elke render wordt bijgewerkt. Met name
+  // onRouteCoachingUpdate was anders voor altijd de versie van vóór de
+  // gekozen route (enabled=false) en de routebegeleiding vuurde nooit.
+  const onRouteCoachingUpdateRef = useRef(onRouteCoachingUpdate);
+  onRouteCoachingUpdateRef.current = onRouteCoachingUpdate;
+  const onKmUpdateRef = useRef(onKmUpdate);
+  onKmUpdateRef.current = onKmUpdate;
+  // gpsReady-ref: ook in handleLocation zelf op true gezet, zodat de eerste-fix-tak
+  // niet bij elk volgend punt opnieuw draait (firstGpsRef bleef anders wissen).
+  const gpsReadyRef = useRef(gpsReady);
+  gpsReadyRef.current = gpsReady || gpsReadyRef.current;
+  const autoPauseEnabledRef = useRef(autoPauseEnabled);
+  autoPauseEnabledRef.current = autoPauseEnabled;
+  // Premium-status laadt asynchroon (RevenueCat), dus de eerste render kan nog
+  // "gratis" claimen terwijl de gebruiker premium is.
+  const canUsePlannerRef = useRef(canUsePlanner);
+  canUsePlannerRef.current = canUsePlanner;
+  const routeLimitReachedRef = useRef(routeLimitReached);
+  routeLimitReachedRef.current = routeLimitReached;
+  const promptUpgradeRef = useRef(promptUpgrade);
+  promptUpgradeRef.current = promptUpgrade;
 
   // ── Init sessie ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -482,7 +511,8 @@ export default function ActiveSessionScreen() {
       setGpsError(prev => (prev ? null : prev));
 
       // ── Eerste GPS-fix ──────────────────────────────────────────────
-      if (!gpsReady) {
+      if (!gpsReadyRef.current) {
+        gpsReadyRef.current = true;
         if (gpsTimeoutRef.current) {
           clearTimeout(gpsTimeoutRef.current);
           gpsTimeoutRef.current = null;
@@ -496,14 +526,14 @@ export default function ActiveSessionScreen() {
         if (isIntervalRef.current && !routePlanTriggered.current) {
           routePlanTriggered.current = true;
           startSessionNow(null);
-        } else if (canUsePlanner && !routePlanTriggered.current) {
+        } else if (canUsePlannerRef.current && !routePlanTriggered.current) {
           routePlanTriggered.current = true;
           setShowRouteQuestion(true);
         } else if (!routePlanTriggered.current) {
           routePlanTriggered.current = true;
           // Gratis weeklimiet bereikt: nette upgrade-prompt en zonder route starten
-          if (routeLimitReached) {
-            promptUpgrade(
+          if (routeLimitReachedRef.current) {
+            promptUpgradeRef.current(
               'Routeplanner-limiet bereikt',
               `Met gratis kun je ${PREMIUM_CONFIG.FREE_ROUTE_PLANS_PER_WEEK} routes per week plannen. Met premium plan je onbeperkt routes. Je sessie start gewoon, zonder vooraf geplande route.`,
             );
@@ -519,7 +549,7 @@ export default function ActiveSessionScreen() {
       if (countdownActiveRef.current) return;
       if (!sessionStartTimeRef.current) return;
 
-      if (autoPauseEnabled && !manuallyPausedRef.current) {
+      if (autoPauseEnabledRef.current && !manuallyPausedRef.current) {
         const sinceStart = now - sessionStartTimeRef.current;
         const isStill = speed != null
           ? speed < AUTO_PAUSE_SPEED_THRESHOLD_MPS
@@ -598,8 +628,8 @@ export default function ActiveSessionScreen() {
 
       // Km-/halverwege-cues slaan we over bij een intervalsessie: die wordt
       // gestuurd door de segmentklok (useIntervalCoaching), niet door afstand.
-      if (!isIntervalRef.current) onKmUpdate(distanceRef.current, paceRef.current);
-      onRouteCoachingUpdate(latitude, longitude, distanceRef.current);
+      if (!isIntervalRef.current) onKmUpdateRef.current(distanceRef.current, paceRef.current);
+      onRouteCoachingUpdateRef.current(latitude, longitude, distanceRef.current);
     };
 
     (async () => {

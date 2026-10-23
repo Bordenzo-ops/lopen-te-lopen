@@ -27,11 +27,15 @@
  *    terugkeer naar de doelzone of een wissel van richting.
  *  - Na een "te hoog"-melding, zodra de hartslag terug in de doelzone is:
  *    één korte bevestiging ("Mooi zo, precies goed."), ook met cooldown.
- *  - Elk type (te hoog/te laag/bevestiging) heeft drie tekstvarianten in de
- *    catalogus (hr_{high,low,ok}_0..2, zie voicePhrases.ts). Deze hook
- *    rouleert per type met een eigen teller: de eerste melding van een type
- *    is variant 0, de tweede variant 1, enz. (modulo 3) — zo hoort iemand die
- *    vaker dezelfde soort melding krijgt niet steeds exact dezelfde zin.
+ *  - Elk type (te hoog/te laag/bevestiging) heeft meerdere tekstvarianten in
+ *    de catalogus (hr_{high,low,ok}_0.., zie HR_TEXTS in voicePhrases.ts).
+ *    Deze hook rouleert per type met een eigen teller binnen de run, plus een
+ *    run-offset (`runOffset`, in active.tsx het aantal eerder voltooide
+ *    sessies): variant = runOffset * MAX_PER_TYPE + teller. Omdat er per run
+ *    hooguit MAX_PER_TYPE meldingen per type zijn, gaat elke run verder waar
+ *    de vorige stopte en doorloopt de hele lijst over opeenvolgende runs
+ *    (hrUtterance klemt zelf modulo de lijstlengte). Zonder offset zouden
+ *    alleen variant 0 en 1 ooit klinken.
  *
  * Zonder maxHr, zonder enabled, zonder doelzone of zonder (geldige) metingen
  * doet de hook niets.
@@ -83,6 +87,7 @@ export function useHeartRateCoaching(
   targetZone: HeartRateZone | undefined,
   maxHr: number | null,
   voiceType: VoiceType = 'female',
+  runOffset: number = 0,
 ) {
   // Richting en starttijd (in elapsedSeconds) van de huidige aaneengesloten
   // afwijking. Null zolang de hartslag in de doelzone zit.
@@ -98,7 +103,7 @@ export function useHeartRateCoaching(
   // Na een "te hoog"-melding wachten we op terugkeer naar de doelzone om één
   // keer een korte bevestiging te geven.
   const awaitingReturnConfirmationRef = useRef(false);
-  // Variant-tellers voor de roulatie van hr_{type}_0..2 (zie voicePhrases.ts
+  // Variant-tellers voor de roulatie van hr_{type}_N (zie voicePhrases.ts
   // en de toelichting bovenaan dit bestand). Eén teller per type: een wissel
   // naar het andere type beïnvloedt de teller van het eerste type niet.
   const highVariantRef = useRef(0);
@@ -107,14 +112,15 @@ export function useHeartRateCoaching(
 
   // Spreekt een hartslagcoaching-melding uit via de catalogus (zie
   // src/config/voicePhrases.ts) — 'high'/'low'/'ok' matchen de drie types,
-  // elk met drie tekstvarianten. Rouleert per type (modulo 3) via de
-  // bijbehorende ref hierboven.
+  // elk met meerdere tekstvarianten. Rouleert per type via de bijbehorende ref
+  // hierboven, verschoven met de run-offset; hrUtterance klemt modulo de
+  // lijstlengte.
   const speak = useCallback((kind: 'high' | 'low' | 'ok') => {
     const variantRef = kind === 'high' ? highVariantRef : kind === 'low' ? lowVariantRef : okVariantRef;
-    const variant = variantRef.current % 3;
+    const variant = runOffset * MAX_PER_TYPE + variantRef.current;
     variantRef.current += 1;
     voiceService.speakPhrases(hrUtterance(kind, variant), voiceType);
-  }, [voiceType]);
+  }, [voiceType, runOffset]);
 
   /** Zet alle interne toestand terug, bijvoorbeeld bij een nieuwe sessie. */
   const reset = useCallback(() => {
