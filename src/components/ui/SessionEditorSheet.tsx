@@ -89,11 +89,16 @@ export function SessionEditorSheet({ visible, initialSession, onClose, onSave }:
   const [zone, setZone] = useState<HeartRateZone>('Z2');
   const [distanceKm, setDistanceKm] = useState(5);
   const [description, setDescription] = useState(DEFAULT_DESCRIPTION_FOR_TYPE.easy);
+  // True zolang een bestaande intervalsessie als intervaltraining behouden blijft.
+  // Intervallen aanmaken kan hier niet; de opbouw blijft alleen bewaard totdat
+  // de gebruiker een ander type kiest.
+  const [keepInterval, setKeepInterval] = useState(false);
 
   // Zet de velden terug zodra de sheet opent, gebaseerd op de meegegeven sessie
   // (bewerken) of nette standaardwaarden (nieuwe sessie).
   useEffect(() => {
     if (!visible) return;
+    setKeepInterval(initialSession?.type === 'interval' && !!initialSession.interval);
     if (initialSession) {
       const initType: EditableType = initialSession.type === 'rest' || initialSession.type === 'interval' ? 'easy' : initialSession.type;
       setDay(initialSession.day);
@@ -112,19 +117,23 @@ export function SessionEditorSheet({ visible, initialSession, onClose, onSave }:
 
   const handleSelectType = (next: EditableType) => {
     setType(next);
+    // Een ander type kiezen laat de intervalopbouw vervallen.
+    setKeepInterval(false);
     // Stel een passende zone voor; de gebruiker kan die daarna nog aanpassen.
     setZone(DEFAULT_ZONE_FOR_TYPE[next]);
     setDescription(DEFAULT_DESCRIPTION_FOR_TYPE[next]);
   };
 
   const handleSave = () => {
+    const keptInterval = keepInterval ? initialSession?.interval : undefined;
     const base = {
       day,
-      type,
+      type: keptInterval ? ('interval' as const) : type,
       distanceKm,
       zone,
-      description: description.trim() || DEFAULT_DESCRIPTION_FOR_TYPE[type],
+      description: description.trim() || (keptInterval ? initialSession?.description : undefined) || DEFAULT_DESCRIPTION_FOR_TYPE[type],
       coachTip: initialSession?.coachTip ?? DEFAULT_COACHTIP_FOR_TYPE[type],
+      ...(keptInterval ? { interval: keptInterval } : {}),
     };
     if (initialSession) {
       onSave({ ...base, id: initialSession.id });
@@ -180,8 +189,18 @@ export function SessionEditorSheet({ visible, initialSession, onClose, onSave }:
           <View style={styles.block}>
             <Text style={styles.blockTitle}>Type training</Text>
             <View style={styles.typeGrid}>
+              {keepInterval && (
+                <View
+                  style={[styles.typeBtn, styles.typeBtnSelected]}
+                  accessibilityRole="radio"
+                  accessibilityLabel="Intervaltraining"
+                  accessibilityState={{ selected: true, disabled: true }}
+                >
+                  <Text style={[styles.typeBtnText, styles.typeBtnTextSelected]}>Intervaltraining</Text>
+                </View>
+              )}
               {TYPE_OPTIONS.map(opt => {
-                const selected = type === opt.value;
+                const selected = !keepInterval && type === opt.value;
                 return (
                   <TouchableOpacity
                     key={opt.value}

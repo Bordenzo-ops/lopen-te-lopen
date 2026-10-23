@@ -724,8 +724,8 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
   const comfortableKm    = useAppStore(s => s.comfortableKm);
   const setComfortableKm = useAppStore(s => s.setComfortableKm);
 
-  // Gratis krijgt de halve marathon als standaardschema; andere afstanden
-  // (en wedstrijden) zijn premium. Offline-first: onbekende status telt als gratis.
+  // Alle afstanden zijn nu gratis (FREE_RACE_DISTANCES); deze tak is voor als
+  // dat ooit verandert. Offline-first: onbekende status telt als gratis.
   const isRaceLocked = (race: Race): boolean =>
     !hasAccess && !isRaceDistanceFree(race.distance);
 
@@ -878,7 +878,7 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
     if (isRaceLocked(race)) {
       promptUpgrade(
         'Premium-wedstrijd',
-        "Met gratis train je voor de halve marathon. Met premium ontgrendel je alle wedstrijden en schema's, van de 5 km tot de marathon.",
+        'Deze afstand hoort bij premium. Met premium train je voor elke wedstrijd, met een schema op je eigen doeltijd.',
       );
       return;
     }

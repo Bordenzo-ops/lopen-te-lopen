@@ -42,18 +42,7 @@ export default function SummaryScreen() {
   const completedSessions = useAppStore(s => s.completedSessions);
   const [showShare, setShowShare] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  // Gededupliceerd op sessionId: een opnieuw gelopen sessie (zie
-  // handleReopenSession in dashboard.tsx) levert een tweede
-  // CompletedSession-record met hetzelfde sessionId op (bewust toegestaan,
-  // zie appStore.completeSession). Voor "X/Y sessies deze week" en de
-  // voortgangsstippen hieronder mag zo'n herhaalde run niet dubbel meetellen.
-  const completedInWeek = useAppStore(s => {
-    const weekNum = parseInt(weekNumber ?? '1');
-    const ids = new Set(
-      s.completedSessions.filter(c => c.weekNumber === weekNum).map(c => c.sessionId),
-    );
-    return ids.size;
-  });
+  const skippedSessions   = useAppStore(s => s.skippedSessions);
   const { hasAccess } = usePremium();
   // Maximaal 1x per 3 voltooide runs: niet opdringerig, wel regelmatig zichtbaar.
   // De hook wordt altijd aangeroepen (rules of hooks); de combinatie met
@@ -217,8 +206,27 @@ export default function SummaryScreen() {
     }
   };
 
-  const totalInWeek = week?.sessions.length ?? 3;
-  const weekDone = completedInWeek >= totalInWeek;
+  // Alleen verplichte sessies tellen mee; optionele bonus-duurloopjes niet
+  // (zelfde regel als isWeekHandled in appStore). De teller is gededupliceerd
+  // op sessionId: een opnieuw gelopen sessie (zie handleReopenSession in
+  // dashboard.tsx) levert een tweede CompletedSession-record met hetzelfde
+  // sessionId op en mag niet dubbel meetellen.
+  const requiredSessions = week?.sessions.filter(s => !s.optional);
+  const totalInWeek = requiredSessions?.length ?? 3;
+  const completedIds = new Set(
+    completedSessions.filter(c => c.weekNumber === weekNum).map(c => c.sessionId),
+  );
+  const completedInWeek = requiredSessions
+    ? requiredSessions.filter(s => completedIds.has(s.id)).length
+    : completedIds.size;
+  // De week is af volgens isWeekHandled: overgeslagen sessies tellen mee, zodat
+  // de samenvatting niet afwijkt van het moment dat de app de week afrondt.
+  const skippedIds = new Set(
+    skippedSessions.filter(s => s.weekNumber === weekNum).map(s => s.sessionId),
+  );
+  const weekDone = requiredSessions
+    ? requiredSessions.every(s => completedIds.has(s.id) || skippedIds.has(s.id))
+    : completedInWeek >= totalInWeek;
 
   // Controleer of het hele schema nu klaar is
   const totalWeeks = activePlan.totalWeeks;

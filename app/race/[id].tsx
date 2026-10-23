@@ -83,11 +83,12 @@ export default function RaceDetailScreen() {
       router.push('/(tabs)/schedule');
       return;
     }
-    // Zelfde premium-regel als de racekiezer: gratis alleen de halve marathon.
+    // Zelfde regel als de racekiezer: alle afstanden zijn nu gratis
+    // (FREE_RACE_DISTANCES); deze tak is voor als dat ooit verandert.
     if (!hasAccess && !isRaceDistanceFree(race.distance)) {
       promptUpgrade(
         'Premium-wedstrijd',
-        "Met gratis train je voor de halve marathon. Met premium ontgrendel je alle wedstrijden en schema's, van de 5 km tot de marathon.",
+        'Deze afstand hoort bij premium. Met premium train je voor elke wedstrijd, met een schema op je eigen doeltijd.',
       );
       return;
     }

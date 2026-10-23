@@ -242,11 +242,11 @@ function RaceModeContent({
 }) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  // Sommige afstanden zijn later premium. We blokkeren de keuze in de
-  // onboarding bewust niet: een nieuwe gebruiker mag altijd een doel kiezen en
-  // direct een werkend schema krijgen. We tonen wel een eerlijke premium-hint,
-  // zodat het later niet als verrassing voelt. Zolang de betaalmuur uit staat
-  // (hasAccess is dan true) verschijnt er niets.
+  // Alle afstanden zijn nu gratis (FREE_RACE_DISTANCES), dus deze hint
+  // verschijnt op dit moment nooit. De tak blijft bestaan voor als er ooit weer
+  // een afstand premium wordt. We blokkeren de keuze in de onboarding dan
+  // bewust niet: een nieuwe gebruiker mag altijd een doel kiezen en direct een
+  // werkend schema krijgen, met een eerlijke hint zodat het geen verrassing is.
   const anyPremiumRace = !hasAccess && races.some(r => !isRaceDistanceFree(r.distance));
   if (races.length === 0) {
     return (
@@ -273,9 +273,8 @@ function RaceModeContent({
       <Text style={styles.sectionSub}>Het schema past zich automatisch aan op jouw wedstrijddag</Text>
       {anyPremiumRace && (
         <Text style={styles.racePremiumNote}>
-          Je kunt nu elke wedstrijd kiezen. De halve marathon blijft altijd gratis.
-          Voor andere afstanden, zoals de 5 km, 10 km of marathon, vraagt de app later
-          om premium.
+          Je kunt nu elke wedstrijd kiezen. Voor sommige afstanden vraagt de app
+          later om premium.
         </Text>
       )}
       <View style={styles.cards}>

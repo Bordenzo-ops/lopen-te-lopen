@@ -59,8 +59,8 @@ const FALLBACK_MONTHLY_EQUIVALENT = 'Dat is €4,08 per maand';
 
 const VOORDELEN = [
   'Onbeperkt routes plannen',
-  "Alle wedstrijdschema's",
-  'ElevenLabs premium-stemmen en coaching',
+  'Elke training op het tempo van jouw doeltijd',
+  'Natuurlijke coachstemmen, ook offline',
 ];
 
 interface PlanOption {
