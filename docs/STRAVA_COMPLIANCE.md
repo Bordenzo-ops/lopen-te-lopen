@@ -167,7 +167,11 @@ Lars:
    toestemmingsscherm zoals de reviewer het ziet.
 3. **Maak de 4 screenshots uit §4.** Doe dat het liefst in het Engels als dat kan, anders in het
    Nederlands. Zet in de aanvraag dat de app Nederlandstalig is.
-4. **Dien het reviewformulier in** op [strava.com/settings/api](https://www.strava.com/settings/api).
+4. **Dien het Developer Program-formulier in:**
+   [share.hsforms.com/1VXSwPUYqSH6IxK0y51FjHwcnkd8](https://share.hsforms.com/1VXSwPUYqSH6IxK0y51FjHwcnkd8).
+   Strava linkt dit formulier vanaf [docs/rate-limits](https://developers.strava.com/docs/rate-limits/);
+   het staat niet op de API-instellingenpagina. Client ID: **262282**. Op 25-10 stonden er
+   10 van de 10 sporters verbonden.
    Gebruik de teksten uit §3 en vraag "Standard Tier Level 2" (9.999 atleten) aan.
 5. **Na 10 werkdagen zonder antwoord** plaats je een korte post in de
    [Developer Community Hub](https://communityhub.strava.com/developers-api-7) met Client ID,
