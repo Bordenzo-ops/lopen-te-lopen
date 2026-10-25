@@ -147,6 +147,14 @@ Maak deze op een echt toestel, in de nieuwe build:
 
 ## 5. Stappenplan (stand 25-10-2026)
 
+> **Status: ingediend op zondag 25-10-2026.** Het Developer Program-formulier is ingediend
+> met één screenshot (Instellingen → Koppelingen, niet verbonden) plus een toelichting in
+> de beschrijving. Gevraagd: Standard Tier Level 2. Op dat moment waren 10 van de 10
+> sporters verbonden.
+> Strava noemt 7–10 werkdagen. Geen antwoord op **vrijdag 6-11-2026**? Plaats dan een post
+> in de Community Hub en mail developers@strava.com.
+> **Niet ontkoppelen** tot de verhoging rond is, anders ben je je eigen plek kwijt.
+
 Al gedaan en gecontroleerd op 25-10:
 
 - [x] Officiële knop en logo, alleen `activity:write`, CSRF-state, echte deauthorize.
