@@ -81,10 +81,16 @@ Strava reviewt in het Engels. Onderstaande teksten kun je overnemen.
 **What does your application do?**
 
 > Lopen te Lopen is a Dutch-language running coach app for beginner and
-> intermediate runners training toward a specific race distance (5K, 10K,
-> half marathon, marathon). The app generates a personalised training schedule,
-> records the run with GPS, and delivers real-time audio coaching during the
-> session. It is available on the App Store and Google Play.
+> intermediate runners training toward a race, from 5K up to the marathon.
+> The app generates a personalised training schedule, records the run with
+> GPS, and delivers real-time audio coaching during the session. It has been
+> live on the App Store since July 2026 and on Google Play (Netherlands and
+> Belgium) since August 2026.
+>
+> - Website: https://lopentelopen.nl
+> - App Store: https://apps.apple.com/nl/app/lopen-te-lopen/id6789545791
+> - Google Play: https://play.google.com/store/apps/details?id=com.lopentelopen.app
+> - Privacy policy: https://lopentelopen.nl/privacy-policy.html
 
 **How do you use the Strava API?**
 
@@ -139,19 +145,37 @@ Maak deze op een echt toestel, in de nieuwe build:
 
 ---
 
-## 5. Wat jij nog moet doen
+## 5. Stappenplan (stand 25-10-2026)
 
-1. **Nieuwe build maken en de flow testen.** De smallere scope en de nieuwe knop
-   zitten pas in een verse build. Let op: jouw eigen koppeling draait nog op een
-   token met de oude scope — ontkoppel en verbind opnieuw, anders test je de
-   oude situatie.
-2. **Screenshots maken** volgens de lijst hierboven.
-3. **Het formulier invullen** op [strava.com/settings/api](https://www.strava.com/settings/api) met de teksten uit paragraaf 3.
-4. **Privacyverklaring op alle drie de plekken bijwerken.** Ik heb `master`
-   aangepast; branch `main` (GitHub Pages) en de upload naar lopentelopen.nl
-   moeten mee, anders wijst de reviewer naar een verouderde versie.
-5. **Play Store-link opzoeken** en toevoegen aan de aanvraag — die staat nergens
-   in de repo genoteerd.
+Al gedaan en gecontroleerd op 25-10:
+
+- [x] Officiële knop en logo, alleen `activity:write`, CSRF-state, echte deauthorize.
+  Zit in commit `52128b00` en dus in de live versies 1.4.0 en 1.5.0.
+- [x] Privacyverklaring met Strava-paragraaf staat gelijk op `master`, GitHub Pages en
+  lopentelopen.nl.
+- [x] Store-links en website zijn opgenomen in de antwoordtekst (§3).
+- [x] De website noemt Strava alleen feitelijk ("koppeling met Strava").
+
+Lars:
+
+1. **Check de voorwaarden van je Strava-account.** Sinds de API Agreement van 1 juni 2026
+   moet een Standard-ontwikkelaar een actief Strava-abonnement hebben. Controleer ook op
+   [strava.com/settings/api](https://www.strava.com/settings/api) of de app daar als
+   "Standard Tier Level 1, 10 athletes" staat, en noteer de **Client ID**.
+2. **Opnieuw koppelen op je toestel (1.5.0).** Ontkoppel Strava in de app en verbind opnieuw.
+   Dan draait je eigen token zeker op de smalle scope en zie je het
+   toestemmingsscherm zoals de reviewer het ziet.
+3. **Maak de 4 screenshots uit §4.** Doe dat het liefst in het Engels als dat kan, anders in het
+   Nederlands. Zet in de aanvraag dat de app Nederlandstalig is.
+4. **Dien het reviewformulier in** op [strava.com/settings/api](https://www.strava.com/settings/api).
+   Gebruik de teksten uit §3 en vraag "Standard Tier Level 2" (9.999 atleten) aan.
+5. **Na 10 werkdagen zonder antwoord** plaats je een korte post in de
+   [Developer Community Hub](https://communityhub.strava.com/developers-api-7) met Client ID,
+   app-naam, gevraagde capaciteit en datum van indienen. Mail ook developers@strava.com.
+   Strava zegt 7–10 werkdagen, maar op het forum melden ontwikkelaars in 2026 wachttijden van
+   weken tot maanden. Dien dus zo snel mogelijk in.
+6. Zolang de limiet op 10 staat: een 11e gebruiker krijgt bij het koppelen een fout van
+   Strava. Bestaande koppelingen blijven werken.
 
 ---
 

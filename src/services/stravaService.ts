@@ -37,6 +37,7 @@ import * as Linking from 'expo-linking';
 import { generateGpx } from './exportService';
 import type { CompletedSession } from '../store/appStore';
 import { useAppStore } from '../store/appStore';
+import { trackEvent } from './analyticsService';
 
 const TOKEN_STORAGE_KEY = 'strava-tokens';
 const OAUTH_STATE_KEY = 'strava-oauth-state';
@@ -220,6 +221,9 @@ export async function handleStravaCallback(params: {
   }
 
   if (params.error) {
+    // Measured so we can see how many runners hit the athlete cap while the
+    // Strava capacity review is pending.
+    void trackEvent('strava_connect_failed', { reason: params.error });
     return { ok: false, message: vertaalStravaFout(params.error) };
   }
   if (!params.access_token || !params.refresh_token || !params.expires_at) {
@@ -235,12 +239,18 @@ export async function handleStravaCallback(params: {
   });
 
   useAppStore.getState().setStravaConnected(true, athleteName);
+  void trackEvent('strava_connected');
   return { ok: true, athleteName };
 }
 
 function vertaalStravaFout(error: string): string {
   if (error === 'niet_geconfigureerd') return 'Strava-koppeling is nog niet ingesteld op de server.';
   if (error === 'geen_code_ontvangen') return 'Strava heeft geen toestemmingscode teruggestuurd.';
+  // Strava answers the token exchange with 403 once the app's athlete
+  // capacity is full; retrying won't help until Strava raises the limit.
+  if (error === 'strava_fout_403') {
+    return 'Strava laat op dit moment nog maar een beperkt aantal koppelingen met onze app toe. We hebben een uitbreiding aangevraagd. Probeer het over een paar weken opnieuw; je runs blijven intussen gewoon in de app bewaard.';
+  }
   return 'Verbinden met Strava is niet gelukt. Probeer het opnieuw.';
 }
 
