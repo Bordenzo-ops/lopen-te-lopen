@@ -106,6 +106,12 @@ export default function AccountScreen() {
    * (app/_layout.tsx) vangt het alsnog op zodra de auth-status doorkomt.
    */
   async function afterSignedIn(result: AuthResult, title: string) {
+    let syncJustEnabled = false;
+    try {
+      syncJustEnabled = useAppStore.getState().enableCloudSyncForAccount();
+    } catch {
+      // Stil falen: cloudsync blijft dan uit en is te bedienen in Instellingen.
+    }
     try {
       const user = result.session?.user ?? await getCurrentUser();
       if (user?.id) {
@@ -116,7 +122,10 @@ export default function AccountScreen() {
       // Stil falen: zie toelichting hierboven.
     }
 
-    Alert.alert(title, result.message, [{ text: 'Oké', onPress: close }]);
+    const message = syncJustEnabled
+      ? `${result.message}\nJe trainingen worden voortaan veilig in de cloud bewaard.`
+      : result.message;
+    Alert.alert(title, message, [{ text: 'Oké', onPress: close }]);
   }
 
   async function handleSubmit() {

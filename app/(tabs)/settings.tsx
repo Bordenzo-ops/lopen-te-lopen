@@ -189,7 +189,7 @@ export default function SettingsScreen() {
   const setThemePreference = useAppStore(s => s.setThemePreference);
   const { hasAccess, goToPaywall, isPremium } = usePremium();
   const cloudSyncEnabled    = useAppStore(s => s.cloudSyncEnabled);
-  const setCloudSyncEnabled = useAppStore(s => s.setCloudSyncEnabled);
+  const setCloudSyncEnabled = useAppStore(s => s.setCloudSyncEnabledByUser);
   const syncStatus          = useAppStore(s => s.syncStatus);
   const lastSyncedAt        = useAppStore(s => s.lastSyncedAt);
   const stravaConnected     = useAppStore(s => s.stravaConnected);

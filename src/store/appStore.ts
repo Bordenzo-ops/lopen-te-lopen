@@ -12,7 +12,7 @@ import {
   isWeekHandledInCurrentAttempt,
   estimateWeekStartedAt,
 } from '../utils/trainingWeek';
-import { ensureAnonymousSession } from '../services/authService';
+import { ensureAnonymousSession, getCurrentUser } from '../services/authService';
 import { syncAll } from '../services/syncService';
 import { isPremiumActive as fetchPremiumActive } from '../services/purchaseService';
 import { trackEvent } from '../services/analyticsService';
@@ -416,6 +416,16 @@ interface AppState {
    */
   cloudSyncEnabled: boolean;
   setCloudSyncEnabled: (v: boolean) => void;
+  /** True zodra de gebruiker de Cloudsync-schakelaar zelf heeft bediend. */
+  cloudSyncUserChoice: boolean;
+  /** Schakelaar in Instellingen: legt de expliciete keuze vast. */
+  setCloudSyncEnabledByUser: (v: boolean) => void;
+  /**
+   * Zet cloudsync automatisch aan voor een ingelogde (niet-anonieme) gebruiker,
+   * tenzij die het zelf uitzette. Geeft true terug als sync hierdoor net
+   * is aangezet. Idempotent.
+   */
+  enableCloudSyncForAccount: () => boolean;
   /** Is er een actieve Supabase-sessie? Default false (offline). */
   isSignedIn: boolean;
   /** Status van de laatste synchronisatiepoging */
@@ -678,6 +688,7 @@ export const useAppStore = create<AppState>()(
 
       // Backend-status (offline-first defaults)
       cloudSyncEnabled: false,
+      cloudSyncUserChoice: false,
       isSignedIn: false,
       syncStatus: 'idle',
       lastSyncedAt: null,
@@ -726,6 +737,22 @@ export const useAppStore = create<AppState>()(
         } else {
           set({ isSignedIn: false, syncStatus: 'idle' });
         }
+      },
+
+      setCloudSyncEnabledByUser: (v) => {
+        set({ cloudSyncUserChoice: true });
+        get().setCloudSyncEnabled(v);
+      },
+
+      enableCloudSyncForAccount: () => {
+        const s = get();
+        // Vóór rehydratie is de gepersisteerde keuze nog niet geladen en zou
+        // de rehydratie onze wijziging overschrijven; onRehydrateStorage
+        // doet de check dan zelf opnieuw.
+        if (!s._hasHydrated) return false;
+        if (s.cloudSyncUserChoice || s.cloudSyncEnabled) return false;
+        s.setCloudSyncEnabled(true);
+        return true;
       },
 
       refreshPremium: async () => {
@@ -1165,6 +1192,7 @@ export const useAppStore = create<AppState>()(
           hrMonitorDeviceId: null,
           hrMonitorDeviceName: null,
           cloudSyncEnabled: false,
+          cloudSyncUserChoice: false,
           isSignedIn: false,
           syncStatus: 'idle',
           lastSyncedAt: null,
@@ -1388,6 +1416,7 @@ export const useAppStore = create<AppState>()(
         // vanuit onRehydrateStorage hieronder) herstelt die vluchtige
         // runtime-status zelf zodra cloudsync aan staat.
         cloudSyncEnabled: state.cloudSyncEnabled,
+        cloudSyncUserChoice: state.cloudSyncUserChoice,
       }),
       onRehydrateStorage: () => (state) => {
         // Gezet na succesvolle én mislukte rehydratie
@@ -1395,6 +1424,19 @@ export const useAppStore = create<AppState>()(
         // Nu het profiel uit de opslag geladen is, alsnog synchroniseren.
         // syncNow zorgt zelf voor een anonieme sessie. Best-effort, faalt stil.
         void state?.syncNow();
+        // Wie al ingelogd was (ook op eerdere versies) en de schakelaar nooit
+        // zelf bediende, krijgt cloudsync nu alsnog. De auth-listener in
+        // _layout kan vóór rehydratie zijn afgegaan, vandaar deze check.
+        void (async () => {
+          try {
+            const user = await getCurrentUser();
+            if (user && user.is_anonymous === false) {
+              state?.enableCloudSyncForAccount();
+            }
+          } catch (_) {
+            // Stil falen: sync blijft staan zoals de gebruiker hem had
+          }
+        })();
       },
     },
   ),

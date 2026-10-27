@@ -225,6 +225,16 @@ export default function RootLayout() {
     let lastUserId: string | null | undefined;
     const unsubscribe = onAuthChange((session) => {
       const userId = session?.user?.id ?? null;
+      // Vóór de vroege return hieronder: een anonieme account koppelen aan
+      // Apple/Google/e-mail behoudt dezelfde user-id. Idempotent en
+      // best-effort; respecteert een eerdere eigen keuze in Instellingen.
+      try {
+        if (session?.user && session.user.is_anonymous === false) {
+          useAppStore.getState().enableCloudSyncForAccount();
+        }
+      } catch {
+        // Stil falen: cloudsync blijft dan gewoon uit staan
+      }
       if (userId === lastUserId) return;
       const previous = lastUserId;
       lastUserId = userId;
