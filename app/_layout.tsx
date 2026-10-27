@@ -28,6 +28,7 @@ import { onAuthChange } from '../src/services/authService';
 import { retryStravaQueue } from '../src/services/stravaService';
 import { maybeAutoUpdatePack } from '../src/services/voicePackService';
 import { refreshRaceData } from '../src/services/raceDataService';
+import { startRecoveryLinkCapture } from '../src/services/recoveryLink';
 import { flushEvents } from '../src/services/analyticsService';
 import { initCrashReporting, CrashReportingBoundary } from '../src/services/crashReporting';
 import { AnimatedSplash } from '../src/components/AnimatedSplash';
@@ -41,6 +42,12 @@ import '../src/services/backgroundLocationService';
 // Zo vroeg mogelijk op module-niveau, voor de component-definitie: crashes
 // tijdens het opstarten van de app worden zo ook al gerapporteerd.
 initCrashReporting();
+
+// Wachtwoordherstel-links vanaf module-niveau opvangen, zodat ze niet missen
+// als ze binnenkomen voordat het accountscherm gemount is. expo-router brengt
+// de gebruiker zelf naar /account (lopentelopen://account); het scherm haalt
+// de link daar uit de houder.
+startRecoveryLinkCapture();
 
 // Houd de native splash zichtbaar totdat de fullscreen JS-splash
 // (AnimatedSplash) gerenderd en klaar is om 'm over te nemen. Zo ontstaat er

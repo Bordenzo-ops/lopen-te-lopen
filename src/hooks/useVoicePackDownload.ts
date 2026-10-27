@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { downloadPack, isPackAvailable, type DownloadPackResult } from '../services/voicePackService';
 import type { VoiceType } from '../config/voiceConfig';
 
@@ -97,6 +98,17 @@ export function useVoicePackDownload(voice: VoiceType): UseVoicePackDownload {
       mountedRef.current = false;
     };
   }, []);
+
+  // Stem gewisseld of pakket elders gewijzigd (bv. gewist in Instellingen):
+  // beschikbaarheid opnieuw bepalen i.p.v. alleen de beginwaarde te houden.
+  useEffect(() => {
+    setAvailable(isPackAvailable(voice));
+  }, [voice]);
+  useFocusEffect(
+    useCallback(() => {
+      setAvailable(isPackAvailable(voice));
+    }, [voice]),
+  );
 
   const start = useCallback(() => {
     setError(null);

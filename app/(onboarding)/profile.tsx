@@ -8,15 +8,20 @@ import { ChevronLeft, Minus, Plus } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { Button } from '../../src/components/ui/Button';
+import { useAppStore } from '../../src/store/appStore';
 import { DayPicker } from '../../src/components/ui/DayPicker';
 import { DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
 import type { GoalType } from '../../src/data/trainingPlans';
 
 export default function ProfileScreen() {
   const { goal, schemaMode, raceId } = useLocalSearchParams<{ goal: GoalType; schemaMode: string; raceId: string }>();
-  const [name, setName] = useState('');
-  const [age, setAge] = useState(30);
-  const [trainingDays, setTrainingDays] = useState<number[]>(DEFAULT_TRAINING_DAYS);
+  // Bij een nieuw doel (profiel bestaat al) beginnen we met de eerdere keuzes.
+  const existing = useAppStore.getState().profile;
+  const [name, setName] = useState(existing && existing.name !== 'Hardloper' ? existing.name : '');
+  const [age, setAge] = useState(existing?.age ?? 30);
+  const [trainingDays, setTrainingDays] = useState<number[]>(
+    existing?.trainingDays && existing.trainingDays.length >= 3 ? existing.trainingDays : DEFAULT_TRAINING_DAYS,
+  );
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 

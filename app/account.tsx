@@ -21,7 +21,7 @@
  * hoeft te wachten op die listener voordat het teruggnavigeert.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -38,7 +38,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Mail } from 'lucide-react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import * as Linking from 'expo-linking';
 import { typography, spacing, radius, type ThemeColors } from '../src/theme/tokens';
 import { useThemeColors, useIsLightTheme } from '../src/theme/useTheme';
 import { Button } from '../src/components/ui/Button';
@@ -54,6 +53,7 @@ import {
   setNewPassword,
   type AuthResult,
 } from '../src/services/authService';
+import { takePendingRecoveryUrl, subscribeRecoveryLink } from '../src/services/recoveryLink';
 import { identifyUser } from '../src/services/purchaseService';
 import { useAppStore } from '../src/store/appStore';
 
@@ -119,33 +119,37 @@ export default function AccountScreen() {
 
   // Wachtwoordherstel: de link in de mail opent de app op dit scherm met een
   // herstelsessie in het URL-fragment. Zet die sessie in en toon het formulier
-  // voor een nieuw wachtwoord. Elke link wordt maar één keer verwerkt.
-  const url = Linking.useURL();
-  const handledRecoveryUrl = useRef<string | null>(null);
+  // voor een nieuw wachtwoord. De link wordt in app/_layout.tsx opgevangen
+  // (src/services/recoveryLink.ts): hier pakken we hem bij het mounten en
+  // luisteren we op latere aankomsten. Elke link wordt maar één keer verwerkt,
+  // ook als dit scherm later opnieuw mount.
   useEffect(() => {
-    if (!url || handledRecoveryUrl.current === url) return;
-    const link = parseRecoveryLink(url);
-    if (!link) return;
-    handledRecoveryUrl.current = url;
+    const handlePending = () => {
+      const url = takePendingRecoveryUrl();
+      const link = parseRecoveryLink(url);
+      if (!link) return;
 
-    if (link.kind === 'error') {
-      Alert.alert('Link verlopen', 'Deze link is verlopen of al gebruikt. Vraag een nieuwe aan via "Wachtwoord vergeten".');
-      setMode('login');
-      return;
-    }
-    setBusy(true);
-    void startRecoverySession(link.accessToken, link.refreshToken)
-      .then(result => {
-        if (result.ok) {
-          setPassword('');
-          setMode('reset');
-        } else {
-          Alert.alert('Link verlopen', result.message);
-          setMode('login');
-        }
-      })
-      .finally(() => setBusy(false));
-  }, [url]);
+      if (link.kind === 'error') {
+        Alert.alert('Link verlopen', 'Deze link is verlopen of al gebruikt. Vraag een nieuwe aan via "Wachtwoord vergeten".');
+        setMode('login');
+        return;
+      }
+      setBusy(true);
+      void startRecoverySession(link.accessToken, link.refreshToken)
+        .then(result => {
+          if (result.ok) {
+            setPassword('');
+            setMode('reset');
+          } else {
+            Alert.alert('Link verlopen', result.message);
+            setMode('login');
+          }
+        })
+        .finally(() => setBusy(false));
+    };
+    handlePending();
+    return subscribeRecoveryLink(handlePending);
+  }, []);
 
   const anyBusy = busy || socialBusy !== null;
 

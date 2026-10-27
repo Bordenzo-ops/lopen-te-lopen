@@ -649,6 +649,14 @@ interface AppState {
   stepBackTrainingWeek: () => void;
 }
 
+// Runtime-vlag (niet gepersisteerd): tijdens het uitloggen mag cloudsync niet
+// opnieuw aangaan, bijvoorbeeld door een TOKEN_REFRESHED-event tussen het
+// uitzetten van sync en het wissen van de lokale data.
+let signingOut = false;
+export function setSigningOut(value: boolean): void {
+  signingOut = value;
+}
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -795,6 +803,7 @@ export const useAppStore = create<AppState>()(
         // de rehydratie onze wijziging overschrijven; onRehydrateStorage
         // doet de check dan zelf opnieuw.
         if (!s._hasHydrated) return false;
+        if (signingOut) return false;
         if (s.cloudSyncUserChoice || s.cloudSyncEnabled) return false;
         s.setCloudSyncEnabled(true);
         return true;
@@ -830,7 +839,7 @@ export const useAppStore = create<AppState>()(
       },
 
       syncNow: async () => {
-        if (!get().cloudSyncEnabled) return;
+        if (signingOut || !get().cloudSyncEnabled) return;
         try {
           // Zorg zelf voor een (anonieme) sessie. Dit voorkomt dat een sync
           // wordt overgeslagen wanneer de sessie nog niet klaar was, en is
@@ -1094,8 +1103,19 @@ export const useAppStore = create<AppState>()(
       // completedSessions blijven bewaard (geschiedenis). De cloud-restore gebruikt
       // dit NIET (reconcileWithAccount zet hasCompletedOnboarding zelf).
       completeOnboarding: (profile) => {
-        set({
-          profile,
+        set(state => ({
+          // Bestaand profiel (nieuw doel): optionele velden zoals
+          // routePlannerEnabled en isPremium blijven behouden, en een eigen
+          // gemeten maxHeartRate alleen als de leeftijd niet is gewijzigd.
+          profile: state.profile
+            ? {
+                ...state.profile,
+                ...profile,
+                maxHeartRate: state.profile.age === profile.age
+                  ? state.profile.maxHeartRate
+                  : profile.maxHeartRate,
+              }
+            : profile,
           hasCompletedOnboarding: true,
           customPlan: null,
           racePlan: null,
@@ -1103,7 +1123,7 @@ export const useAppStore = create<AppState>()(
           currentWeekTraining: 1,
           weekStartedAt: new Date().toISOString(),
           currentWeekRace: 1,
-        });
+        }));
         // Best-effort sync, blokkeert de onboarding niet
         void get().syncNow();
       },

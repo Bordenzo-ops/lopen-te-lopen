@@ -20,8 +20,12 @@ import { trackEvent } from '../../src/services/analyticsService';
 export default function VoiceScreen() {
   const { goal, name, age, schemaMode, raceId, trainingDays } =
     useLocalSearchParams<{ goal: GoalType; name: string; age: string; schemaMode: string; raceId: string; trainingDays: string }>();
-  const [voiceGuidance, setVoiceGuidance] = useState(true);
-  const [voiceType, setVoiceType]         = useState<VoiceType>('female');
+  // Bij een nieuw doel (profiel bestaat al) beginnen we met de eerdere stemkeuze.
+  // Alleen bij het eerste render uitgelezen; gewone onboarding heeft geen profiel.
+  const [existingProfile] = useState(() => useAppStore.getState().profile);
+  const isNewGoal = existingProfile !== null;
+  const [voiceGuidance, setVoiceGuidance] = useState(existingProfile?.voiceGuidance ?? true);
+  const [voiceType, setVoiceType]         = useState<VoiceType>(existingProfile?.voiceType ?? 'female');
   const completeOnboarding = useAppStore(s => s.completeOnboarding);
   const setSchemaMode     = useAppStore(s => s.setSchemaMode);
   const setRacePlan       = useAppStore(s => s.setRacePlan);
@@ -95,11 +99,20 @@ export default function VoiceScreen() {
       schemaMode: mode,
       goal: finalGoal ?? 'unknown',
       trainingDays: chosenDays.length,
+      // Nieuw doel van een bestaande gebruiker: apart te filteren in de funnel.
+      new_goal: isNewGoal,
     });
 
     if (racePlan) setRacePlan(racePlan);
 
-    router.replace('/(tabs)/dashboard');
+    if (isNewGoal) {
+      // Nieuw doel: de stack bevat nog de tabs (en evt. het voltooide-scherm).
+      // dismissTo gaat terug naar het bestaande dashboard i.p.v. er een extra
+      // kopie bovenop te zetten, zodat Android-terug niet terugspringt.
+      router.dismissTo('/(tabs)/dashboard');
+    } else {
+      router.replace('/(tabs)/dashboard');
+    }
   };
 
   return (

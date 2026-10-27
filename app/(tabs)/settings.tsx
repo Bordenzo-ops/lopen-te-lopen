@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Cloud, Activity, Bell, HeartPulse, ChevronRight, Mail, LogOut, Crown, Info, Watch, CalendarCheck, Flag, Flame } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
-import { useAppStore } from '../../src/store/appStore';
+import { useAppStore, setSigningOut } from '../../src/store/appStore';
 import { zoneInfo } from '../../src/data/trainingPlans';
 import type { GoalType } from '../../src/data/trainingPlans';
 import { GoalPickerSheet } from '../../src/components/GoalPickerSheet';
@@ -330,6 +330,9 @@ export default function SettingsScreen() {
       useAppStore.setState({ isPremium: false, premiumExpiredNoticePending: false });
       // Sync uit vóór de wissel van sessie: de nieuwe anonieme sessie die
       // signOut start mag nooit nog de oude data pushen.
+      // De vlag blokkeert ook een auth-event (TOKEN_REFRESHED) dat sync
+      // opnieuw zou aanzetten; pas gezet na de laatste push hierboven.
+      setSigningOut(true);
       useAppStore.getState().setCloudSyncEnabled(false);
       await authSignOut();
       // Wist de store (incl. cloudDataUserId, cloudSyncUserChoice en de
@@ -340,6 +343,7 @@ export default function SettingsScreen() {
     } catch {
       Alert.alert('Uitloggen', 'Uitloggen lukte niet. Probeer het later opnieuw.');
     } finally {
+      setSigningOut(false);
       setAccountBusy(false);
     }
   }
