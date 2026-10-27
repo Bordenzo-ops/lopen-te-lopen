@@ -49,6 +49,8 @@ import { trackEvent } from '../src/services/analyticsService';
 import { getPaywallVariant, type PaywallVariant } from '../src/services/paywallVariant';
 import { FINISH_GUARANTEE_TERMS_URL, PRIVACY_URL, TERMS_URL } from '../src/config/legalLinks';
 import { FINISH_GUARANTEE_LINK_LABEL, FINISH_GUARANTEE_TEXT } from '../src/config/finishGuarantee';
+import { isPackAvailable, getRemotePackSizeLabel } from '../src/services/voicePackService';
+import { startVoicePackDownload } from '../src/hooks/useVoicePackDownload';
 
 const GOLD = colors.premium;
 
@@ -124,6 +126,33 @@ function formatMonthlyEquivalent(price: number, priceString: string): string | u
     return `Dat is ${formattedPrice} per maand`;
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * Na een geslaagde aankoop of herstelactie: bied het natuurlijke stempakket
+ * aan als gesproken begeleiding aan staat en het pakket nog niet op het
+ * toestel staat. De download draait op de achtergrond (module-breed, dus ook
+ * na het sluiten van de paywall) en faalt stil; de dashboardkaart en
+ * Instellingen blijven vangnetten.
+ */
+function offerVoicePackDownload(): void {
+  try {
+    const profile = useAppStore.getState().profile;
+    if (!profile?.voiceGuidance) return;
+    const voice = profile.voiceType ?? 'female';
+    if (isPackAvailable(voice)) return;
+    const size = getRemotePackSizeLabel().replace('± ', '');
+    Alert.alert(
+      'Natuurlijke stem downloaden?',
+      `De coachstem is ongeveer ${size}. Op wifi gaat het het snelst.`,
+      [
+        { text: 'Later', style: 'cancel' },
+        { text: 'Nu downloaden', onPress: () => { void startVoicePackDownload(voice); } },
+      ],
+    );
+  } catch {
+    // Best-effort: nooit de aankoopflow verstoren
   }
 }
 
@@ -315,7 +344,7 @@ export default function PaywallScreen() {
       if (premium) {
         setPremium(true);
         Alert.alert('Gelukt', result.message ?? 'Je premium is geactiveerd. Veel loopplezier.', [
-          { text: 'Top', onPress: close },
+          { text: 'Top', onPress: () => { close(); offerVoicePackDownload(); } },
         ]);
       } else {
         // Aankoop is gelukt, maar het entitlement is nog niet doorgekomen.
@@ -339,7 +368,7 @@ export default function PaywallScreen() {
       if (result.ok && result.isPremium) {
         setPremium(true);
         Alert.alert('Hersteld', result.message ?? 'Je premium is hersteld.', [
-          { text: 'Top', onPress: close },
+          { text: 'Top', onPress: () => { close(); offerVoicePackDownload(); } },
         ]);
       } else {
         await refreshPremium();

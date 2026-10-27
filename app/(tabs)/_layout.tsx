@@ -23,6 +23,9 @@ export default function TabsLayout() {
         },
         tabBarActiveTintColor: colors.brandPrimary,
         tabBarInactiveTintColor: colors.textTertiary,
+        // Vijf tabs met kleine labels: meeschalen met de systeemlettergrootte
+        // laat o.a. "Instellingen" afkappen.
+        tabBarAllowFontScaling: false,
         tabBarLabelStyle: {
           fontFamily: typography.fontFamily.sansMedium,
           fontSize: typography.fontSize.xs,

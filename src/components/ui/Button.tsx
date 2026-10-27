@@ -132,6 +132,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
 
   // Labels
   label: {
+    flexShrink: 1,
+    textAlign: 'center',
     fontFamily: typography.fontFamily.sansSemi,
     letterSpacing: typography.letterSpacing.wide,
   },

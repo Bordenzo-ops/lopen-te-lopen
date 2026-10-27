@@ -30,7 +30,8 @@ import {
   ArrowRight,
   type LucideIcon,
 } from 'lucide-react-native';
-import { palette, spacing, radius, typography, shadows } from '../src/theme/tokens';
+import { StatusBar } from 'expo-status-bar';
+import { palette, darkColors, spacing, radius, typography, shadows } from '../src/theme/tokens';
 import { useAppStore } from '../src/store/appStore';
 import { trackEvent } from '../src/services/analyticsService';
 import {
@@ -55,7 +56,8 @@ const BRAND = palette.primary[500];
 const GOLD = palette.gold;
 const TEXT_PRIMARY = palette.neutral[50];
 const TEXT_SECONDARY = palette.neutral[400];
-const TEXT_TERTIARY = palette.neutral[500];
+// Donker-thema textTertiary (#8B95A4): neutral[500] haalt op deze achtergrond maar 3,99:1.
+const TEXT_TERTIARY = darkColors.textTertiary;
 
 /** Icoon-key uit de config gemapt naar de lucide-component in dit scherm. */
 const ICON_MAP: Record<PremiumIntroIcon, LucideIcon> = {
@@ -108,6 +110,8 @@ export default function PremiumIntroScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      {/* Vaste donkere achtergrond: lichte statusbariconen, ook in lichte modus. */}
+      <StatusBar style="light" />
       <View style={styles.header}>
         <TouchableOpacity
           onPress={close}

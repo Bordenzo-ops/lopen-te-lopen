@@ -7,10 +7,11 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, Modal, TouchableOpacity,
+  View, Text, StyleSheet, Modal, TouchableOpacity, KeyboardAvoidingView,
   TouchableWithoutFeedback, ScrollView, TextInput, Platform,
 } from 'react-native';
 import { Minus, Plus } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
 import { SheetHandle, SheetCloseButton } from './sheetParts';
@@ -81,7 +82,8 @@ interface SessionEditorSheetProps {
 
 export function SessionEditorSheet({ visible, initialSession, onClose, onSave }: SessionEditorSheetProps) {
   const colors = useThemeColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
   const isEditing = !!initialSession;
 
   const [day, setDay] = useState(1);
@@ -156,6 +158,13 @@ export function SessionEditorSheet({ visible, initialSession, onClose, onSave }:
         <View style={styles.backdrop} />
       </TouchableWithoutFeedback>
 
+      {/* KeyboardAvoidingView rond de sheet (zelfde patroon als
+          RoutePreviewSheet): het omschrijvingsveld onderin zou anders onder
+          het toetsenbord verdwijnen op iOS. */}
+      <KeyboardAvoidingView
+        style={styles.sheetKeyboardWrap}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
       <View style={styles.sheet}>
         <SheetHandle />
 
@@ -314,25 +323,30 @@ export function SessionEditorSheet({ visible, initialSession, onClose, onSave }:
         {/* Laatste kind, zie sheetParts. */}
         <SheetCloseButton onPress={onClose} />
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, insetBottom: number) => StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
-  sheet: {
+  // Absolute positionering staat op de KeyboardAvoidingView-wrapper, zodat
+  // de 'padding'-behavior op iOS de hele sheet omhoog kan duwen.
+  sheetKeyboardWrap: {
     position: 'absolute',
     bottom: 0, left: 0, right: 0,
+  },
+  sheet: {
     backgroundColor: colors.bgSurface,
     borderTopLeftRadius:  radius['2xl'],
     borderTopRightRadius: radius['2xl'],
     maxHeight: '88%',
-    paddingBottom: Platform.OS === 'ios' ? 30 : 20,
+    paddingBottom: Math.max(insetBottom, Platform.OS === 'ios' ? 30 : 20),
     ...shadows.lg,
   },
   title: {
