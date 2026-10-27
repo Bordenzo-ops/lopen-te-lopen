@@ -13,7 +13,8 @@ import {
   estimateWeekStartedAt,
 } from '../utils/trainingWeek';
 import { ensureAnonymousSession, getCurrentUser } from '../services/authService';
-import { syncAll } from '../services/syncService';
+import { syncAll, pullAccountData, rowToRun } from '../services/syncService';
+import { mergeRuns, mergeProfile, deriveTrainingWeek } from '../utils/cloudMerge';
 import { isPremiumActive as fetchPremiumActive } from '../services/purchaseService';
 import { trackEvent } from '../services/analyticsService';
 import type { VoiceType } from '../config/voiceConfig';
@@ -198,6 +199,29 @@ export interface ActiveSession {
   route: Array<{ lat: number; lon: number; timestamp: number }>;
   isRunning: boolean;
 }
+
+/** Waarde van cloudDataUserId na een upgrade met sync aan: zie AppState.cloudDataUserId. */
+export const LEGACY_ADOPT = '__legacy__';
+
+/** Uitkomst van reconcileWithAccount. */
+export interface ReconcileResult {
+  /** False = ophalen mislukt (of geen sessie): er is niets toegepast. */
+  ok: boolean;
+  /** Aantal runs uit de cloud dat lokaal nog niet bestond. */
+  restoredRuns: number;
+  /** Bestond er een profielrij in de cloud? */
+  hadRemoteProfile: boolean;
+}
+
+/** Gedeelde pull: alle gelijktijdige aanroepers wachten op dezelfde promise. */
+let reconcileInFlight: Promise<ReconcileResult> | null = null;
+/**
+ * Laatste echte reconcile, kort bewaard: syncNow (via de auth-listener) kan de
+ * pull al afgerond hebben voordat het loginscherm erom vraagt, en dat scherm
+ * wil de uitkomst voor de melding.
+ */
+let lastReconcile: { userId: string; at: number; result: ReconcileResult } | null = null;
+const LAST_RECONCILE_TTL_MS = 60_000;
 
 interface AppState {
   // Onboarding
@@ -437,8 +461,23 @@ interface AppState {
    * Faalt stil naar offline als er geen sleutels of netwerk zijn.
    */
   initBackend: () => Promise<void>;
+  /**
+   * Supabase-user-id waarmee de lokale data van dit toestel is verzoend. Alleen
+   * naar dit account mag gepusht worden (push-gate in syncNow). Null = nog met
+   * geen enkel account verzoend. LEGACY_ADOPT = upgrade van een build zonder
+   * dit veld met sync aan: de eerstvolgende sync adopteert de dan actieve
+   * gebruiker zonder pull, zodat het gedrag voor bestaande gebruikers gelijk blijft.
+   */
+  cloudDataUserId: string | null;
   /** Best-effort synchronisatie van profiel en sessies. Blokkeert de UI nooit. */
   syncNow: () => Promise<void>;
+  /**
+   * Haalt profiel en runs van het ingelogde (niet-anonieme) account op en voegt
+   * ze samen met de lokale data; zet daarna cloudDataUserId. Draait ook als
+   * cloudsync uit staat (alleen lezen, er wordt hier nooit gepusht). Meerdere
+   * gelijktijdige aanroepen delen één pull. Faalt stil met ok: false.
+   */
+  reconcileWithAccount: () => Promise<ReconcileResult>;
 
   // Premium (RevenueCat)
   /**
@@ -689,6 +728,7 @@ export const useAppStore = create<AppState>()(
       // Backend-status (offline-first defaults)
       cloudSyncEnabled: false,
       cloudSyncUserChoice: false,
+      cloudDataUserId: null,
       isSignedIn: false,
       syncStatus: 'idle',
       lastSyncedAt: null,
@@ -796,8 +836,31 @@ export const useAppStore = create<AppState>()(
             return;
           }
           set({ isSignedIn: true, syncStatus: 'syncing' });
+
+          // Push-gate: alleen pushen naar een account waarmee dit toestel
+          // verzoend is. Zo overschrijft een vers onboardingprofiel nooit het
+          // echte cloudprofiel van een bestaand account (id-wissel bij inloggen).
+          const userId = session.user.id;
+          const known = get().cloudDataUserId;
+          if (known !== userId) {
+            if (session.user.is_anonymous === true || known === LEGACY_ADOPT) {
+              // Anonieme id is altijd op dit toestel aangemaakt; LEGACY_ADOPT
+              // behoudt het gedrag van vóór de gate voor bestaande gebruikers.
+              set({ cloudDataUserId: userId });
+            } else {
+              // Niet-anoniem account waarmee we nog niet verzoend zijn: eerst
+              // ophalen en samenvoegen. Mislukt dat, dan wordt er niets gepusht
+              // en probeert de volgende syncNow het opnieuw.
+              const reconciled = await get().reconcileWithAccount();
+              if (!reconciled.ok || get().cloudDataUserId !== userId) {
+                set({ syncStatus: 'error' });
+                return;
+              }
+            }
+          }
+
           const { profile, completedSessions } = get();
-          const result = await syncAll(profile, completedSessions);
+          const result = await syncAll(userId, profile, completedSessions);
           set({
             syncStatus: result.ok ? 'synced' : 'error',
             lastSyncedAt: result.ok ? new Date().toISOString() : get().lastSyncedAt,
@@ -806,6 +869,118 @@ export const useAppStore = create<AppState>()(
           // Sync is best-effort: nooit crashen
           set({ syncStatus: 'error' });
         }
+      },
+
+      reconcileWithAccount: () => {
+        if (reconcileInFlight) return reconcileInFlight;
+
+        const failed: ReconcileResult = { ok: false, restoredRuns: 0, hadRemoteProfile: false };
+        const nothingToDo: ReconcileResult = { ok: true, restoredRuns: 0, hadRemoteProfile: false };
+
+        const run = (async (): Promise<ReconcileResult> => {
+          try {
+            const user = await getCurrentUser();
+            if (!user) return failed;
+            // Een anonieme id is op dit toestel aangemaakt: niets te herstellen.
+            if (user.is_anonymous === true) return nothingToDo;
+
+            const known = get().cloudDataUserId;
+            if (known === user.id) {
+              // Al verzoend. Was dat zojuist (bv. via syncNow vanuit de
+              // auth-listener), geef dan die uitkomst door voor de melding.
+              const last = lastReconcile;
+              return last && last.userId === user.id && Date.now() - last.at < LAST_RECONCILE_TTL_MS
+                ? last.result
+                : nothingToDo;
+            }
+            if (known === LEGACY_ADOPT) {
+              set({ cloudDataUserId: user.id });
+              return nothingToDo;
+            }
+
+            // Eerst alles ophalen; pas als dat helemaal gelukt is wordt er iets toegepast.
+            const pulled = await pullAccountData(user.id);
+            if (!pulled.ok) return failed;
+            // Wisselde de sessie tijdens het ophalen, dan hoort deze data niet meer bij de gebruiker.
+            const stillCurrent = await getCurrentUser();
+            if (stillCurrent?.id !== user.id) return failed;
+
+            const remoteRuns = pulled.runs
+              .map(rowToRun)
+              .filter((r): r is CompletedSession => r !== null);
+
+            let restoredRuns = 0;
+            let weekChanged = false;
+            // Eén functionele set op de ACTUELE state: er kan tijdens het
+            // netwerkverzoek een run zijn bijgekomen via completeSession.
+            set(state => {
+              const { merged, added } = mergeRuns(state.completedSessions, remoteRuns);
+              const { profile, goalChanged } = mergeProfile(state.profile, pulled.profile);
+              restoredRuns = added;
+
+              const patch: Partial<AppState> = {
+                completedSessions: merged,
+                cloudDataUserId: user.id,
+              };
+              if (profile !== state.profile) {
+                patch.profile = profile;
+                if (profile && !state.profile) patch.hasCompletedOnboarding = true;
+              }
+
+              // Trainingsweek afleiden: alleen voor het standaardschema in
+              // trainingsmodus (sessie-id's coderen daar de week). Nooit
+              // terugzetten, behalve als het doel door de merge veranderde.
+              if (profile && state.schemaMode === 'training' && !state.customPlan) {
+                const plan = resolveActivePlan({
+                  schemaMode: 'training',
+                  racePlan: null,
+                  customPlan: null,
+                  goal: profile.goal,
+                  trainingDays: profile.trainingDays,
+                });
+                const derived = deriveTrainingWeek(plan.weeks, merged, plan.totalWeeks);
+                const newWeek = goalChanged
+                  ? derived
+                  : Math.min(Math.max(state.currentWeekTraining, derived), plan.totalWeeks);
+                if (newWeek !== state.currentWeekTraining) {
+                  weekChanged = true;
+                  patch.currentWeekTraining = newWeek;
+                  patch.weekStartedAt = estimateWeekStartedAt(merged, state.skippedSessions, newWeek, new Date());
+                }
+              }
+              return patch;
+            });
+
+            // Best-effort herplannen van de lokale meldingen, net als in completeSession.
+            if (weekChanged) {
+              const { remindersEnabled, weeklyProgressEnabled, countdownEnabled, streakEnabled } = get();
+              if (remindersEnabled || weeklyProgressEnabled || countdownEnabled || streakEnabled) {
+                import('../services/notificationService')
+                  .then(({ rescheduleNotifications }) => rescheduleNotifications())
+                  .catch(() => {
+                    // Stil falen: herinneringen zijn een prettige extra, geen kernfunctie
+                  });
+              }
+            }
+
+            const result: ReconcileResult = {
+              ok: true,
+              restoredRuns,
+              hadRemoteProfile: pulled.profile !== null,
+            };
+            lastReconcile = { userId: user.id, at: Date.now(), result };
+            return result;
+          } catch (_) {
+            // Best-effort: nooit crashen; syncNow probeert het later opnieuw
+            return failed;
+          }
+        })();
+
+        reconcileInFlight = run;
+        void run.finally(() => {
+          if (reconcileInFlight === run) reconcileInFlight = null;
+        });
+        return run;
       },
 
       registerRoutePlan: () => {
@@ -1193,6 +1368,7 @@ export const useAppStore = create<AppState>()(
           hrMonitorDeviceName: null,
           cloudSyncEnabled: false,
           cloudSyncUserChoice: false,
+          cloudDataUserId: null,
           isSignedIn: false,
           syncStatus: 'idle',
           lastSyncedAt: null,
@@ -1334,7 +1510,13 @@ export const useAppStore = create<AppState>()(
       // de week ervoor, anders nu (zie estimateWeekStartedAt). Zo blijft de
       // voortgang van een bezige week zichtbaar en krijgen vastgelopen
       // gebruikers de terugkomkaart.
-      version: 3,
+      //
+      // Versie 4: cloudDataUserId (met welk account het toestel verzoend is, de
+      // push-gate in syncNow). Wie al met cloudsync aan was, krijgt LEGACY_ADOPT:
+      // de eerstvolgende sync adopteert de dan actieve gebruiker zonder pull, dus
+      // het gedrag blijft gelijk. Wie sync uit had krijgt null en dus een veilige
+      // pull bij de eerste login op een bestaand account.
+      version: 4,
       migrate: (persistedState: any, version: number): any => {
         let state = (persistedState ?? {}) as Record<string, unknown> & { currentWeek?: number };
         if (version < 2 && typeof state.streakEnabled !== 'boolean') {
@@ -1361,6 +1543,12 @@ export const useAppStore = create<AppState>()(
               week,
               new Date(),
             ),
+          };
+        }
+        if (version < 4 && typeof state.cloudDataUserId !== 'string') {
+          state = {
+            ...state,
+            cloudDataUserId: state.cloudSyncEnabled === true ? LEGACY_ADOPT : null,
           };
         }
         return state;
@@ -1417,6 +1605,7 @@ export const useAppStore = create<AppState>()(
         // runtime-status zelf zodra cloudsync aan staat.
         cloudSyncEnabled: state.cloudSyncEnabled,
         cloudSyncUserChoice: state.cloudSyncUserChoice,
+        cloudDataUserId: state.cloudDataUserId,
       }),
       onRehydrateStorage: () => (state) => {
         // Gezet na succesvolle én mislukte rehydratie

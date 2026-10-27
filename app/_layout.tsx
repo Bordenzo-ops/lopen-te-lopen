@@ -238,6 +238,17 @@ export default function RootLayout() {
       if (userId === lastUserId) return;
       const previous = lastUserId;
       lastUserId = userId;
+      // Wisseling naar een echt account: meteen synchroniseren, ook als
+      // cloudsync al aan stond (enableCloudSyncForAccount doet dan niets). De
+      // push-gate in syncNow haalt eerst de clouddata op en voegt die samen
+      // voordat er iets gepusht wordt; idempotent en best-effort.
+      try {
+        if (session?.user && session.user.is_anonymous === false) {
+          void useAppStore.getState().syncNow();
+        }
+      } catch {
+        // Stil falen: de eerstvolgende sync haalt het alsnog in
+      }
       void (async () => {
         try {
           if (userId) {

@@ -54,6 +54,26 @@ import { useAppStore } from '../src/store/appStore';
 
 type SocialProvider = 'google' | 'apple';
 
+/** Maximale wachttijd op het ophalen van clouddata na het inloggen. */
+const RECONCILE_WAIT_MS = 10000;
+
+/** Wacht maximaal `ms` op een promise; geeft anders `fallback` terug. Gooit nooit. */
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise<T>(resolve => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    promise.then(
+      value => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(fallback);
+      },
+    );
+  });
+}
+
 type Mode = 'create' | 'login';
 
 export default function AccountScreen() {
@@ -112,6 +132,15 @@ export default function AccountScreen() {
     } catch {
       // Stil falen: cloudsync blijft dan uit en is te bedienen in Instellingen.
     }
+    // Direct de clouddata van dit account ophalen en samenvoegen (parallel aan de
+    // RevenueCat-nazorg hieronder). Gedeelde pull met syncNow: er is nooit meer
+    // dan één tegelijk. Ook als cloudsync uit staat: inloggen betekent herstellen
+    // (alleen lezen). Na de timeout loopt de pull op de achtergrond door.
+    const reconcilePromise = withTimeout(
+      useAppStore.getState().reconcileWithAccount(),
+      RECONCILE_WAIT_MS,
+      null,
+    );
     try {
       const user = result.session?.user ?? await getCurrentUser();
       if (user?.id) {
@@ -122,10 +151,26 @@ export default function AccountScreen() {
       // Stil falen: zie toelichting hierboven.
     }
 
-    const message = syncJustEnabled
-      ? `${result.message}\nJe trainingen worden voortaan veilig in de cloud bewaard.`
-      : result.message;
-    Alert.alert(title, message, [{ text: 'Oké', onPress: close }]);
+    const reconciled = await reconcilePromise;
+    const cloudNote = syncJustEnabled
+      ? '\nJe trainingen worden voortaan veilig in de cloud bewaard.'
+      : '';
+
+    let alertTitle = title;
+    let message: string;
+    if (!reconciled || !reconciled.ok) {
+      message = `${result.message}\nJe bent ingelogd, maar je gegevens ophalen lukte nog niet. We proberen het automatisch opnieuw zodra je verbinding hebt.`;
+    } else if (reconciled.restoredRuns > 0 || reconciled.hadRemoteProfile) {
+      alertTitle = 'Welkom terug';
+      const n = reconciled.restoredRuns;
+      const restored = n > 0
+        ? `je profiel en ${n} ${n === 1 ? 'training' : 'trainingen'}`
+        : 'je profiel';
+      message = `We hebben ${restored} uit je account op dit toestel gezet. Routekaarten bewaren we alleen op het toestel waarop je liep.${cloudNote}`;
+    } else {
+      message = `${result.message}${cloudNote}`;
+    }
+    Alert.alert(alertTitle, message, [{ text: 'Oké', onPress: close }]);
   }
 
   async function handleSubmit() {
@@ -202,8 +247,8 @@ export default function AccountScreen() {
           </Text>
           <Text style={styles.subtitle}>
             {mode === 'create'
-              ? 'Bewaar je voortgang veilig en herstel hem op een ander toestel.'
-              : 'Log in om je data te herstellen op dit toestel.'}
+              ? 'Bewaar je trainingen veilig in de cloud en zet ze terug op een nieuw toestel.'
+              : 'Log in om je profiel en trainingen op dit toestel terug te zetten.'}
           </Text>
 
           <View style={styles.socialGroup}>
