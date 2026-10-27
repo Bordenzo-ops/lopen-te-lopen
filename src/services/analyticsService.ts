@@ -48,7 +48,8 @@ export type AnalyticsEvent =
   | 'notification_category_toggled'
   | 'week_return_choice'
   | 'strava_connected'
-  | 'strava_connect_failed';
+  | 'strava_connect_failed'
+  | 'goal_changed';
 
 /** Kleine, generieke eigenschappen bij een event. Geen persoonsgegevens. */
 export type AnalyticsProps = Record<string, string | number | boolean | null>;

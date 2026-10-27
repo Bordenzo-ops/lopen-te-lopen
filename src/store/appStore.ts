@@ -565,6 +565,11 @@ interface AppState {
   setRaceTargetSeconds: (seconds: number | null) => void;
   setSchemaMode: (mode: 'training' | 'race') => void;
   updateProfile: (updates: Partial<UserProfile>) => void;
+  /**
+   * Wissel naar een ander trainingsdoel: week 1, trainingsmodus, wedstrijd- en
+   * eigen schema gewist. Gelopen trainingen blijven bewaard.
+   */
+  changeTrainingGoal: (goal: GoalType) => void;
   startSession: (session: Session, weekNumber: number) => void;
   updateActiveSession: (updates: Partial<ActiveSession>) => void;
   /**
@@ -660,7 +665,7 @@ export const useAppStore = create<AppState>()(
       raceTargetSeconds: null,
       comfortableKm: null,
       schemaMode: 'training',
-      themePreference: 'system',
+      themePreference: 'dark',
       routePlanCount: 0,
       routePlanWeekStart: null,
       savedRoutes: [],
@@ -1071,13 +1076,30 @@ export const useAppStore = create<AppState>()(
       setRacePlan: (plan) => set({ racePlan: plan, raceTargetSeconds: null, currentWeekRace: 1 }),
       setRaceTargetSeconds: (seconds) => set({ raceTargetSeconds: seconds }),
       setComfortableKm: (km) => set({ comfortableKm: km }),
-      setSchemaMode: (mode) => set({ schemaMode: mode }),
+      setSchemaMode: (mode) =>
+        set(state => {
+          // Terug naar trainingsmodus: een weeknummer voorbij het einde van het
+          // doelschema (bv. na een wedstrijd met een langer schema) terugbrengen.
+          if (mode === 'training' && state.profile && !state.customPlan) {
+            const total = getTrainingPlan(state.profile.goal).weeks;
+            if (state.currentWeekTraining > total) {
+              return { schemaMode: mode, currentWeekTraining: total };
+            }
+          }
+          return { schemaMode: mode };
+        }),
       setThemePreference: (preference) => set({ themePreference: preference }),
 
+      // Alleen voor een nieuw doel in de onboarding: begint met een schoon plan.
+      // completedSessions blijven bewaard (geschiedenis). De cloud-restore gebruikt
+      // dit NIET (reconcileWithAccount zet hasCompletedOnboarding zelf).
       completeOnboarding: (profile) => {
         set({
           profile,
           hasCompletedOnboarding: true,
+          customPlan: null,
+          racePlan: null,
+          raceTargetSeconds: null,
           currentWeekTraining: 1,
           weekStartedAt: new Date().toISOString(),
           currentWeekRace: 1,
@@ -1087,9 +1109,47 @@ export const useAppStore = create<AppState>()(
       },
 
       updateProfile: (updates) =>
+        set(state => {
+          if (!state.profile) return { profile: null };
+          const profile = { ...state.profile, ...updates };
+          // Ander doel: weeknummer begrenzen op het nieuwe schema en de week
+          // opnieuw laten beginnen, zodat de voortgang klopt met het nieuwe plan.
+          if (updates.goal && updates.goal !== state.profile.goal) {
+            const total = getTrainingPlan(profile.goal).weeks;
+            return {
+              profile,
+              currentWeekTraining: Math.min(state.currentWeekTraining, total),
+              weekStartedAt: new Date().toISOString(),
+            };
+          }
+          return { profile };
+        }),
+
+      changeTrainingGoal: (goal) => {
+        const from = get().profile?.goal;
+        if (!get().profile || from === goal) return;
         set(state => ({
-          profile: state.profile ? { ...state.profile, ...updates } : null,
-        })),
+          profile: state.profile ? { ...state.profile, goal } : null,
+          schemaMode: 'training',
+          racePlan: null,
+          customPlan: null,
+          raceTargetSeconds: null,
+          currentWeekTraining: 1,
+          currentWeekRace: 1,
+          weekStartedAt: new Date().toISOString(),
+        }));
+        void trackEvent('goal_changed', { from: from ?? 'unknown', to: goal });
+        // Best-effort herplannen van de lokale meldingen, net als in completeSession.
+        const { remindersEnabled, weeklyProgressEnabled, countdownEnabled, streakEnabled } = get();
+        if (remindersEnabled || weeklyProgressEnabled || countdownEnabled || streakEnabled) {
+          import('../services/notificationService')
+            .then(({ rescheduleNotifications }) => rescheduleNotifications())
+            .catch(() => {
+              // Stil falen: herinneringen zijn een prettige extra, geen kernfunctie
+            });
+        }
+        void get().syncNow();
+      },
 
       startSession: (session, weekNumber) => {
         set({
@@ -1547,7 +1607,9 @@ export const useAppStore = create<AppState>()(
       // huidige sessie-id (anoniem of niet), zodat een latere login op een ander
       // account als id-wissel wordt herkend en wél door reconcile gaat. Verse
       // installaties houden null.
-      version: 4,
+      //
+      // Versie 5: themePreference 'system' bestaat niet meer en wordt 'dark'.
+      version: 5,
       migrate: (persistedState: any, version: number): any => {
         let state = (persistedState ?? {}) as Record<string, unknown> & { currentWeek?: number };
         if (version < 2 && typeof state.streakEnabled !== 'boolean') {
@@ -1584,6 +1646,10 @@ export const useAppStore = create<AppState>()(
             ...state,
             cloudDataUserId: state.hasCompletedOnboarding === true ? LEGACY_ADOPT : null,
           };
+        }
+        if (version < 5 && state.themePreference === 'system') {
+          // Donker is bewust vergrendeld (userInterfaceStyle: "dark"): "Systeem" bestaat niet meer.
+          state = { ...state, themePreference: 'dark' };
         }
         return state;
       },

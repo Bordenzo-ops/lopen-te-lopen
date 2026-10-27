@@ -4,11 +4,13 @@ import {
   Alert, TextInput, KeyboardAvoidingView, Platform, Linking, Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Smartphone, Cloud, Activity, Bell, HeartPulse, ChevronRight, Mail, LogOut, Crown, Info, Watch, CalendarCheck, Flag, Flame } from 'lucide-react-native';
+import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, Cloud, Activity, Bell, HeartPulse, ChevronRight, Mail, LogOut, Crown, Info, Watch, CalendarCheck, Flag, Flame } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore } from '../../src/store/appStore';
 import { zoneInfo } from '../../src/data/trainingPlans';
+import type { GoalType } from '../../src/data/trainingPlans';
+import { GoalPickerSheet } from '../../src/components/GoalPickerSheet';
 import * as voiceService from '../../src/services/voiceService';
 import type { VoiceType } from '../../src/config/voiceConfig';
 import { VOICES, voiceDefinition } from '../../src/config/voiceConfig';
@@ -208,6 +210,9 @@ export default function SettingsScreen() {
   const setHrMonitorDevice  = useAppStore(s => s.setHrMonitorDevice);
   const [showHrSheet, setShowHrSheet] = useState(false);
   const [showCoachExplainer, setShowCoachExplainer] = useState(false);
+  const [showGoalPicker, setShowGoalPicker] = useState(false);
+  const customPlan        = useAppStore(s => s.customPlan);
+  const changeTrainingGoal = useAppStore(s => s.changeTrainingGoal);
   const autoPauseEnabled    = useAppStore(s => s.autoPauseEnabled);
   const setAutoPauseEnabled = useAppStore(s => s.setAutoPauseEnabled);
   const routeNotificationsEnabled    = useAppStore(s => s.routeNotificationsEnabled);
@@ -456,6 +461,28 @@ export default function SettingsScreen() {
   const goalLabel: Record<string, string> = {
     '5km': '5 KM', '10km': '10 KM', '15km': '15 KM',
     'half_marathon': 'Halve marathon', 'marathon': 'Marathon',
+  };
+
+  const handleGoalSelected = (goal: GoalType) => {
+    setShowGoalPicker(false);
+    if (goal === profile.goal) return;
+    const extra =
+      schemaMode === 'race' && racePlan
+        ? ' Je wedstrijdschema stopt hiermee.'
+        : customPlan
+          ? ' Je eigen schema stopt hiermee.'
+          : '';
+    // Op iOS verschijnt een Alert niet tijdens het sluiten van een Modal: even wachten.
+    setTimeout(() => {
+      Alert.alert(
+        `Doel wijzigen naar ${goalLabel[goal] ?? goal}?`,
+        `Je begint dan in week 1 van het nieuwe schema. Je gelopen trainingen blijven bewaard.${extra}`,
+        [
+          { text: 'Annuleren', style: 'cancel' },
+          { text: 'Wijzigen', onPress: () => changeTrainingGoal(goal) },
+        ],
+      );
+    }, 400);
   };
 
   const handleReset = () => {
@@ -738,10 +765,19 @@ export default function SettingsScreen() {
                 suffix="bpm"
               />
               <Divider />
-              <View style={styles.row}>
+              <TouchableOpacity
+                style={styles.row}
+                onPress={() => setShowGoalPicker(true)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`Doel wijzigen, huidig doel ${goalLabel[profile.goal] ?? profile.goal}`}
+              >
                 <Text style={styles.rowLabel}>Huidig doel</Text>
-                <Text style={styles.rowValue}>{goalLabel[profile.goal] ?? profile.goal}</Text>
-              </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing[0.5] }}>
+                  <Text style={styles.rowValue}>{goalLabel[profile.goal] ?? profile.goal}</Text>
+                  <ChevronRight size={16} color={colors.textTertiary} strokeWidth={2} />
+                </View>
+              </TouchableOpacity>
             </View>
             <Text style={styles.fieldNote}>
               Max. hartslag wordt automatisch herberekend als je je leeftijd aanpast. Heb je een nauwkeurige meting? Pas de waarde direct aan.
@@ -776,7 +812,6 @@ export default function SettingsScreen() {
             <View style={styles.card}>
               <View style={styles.themeRow}>
                 {([
-                  { key: 'system', label: 'Systeem', icon: Smartphone },
                   { key: 'light',  label: 'Licht',   icon: Sun },
                   { key: 'dark',   label: 'Donker',  icon: Moon },
                 ] as const).map(opt => {
@@ -800,7 +835,7 @@ export default function SettingsScreen() {
               </View>
             </View>
             <Text style={styles.fieldNote}>
-              Kies Licht voor betere leesbaarheid buiten in fel daglicht. Systeem volgt de instelling van je telefoon.
+              Kies Licht voor betere leesbaarheid buiten in fel daglicht. De app start standaard in Donker.
             </Text>
           </View>
 
@@ -1223,7 +1258,7 @@ export default function SettingsScreen() {
                         : syncStatus === 'syncing' ? 'Bezig met synchroniseren...'
                         : syncStatus === 'error' ? 'Synchronisatie mislukt'
                         : 'Trainingdata wordt opgeslagen in de cloud'
-                      : 'Trainingsdata blijft alleen lokaal op dit apparaat'}
+                      : 'Staat uit: trainingsdata blijft alleen op dit apparaat'}
                   </Text>
                 </View>
                 <Switch
@@ -1236,7 +1271,7 @@ export default function SettingsScreen() {
               </View>
             </View>
             <Text style={styles.fieldNote}>
-              Als cloudsync aan staat, worden je profiel en trainingsresultaten versleuteld opgeslagen bij Supabase (EU). Routes worden niet gesynchroniseerd. Zie het privacybeleid voor details.
+              Zodra je inlogt, gaat cloudsync vanzelf aan; je kunt de schakelaar altijd zelf aan- of uitzetten. Als cloudsync aan staat, worden je profiel en trainingsresultaten versleuteld opgeslagen bij Supabase (EU). Routes worden niet gesynchroniseerd. Zie het privacybeleid voor details.
             </Text>
           </View>
 
@@ -1332,7 +1367,7 @@ export default function SettingsScreen() {
                   <View style={styles.integrationRow}>
                     <Mail size={18} color={colors.textSecondary} strokeWidth={2} />
                     <Text style={styles.integrationInfo}>
-                      Maak een account aan om je voortgang te bewaren en te herstellen op een ander toestel.
+                      Maak een account aan om je voortgang te bewaren en te herstellen op een ander toestel. Zodra je inlogt, gaat cloudsync vanzelf aan.
                     </Text>
                   </View>
                   <Divider />
@@ -1414,6 +1449,12 @@ export default function SettingsScreen() {
       <CoachExplainerSheet
         visible={showCoachExplainer}
         onClose={() => setShowCoachExplainer(false)}
+      />
+      <GoalPickerSheet
+        visible={showGoalPicker}
+        currentGoal={profile.goal}
+        onSelect={handleGoalSelected}
+        onClose={() => setShowGoalPicker(false)}
       />
     </SafeAreaView>
   );
