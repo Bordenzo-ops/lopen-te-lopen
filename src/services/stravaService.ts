@@ -209,14 +209,11 @@ export async function handleStravaCallback(params: {
 }): Promise<{ ok: boolean; athleteName?: string; message?: string }> {
   const bewaardeState = await verbruikBewaardeOAuthState();
 
-  // CSRF-controle: de ontvangen state moet overeenkomen met de bewaarde.
-  // Is er geen bewaarde state (bijv. oude flow of app-herstart zonder
-  // fallback), dan accepteren we alleen als er ook geen state binnenkomt.
-  if (bewaardeState) {
-    if (params.state !== bewaardeState) {
-      return { ok: false, message: 'Verbinden met Strava is niet gelukt: de beveiligingscontrole is mislukt. Probeer het opnieuw.' };
-    }
-  } else if (params.state) {
+  // CSRF-controle: connectStrava bewaart altijd eerst een state, dus een
+  // callback zonder bewaarde state is niet door ons gestart (bijvoorbeeld een
+  // aangeleverde deep link met andermans tokens) en wordt altijd geweigerd.
+  // Daarnaast moet de ontvangen state exact overeenkomen met de bewaarde.
+  if (!bewaardeState || !params.state || params.state !== bewaardeState) {
     return { ok: false, message: 'Verbinden met Strava is niet gelukt: de beveiligingscontrole is mislukt. Probeer het opnieuw.' };
   }
 
@@ -252,6 +249,21 @@ function vertaalStravaFout(error: string): string {
     return 'Strava laat op dit moment nog maar een beperkt aantal koppelingen met onze app toe. We hebben een uitbreiding aangevraagd. Probeer het over een paar weken opnieuw; je runs blijven intussen gewoon in de app bewaard.';
   }
   return 'Verbinden met Strava is niet gelukt. Probeer het opnieuw.';
+}
+
+/**
+ * Wist alleen de lokale Strava-gegevens (tokens en een eventuele openstaande
+ * OAuth-state), zonder de toegang bij Strava in te trekken. Gebruikt bij
+ * uitloggen en account verwijderen; de store-vlag zet resetAllLocalData zelf.
+ */
+export async function clearStravaLocalData(): Promise<void> {
+  pendingOAuthState = null;
+  try {
+    await SecureStore.deleteItemAsync(OAUTH_STATE_KEY);
+  } catch {
+    // Negeer storage-fouten bij opruimen
+  }
+  await clearTokens();
 }
 
 /** Ontkoppelt Strava: wist lokale tokens en trekt de toegang bij Strava in. */

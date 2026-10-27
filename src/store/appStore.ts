@@ -938,13 +938,30 @@ export const useAppStore = create<AppState>()(
                   goal: profile.goal,
                   trainingDays: profile.trainingDays,
                 });
-                const derived = deriveTrainingWeek(plan.weeks, merged, plan.totalWeeks);
-                const newWeek = goalChanged
-                  ? derived
-                  : Math.min(Math.max(state.currentWeekTraining, derived), plan.totalWeeks);
+                const derivedMerged = deriveTrainingWeek(plan.weeks, merged, plan.totalWeeks);
+                const derivedLocal = deriveTrainingWeek(plan.weeks, state.completedSessions, plan.totalWeeks);
+                // Alleen echte nieuwe voortgang uit de cloud telt: anders zou
+                // een handmatige "Week terug" hier weer ongedaan worden gemaakt.
+                let newWeek = state.currentWeekTraining;
+                if (goalChanged) {
+                  newWeek = derivedMerged;
+                } else if (derivedMerged > derivedLocal) {
+                  newWeek = Math.min(Math.max(state.currentWeekTraining, derivedMerged), plan.totalWeeks);
+                }
                 if (newWeek !== state.currentWeekTraining) {
                   weekChanged = true;
                   patch.currentWeekTraining = newWeek;
+                }
+                // weekStartedAt opnieuw schatten als de week veranderde, of als er
+                // runs van de resulterende week bijkwamen terwijl het toestel er
+                // zelf geen had: anders vallen die runs vóór weekStartedAt en
+                // telt de week als 0 voltooid. Ook als weekStartedAt ontbreekt.
+                const ownRunInWeek = state.completedSessions.some(c => c.weekNumber === newWeek);
+                if (
+                  newWeek !== state.currentWeekTraining ||
+                  !state.weekStartedAt ||
+                  (added > 0 && !ownRunInWeek)
+                ) {
                   patch.weekStartedAt = estimateWeekStartedAt(merged, state.skippedSessions, newWeek, new Date());
                 }
               }
@@ -1344,6 +1361,17 @@ export const useAppStore = create<AppState>()(
       },
 
       resetAllLocalData: async () => {
+        // Strava-tokens staan in SecureStore (niet in de store): lokaal wissen,
+        // zonder de toegang bij Strava in te trekken. Dynamische import omdat
+        // stravaService zelf deze store importeert. Best-effort.
+        try {
+          const { clearStravaLocalData } = await import('../services/stravaService');
+          await clearStravaLocalData();
+        } catch (_) {
+          // Negeer: tokens verlopen vanzelf, en de koppeling staat hieronder uit
+        }
+        reconcileInFlight = null;
+        lastReconcile = null;
         set({
           hasCompletedOnboarding: false,
           profile: null,
@@ -1512,10 +1540,13 @@ export const useAppStore = create<AppState>()(
       // gebruikers de terugkomkaart.
       //
       // Versie 4: cloudDataUserId (met welk account het toestel verzoend is, de
-      // push-gate in syncNow). Wie al met cloudsync aan was, krijgt LEGACY_ADOPT:
-      // de eerstvolgende sync adopteert de dan actieve gebruiker zonder pull, dus
-      // het gedrag blijft gelijk. Wie sync uit had krijgt null en dus een veilige
-      // pull bij de eerste login op een bestaand account.
+      // push-gate in syncNow). Elke bestaande installatie met een afgeronde
+      // onboarding krijgt LEGACY_ADOPT, ook als cloudsync uit stond: lokale data
+      // is bij de eerste start na de update leidend en wordt nooit overschreven
+      // door een pull. onRehydrateStorage zet LEGACY_ADOPT meteen om naar de
+      // huidige sessie-id (anoniem of niet), zodat een latere login op een ander
+      // account als id-wissel wordt herkend en wél door reconcile gaat. Verse
+      // installaties houden null.
       version: 4,
       migrate: (persistedState: any, version: number): any => {
         let state = (persistedState ?? {}) as Record<string, unknown> & { currentWeek?: number };
@@ -1546,9 +1577,12 @@ export const useAppStore = create<AppState>()(
           };
         }
         if (version < 4 && typeof state.cloudDataUserId !== 'string') {
+          // Elke bestaande installatie met een afgeronde onboarding behandelt de
+          // lokale data als leidend (ook met sync uit): onRehydrateStorage zet
+          // LEGACY_ADOPT zo snel mogelijk om naar de huidige sessie-id.
           state = {
             ...state,
-            cloudDataUserId: state.cloudSyncEnabled === true ? LEGACY_ADOPT : null,
+            cloudDataUserId: state.hasCompletedOnboarding === true ? LEGACY_ADOPT : null,
           };
         }
         return state;
@@ -1619,6 +1653,20 @@ export const useAppStore = create<AppState>()(
         void (async () => {
           try {
             const user = await getCurrentUser();
+            // LEGACY_ADOPT zo vroeg mogelijk vastleggen op de huidige sessie,
+            // onafhankelijk van cloudSyncEnabled. Zonder sessie en met sync uit
+            // is er niets te adopteren: dan terug naar null, zodat een latere
+            // login op een bestaand account netjes door reconcile gaat. Met
+            // sync aan en zonder sessie (tijdelijk niet leesbaar) laten we het
+            // staan: syncNow adopteert dan de sessie die er daarna komt.
+            const current = useAppStore.getState();
+            if (current.cloudDataUserId === LEGACY_ADOPT) {
+              if (user) {
+                useAppStore.setState({ cloudDataUserId: user.id });
+              } else if (!current.cloudSyncEnabled) {
+                useAppStore.setState({ cloudDataUserId: null });
+              }
+            }
             if (user && user.is_anonymous === false) {
               state?.enableCloudSyncForAccount();
             }

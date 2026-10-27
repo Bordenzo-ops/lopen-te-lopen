@@ -1,12 +1,13 @@
-import React, { useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { router } from 'expo-router';
+import React, { useMemo, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CalendarDays, HeartPulse, MapPin } from 'lucide-react-native';
 import { typography, spacing, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { Button } from '../../src/components/ui/Button';
 import { trackEvent } from '../../src/services/analyticsService';
+import { useAppStore } from '../../src/store/appStore';
 
 export default function WelcomeScreen() {
   const colors = useThemeColors();
@@ -17,6 +18,17 @@ export default function WelcomeScreen() {
   useEffect(() => {
     void trackEvent('onboarding_started');
   }, []);
+
+  // Na inloggen op een bestaand account herstelt de cloudsync het profiel en
+  // zet hasCompletedOnboarding aan (ook als dat pas na een timeout binnenkomt).
+  // Alleen doorsturen als dit scherm in beeld is: tijdens de onboarding zelf
+  // (andere schermen erboven) mag deze redirect niet afgaan.
+  const onboardingDone = useAppStore(s => s.hasCompletedOnboarding);
+  useFocusEffect(
+    useCallback(() => {
+      if (onboardingDone) router.replace('/(tabs)/dashboard');
+    }, [onboardingDone]),
+  );
   return (
     <SafeAreaView style={styles.container}>
       {/* ScrollView: bij grotere systeemlettergrootte of op kleine toestellen past
@@ -55,8 +67,16 @@ export default function WelcomeScreen() {
             fullWidth
             size="lg"
           />
+          <TouchableOpacity
+            onPress={() => router.push({ pathname: '/account', params: { mode: 'login', from: 'welcome' } })}
+            style={styles.loginLink}
+            accessibilityRole="button"
+            accessibilityLabel="Ik heb al een account"
+          >
+            <Text style={styles.loginLinkText}>Ik heb al een account</Text>
+          </TouchableOpacity>
           <Text style={styles.disclaimer}>
-            Gratis en zonder account. Jouw data blijft op jouw apparaat.
+            Gratis en zonder account. Je trainingen staan op je telefoon. Log je in, dan bewaren we ze ook veilig in de cloud.
           </Text>
         </View>
       </ScrollView>
@@ -137,6 +157,15 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   actions: {
     gap: spacing[1.5],
     alignItems: 'center',
+  },
+  loginLink: {
+    paddingVertical: spacing[1],
+    paddingHorizontal: spacing[2],
+  },
+  loginLinkText: {
+    fontFamily: typography.fontFamily.sansSemi,
+    fontSize: typography.fontSize.base,
+    color: colors.brandPrimary,
   },
   disclaimer: {
     fontFamily: typography.fontFamily.sans,

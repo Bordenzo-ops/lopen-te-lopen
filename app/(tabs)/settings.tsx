@@ -270,37 +270,73 @@ export default function SettingsScreen() {
     }, [refreshAccountStatus]),
   );
 
+  // Uitloggen: eerst synchroniseren, dan lokaal wissen. Het toestel begint na
+  // het uitloggen leeg (zoals een nieuwe installatie); bij opnieuw inloggen
+  // zet de herstelflow (reconcileWithAccount) de trainingen terug.
   function handleSignOut() {
+    const syncOn = useAppStore.getState().cloudSyncEnabled;
     Alert.alert(
       'Uitloggen',
-      'Weet je zeker dat je wilt uitloggen?',
+      syncOn
+        ? 'Je trainingen worden van dit toestel gewist. Ze staan veilig in je account en komen terug zodra je weer inlogt.'
+        : 'Cloudsync staat uit, dus je trainingen staan niet in je account. Als je uitlogt, worden ze van dit toestel gewist en komen ze niet terug. Zet eerst cloudsync aan als je ze wilt bewaren.',
       [
         { text: 'Annuleren', style: 'cancel' },
         {
           text: 'Uitloggen',
           style: 'destructive',
-          onPress: async () => {
-            setAccountBusy(true);
-            try {
-              // De globale onAuthChange-listener (app/_layout.tsx) koppelt
-              // RevenueCat los en ververst premium; hier alleen uitloggen
-              // en de lokale schermstatus bijwerken.
-              //
-              // Premium expliciet resetten VOOR het uitloggen: anders ziet
-              // setPremium(false) een overgang van actief naar verlopen en
-              // krijgt een uitgelogde betaler ten onrechte de melding
-              // "premium verlopen". signOut start daarna zelf een nieuwe
-              // anonieme sessie, zodat sync en analytics blijven werken.
-              useAppStore.setState({ isPremium: false, premiumExpiredNoticePending: false });
-              await authSignOut();
-              await refreshAccountStatus();
-            } finally {
-              setAccountBusy(false);
-            }
-          },
+          onPress: () => { void performSignOut(); },
         },
       ],
     );
+  }
+
+  async function performSignOut() {
+    setAccountBusy(true);
+    try {
+      // Eerst de laatste trainingen naar de cloud. Lukt dat niet, dan vragen
+      // we of de gebruiker toch wil uitloggen: wissen kan niet ongedaan.
+      const store = useAppStore.getState();
+      if (store.cloudSyncEnabled) {
+        useAppStore.setState({ syncStatus: 'idle' });
+        await useAppStore.getState().syncNow();
+        if (useAppStore.getState().syncStatus !== 'synced') {
+          const proceed = await new Promise<boolean>(resolve => {
+            Alert.alert(
+              'Uitloggen',
+              'Je laatste trainingen staan nog niet in de cloud. Als je nu uitlogt, kunnen ze verloren gaan. Controleer je verbinding en probeer het opnieuw, of log toch uit.',
+              [
+                { text: 'Annuleren', style: 'cancel', onPress: () => resolve(false) },
+                { text: 'Toch uitloggen', style: 'destructive', onPress: () => resolve(true) },
+              ],
+              { cancelable: true, onDismiss: () => resolve(false) },
+            );
+          });
+          if (!proceed) return;
+        }
+      }
+
+      // De globale onAuthChange-listener (app/_layout.tsx) koppelt RevenueCat
+      // los en ververst premium.
+      //
+      // Premium expliciet resetten VOOR het uitloggen: anders ziet
+      // setPremium(false) een overgang van actief naar verlopen en krijgt een
+      // uitgelogde betaler ten onrechte de melding "premium verlopen".
+      useAppStore.setState({ isPremium: false, premiumExpiredNoticePending: false });
+      // Sync uit vóór de wissel van sessie: de nieuwe anonieme sessie die
+      // signOut start mag nooit nog de oude data pushen.
+      useAppStore.getState().setCloudSyncEnabled(false);
+      await authSignOut();
+      // Wist de store (incl. cloudDataUserId, cloudSyncUserChoice en de
+      // Strava-tokens in SecureStore). De volgende start is een schone start.
+      await useAppStore.getState().resetAllLocalData();
+      await refreshAccountStatus();
+      router.replace('/');
+    } catch {
+      Alert.alert('Uitloggen', 'Uitloggen lukte niet. Probeer het later opnieuw.');
+    } finally {
+      setAccountBusy(false);
+    }
   }
 
   // Account definitief verwijderen (store-eis). Ook voor anonieme gebruikers:

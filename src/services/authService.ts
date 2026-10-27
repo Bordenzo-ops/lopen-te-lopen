@@ -22,6 +22,7 @@ import { getSupabase, isSupabaseConfigured } from './supabaseClient';
 import type { Session, User, SignInWithIdTokenCredentials } from '@supabase/supabase-js';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
+import * as Linking from 'expo-linking';
 import {
   GoogleSignin,
   statusCodes,
@@ -192,6 +193,121 @@ export async function signInWithEmail(
 }
 
 /**
+ * Stuurt een e-mail om het wachtwoord opnieuw in te stellen. De link in de mail
+ * opent de app op het accountscherm (deep link lopentelopen://account) met een
+ * herstelsessie in het fragment; zie parseRecoveryLink en startRecoverySession.
+ * Supabase geeft ook succes voor onbekende adressen, zodat niet te raden is wie
+ * een account heeft.
+ *
+ * Vereist in het Supabase-dashboard: de redirect-URL lopentelopen://account
+ * (zie docs/SUPABASE_SETUP.md) onder Authentication, URL Configuration.
+ */
+export async function sendPasswordReset(email: string): Promise<AuthResult> {
+  if (!isSupabaseConfigured()) {
+    return { ok: false, message: 'Synchronisatie staat niet ingesteld.' };
+  }
+  const supabase = getSupabase();
+  if (!supabase) {
+    return { ok: false, message: 'Synchronisatie staat niet ingesteld.' };
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail) {
+    return { ok: false, message: 'Vul eerst je e-mailadres in.' };
+  }
+
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+      redirectTo: Linking.createURL('account'),
+    });
+    if (error) {
+      return { ok: false, message: vertaalAuthFout(error.message) };
+    }
+    return { ok: true };
+  } catch {
+    return {
+      ok: false,
+      message: 'Versturen lukte niet. Controleer je verbinding en probeer het opnieuw.',
+    };
+  }
+}
+
+/** Uitkomst van het lezen van een wachtwoordherstel-link. */
+export type RecoveryLink =
+  | { kind: 'tokens'; accessToken: string; refreshToken: string }
+  | { kind: 'error' };
+
+/**
+ * Leest een wachtwoordherstel-link (lopentelopen://account#access_token=...&
+ * refresh_token=...&type=recovery). Geeft null als de URL daar niet op lijkt,
+ * zodat gewone deep links genegeerd worden. Een verlopen of ongeldige link
+ * (Supabase zet dan error_code in het fragment) geeft { kind: 'error' }.
+ */
+export function parseRecoveryLink(url: string | null | undefined): RecoveryLink | null {
+  if (!url) return null;
+  const hashIndex = url.indexOf('#');
+  if (hashIndex < 0) return null;
+  const params = new URLSearchParams(url.slice(hashIndex + 1));
+  if (params.get('error') || params.get('error_code')) return { kind: 'error' };
+  const accessToken = params.get('access_token');
+  const refreshToken = params.get('refresh_token');
+  if (params.get('type') !== 'recovery' || !accessToken || !refreshToken) return null;
+  return { kind: 'tokens', accessToken, refreshToken };
+}
+
+/** Zet de herstelsessie uit een wachtwoordherstel-link in, zodat een nieuw wachtwoord gekozen kan worden. */
+export async function startRecoverySession(
+  accessToken: string,
+  refreshToken: string,
+): Promise<AuthResult> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return { ok: false, message: 'Synchronisatie staat niet ingesteld.' };
+  }
+  try {
+    const { data, error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+    if (error || !data.session) {
+      return {
+        ok: false,
+        message: 'Deze link is verlopen of al gebruikt. Vraag een nieuwe aan.',
+      };
+    }
+    return { ok: true, session: data.session };
+  } catch {
+    return {
+      ok: false,
+      message: 'Deze link is verlopen of al gebruikt. Vraag een nieuwe aan.',
+    };
+  }
+}
+
+/** Stelt een nieuw wachtwoord in voor de huidige (herstel)sessie. */
+export async function setNewPassword(password: string): Promise<AuthResult> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    return { ok: false, message: 'Synchronisatie staat niet ingesteld.' };
+  }
+  if (password.length < 8) {
+    return { ok: false, message: 'Kies een wachtwoord van minstens 8 tekens.' };
+  }
+  try {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) {
+      return { ok: false, message: vertaalAuthFout(error.message) };
+    }
+    return { ok: true, message: 'Je wachtwoord is aangepast.', session: await getCurrentSession() };
+  } catch {
+    return {
+      ok: false,
+      message: 'Wachtwoord aanpassen lukte niet. Probeer het later opnieuw.',
+    };
+  }
+}
+
+/**
  * Zorgt dat GoogleSignin eenmalig geconfigureerd is met de publieke
  * client-ID's. Meerdere aanroepen zijn goedkoop/onschadelijk, maar we
  * beperken het toch tot eenmaal per app-sessie.
@@ -354,7 +470,9 @@ export async function signOut(): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;
   try {
-    await supabase.auth.signOut();
+    // Alleen deze sessie beëindigen: uitloggen op dit toestel mag een ander
+    // toestel van dezelfde gebruiker niet uitloggen (de standaard is 'global').
+    await supabase.auth.signOut({ scope: 'local' });
   } catch {
     // Negeer fouten bij uitloggen
   }
@@ -500,6 +618,15 @@ function vertaalAuthFout(message: string): string {
   }
   if (m.includes('invalid login credentials')) {
     return 'E-mailadres of wachtwoord klopt niet.';
+  }
+  if (m.includes('rate limit') || m.includes('security purposes')) {
+    return 'Je hebt dit net al aangevraagd. Wacht een paar minuten en probeer het dan opnieuw.';
+  }
+  if (m.includes('different from the old')) {
+    return 'Kies een ander wachtwoord dan je huidige.';
+  }
+  if (m.includes('expired') || m.includes('invalid or has expired')) {
+    return 'Deze link is verlopen. Vraag een nieuwe aan.';
   }
   if (m.includes('password')) {
     return 'Het wachtwoord voldoet niet. Kies minstens 8 tekens.';

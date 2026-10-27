@@ -21,7 +21,7 @@
  * hoeft te wachten op die listener voordat het teruggnavigeert.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -38,6 +38,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Mail } from 'lucide-react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Linking from 'expo-linking';
 import { typography, spacing, radius, type ThemeColors } from '../src/theme/tokens';
 import { useThemeColors, useIsLightTheme } from '../src/theme/useTheme';
 import { Button } from '../src/components/ui/Button';
@@ -47,6 +48,10 @@ import {
   signInWithGoogle,
   signInWithApple,
   getCurrentUser,
+  sendPasswordReset,
+  parseRecoveryLink,
+  startRecoverySession,
+  setNewPassword,
   type AuthResult,
 } from '../src/services/authService';
 import { identifyUser } from '../src/services/purchaseService';
@@ -74,11 +79,15 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
   });
 }
 
-type Mode = 'create' | 'login';
+/** 'reset' = nieuw wachtwoord kiezen na een wachtwoordherstel-link uit de mail. */
+type Mode = 'create' | 'login' | 'reset';
 
 export default function AccountScreen() {
-  const params = useLocalSearchParams<{ mode?: string }>();
+  const params = useLocalSearchParams<{ mode?: string; from?: string }>();
   const initialMode: Mode = params.mode === 'login' ? 'login' : 'create';
+  // Geopend vanaf het welkomstscherm (nog geen profiel op dit toestel): na het
+  // inloggen moet de onboarding verdergaan of overgeslagen worden.
+  const fromWelcome = params.from === 'welcome';
 
   const colors = useThemeColors();
   const isLight = useIsLightTheme();
@@ -107,6 +116,36 @@ export default function AccountScreen() {
       cancelled = true;
     };
   }, []);
+
+  // Wachtwoordherstel: de link in de mail opent de app op dit scherm met een
+  // herstelsessie in het URL-fragment. Zet die sessie in en toon het formulier
+  // voor een nieuw wachtwoord. Elke link wordt maar één keer verwerkt.
+  const url = Linking.useURL();
+  const handledRecoveryUrl = useRef<string | null>(null);
+  useEffect(() => {
+    if (!url || handledRecoveryUrl.current === url) return;
+    const link = parseRecoveryLink(url);
+    if (!link) return;
+    handledRecoveryUrl.current = url;
+
+    if (link.kind === 'error') {
+      Alert.alert('Link verlopen', 'Deze link is verlopen of al gebruikt. Vraag een nieuwe aan via "Wachtwoord vergeten".');
+      setMode('login');
+      return;
+    }
+    setBusy(true);
+    void startRecoverySession(link.accessToken, link.refreshToken)
+      .then(result => {
+        if (result.ok) {
+          setPassword('');
+          setMode('reset');
+        } else {
+          Alert.alert('Link verlopen', result.message);
+          setMode('login');
+        }
+      })
+      .finally(() => setBusy(false));
+  }, [url]);
 
   const anyBusy = busy || socialBusy !== null;
 
@@ -156,10 +195,25 @@ export default function AccountScreen() {
       ? '\nJe trainingen worden voortaan veilig in de cloud bewaard.'
       : '';
 
+    // Na inloggen vanaf het welkomstscherm: is het profiel hersteld, dan stuurt
+    // het welkomstscherm zelf door naar het dashboard zodra het weer in beeld is.
+    const after = useAppStore.getState();
+    const profileRestored = after.hasCompletedOnboarding && !!after.profile;
+
     let alertTitle = title;
     let message: string;
-    if (!reconciled || !reconciled.ok) {
-      message = `${result.message}\nJe bent ingelogd, maar je gegevens ophalen lukte nog niet. We proberen het automatisch opnieuw zodra je verbinding hebt.`;
+    if (reconciled === null) {
+      // Timeout: de pull loopt op de achtergrond door, dus geen "mislukt" claimen.
+      message = fromWelcome
+        ? 'Je gegevens worden nog opgehaald. Zodra ze binnen zijn, gaat de app vanzelf verder.'
+        : 'Je gegevens worden nog opgehaald. Dit kan even duren.';
+    } else if (!reconciled.ok) {
+      message = fromWelcome
+        ? 'Je gegevens ophalen lukte nog niet. Je kunt alvast je schema instellen; lukt het ophalen later alsnog, dan zetten we je gegevens terug.'
+        : 'Je gegevens ophalen lukte nog niet. We proberen het opnieuw de volgende keer dat de app synchroniseert.';
+    } else if (fromWelcome && !profileRestored) {
+      alertTitle = 'Nog geen profiel';
+      message = 'Je bent ingelogd, maar bij dit account staat nog geen profiel. Stel eerst je schema in; daarna bewaren we alles in je account.';
     } else if (reconciled.restoredRuns > 0 || reconciled.hadRemoteProfile) {
       alertTitle = 'Welkom terug';
       const n = reconciled.restoredRuns;
@@ -176,6 +230,16 @@ export default function AccountScreen() {
   async function handleSubmit() {
     setBusy(true);
     try {
+      if (mode === 'reset') {
+        const result = await setNewPassword(password);
+        if (!result.ok) {
+          Alert.alert('Nieuw wachtwoord', result.message);
+          return;
+        }
+        await afterSignedIn(result, 'Wachtwoord aangepast');
+        return;
+      }
+
       const result = mode === 'create'
         ? await linkEmailAccount(email, password)
         : await signInWithEmail(email, password);
@@ -186,6 +250,27 @@ export default function AccountScreen() {
       }
 
       await afterSignedIn(result, mode === 'create' ? 'Account aangemaakt' : 'Ingelogd');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleForgotPassword() {
+    if (email.trim().length === 0) {
+      Alert.alert('Wachtwoord vergeten', 'Vul eerst je e-mailadres in, dan sturen we je een mail.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await sendPasswordReset(email);
+      if (!result.ok) {
+        Alert.alert('Wachtwoord vergeten', result.message);
+        return;
+      }
+      Alert.alert(
+        'Wachtwoord vergeten',
+        'Als dit e-mailadres bij ons bekend is, ontvang je een mail om je wachtwoord opnieuw in te stellen.',
+      );
     } finally {
       setBusy(false);
     }
@@ -213,7 +298,8 @@ export default function AccountScreen() {
   }
 
   const cleanEmail = email.trim();
-  const canSubmit = cleanEmail.length > 0 && password.length > 0 && !anyBusy;
+  const isReset = mode === 'reset';
+  const canSubmit = (isReset || cleanEmail.length > 0) && password.length > 0 && !anyBusy;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -243,14 +329,18 @@ export default function AccountScreen() {
           </View>
 
           <Text style={styles.title} accessibilityRole="header">
-            {mode === 'create' ? 'Account aanmaken' : 'Inloggen'}
+            {isReset ? 'Nieuw wachtwoord' : mode === 'create' ? 'Account aanmaken' : 'Inloggen'}
           </Text>
           <Text style={styles.subtitle}>
-            {mode === 'create'
-              ? 'Bewaar je trainingen veilig in de cloud en zet ze terug op een nieuw toestel.'
-              : 'Log in om je profiel en trainingen op dit toestel terug te zetten.'}
+            {isReset
+              ? 'Kies een nieuw wachtwoord voor je account.'
+              : mode === 'create'
+                ? 'Bewaar je trainingen veilig in de cloud en zet ze terug op een nieuw toestel.'
+                : 'Log in om je profiel en trainingen op dit toestel terug te zetten.'}
           </Text>
 
+          {!isReset && (
+          <>
           <View style={styles.socialGroup}>
             {Platform.OS === 'ios' && appleAvailable && (
               <View style={[styles.appleButtonWrap, anyBusy && styles.socialDisabled]} pointerEvents={anyBusy ? 'none' : 'auto'}>
@@ -301,27 +391,40 @@ export default function AccountScreen() {
               editable={!anyBusy}
             />
           </View>
+          </>
+          )}
 
           <View style={styles.field}>
-            <Text style={styles.label}>Wachtwoord</Text>
+            <Text style={styles.label}>{isReset ? 'Nieuw wachtwoord' : 'Wachtwoord'}</Text>
             <TextInput
               value={password}
               onChangeText={setPassword}
-              placeholder={mode === 'create' ? 'Minstens 8 tekens' : 'Jouw wachtwoord'}
+              placeholder={mode === 'login' ? 'Jouw wachtwoord' : 'Minstens 8 tekens'}
               placeholderTextColor={colors.textTertiary}
               style={styles.input}
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}
-              textContentType={mode === 'create' ? 'newPassword' : 'password'}
+              textContentType={mode === 'login' ? 'password' : 'newPassword'}
               returnKeyType="done"
               onSubmitEditing={() => canSubmit && handleSubmit()}
               editable={!anyBusy}
             />
+            {mode === 'login' && (
+              <TouchableOpacity
+                onPress={handleForgotPassword}
+                disabled={anyBusy}
+                style={styles.forgotRow}
+                accessibilityRole="button"
+                accessibilityLabel="Wachtwoord vergeten"
+              >
+                <Text style={styles.switchModeLink}>Wachtwoord vergeten?</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <Button
-            label={mode === 'create' ? 'Account aanmaken' : 'Inloggen'}
+            label={isReset ? 'Wachtwoord opslaan' : mode === 'create' ? 'Account aanmaken' : 'Inloggen'}
             onPress={handleSubmit}
             disabled={!canSubmit}
             loading={busy}
@@ -330,22 +433,24 @@ export default function AccountScreen() {
             style={styles.submitButton}
           />
 
-          <TouchableOpacity
-            onPress={() => setMode(m => (m === 'create' ? 'login' : 'create'))}
-            style={styles.switchModeRow}
-            disabled={anyBusy}
-            accessibilityRole="button"
-            accessibilityLabel={mode === 'create' ? 'Ik heb al een account' : 'Ik heb nog geen account'}
-          >
-            <Text style={styles.switchModeText}>
-              {mode === 'create'
-                ? 'Heb je al een account? '
-                : 'Nog geen account? '}
-              <Text style={styles.switchModeLink}>
-                {mode === 'create' ? 'Inloggen' : 'Account aanmaken'}
+          {!isReset && (
+            <TouchableOpacity
+              onPress={() => setMode(m => (m === 'create' ? 'login' : 'create'))}
+              style={styles.switchModeRow}
+              disabled={anyBusy}
+              accessibilityRole="button"
+              accessibilityLabel={mode === 'create' ? 'Ik heb al een account' : 'Ik heb nog geen account'}
+            >
+              <Text style={styles.switchModeText}>
+                {mode === 'create'
+                  ? 'Heb je al een account? '
+                  : 'Nog geen account? '}
+                <Text style={styles.switchModeLink}>
+                  {mode === 'create' ? 'Inloggen' : 'Account aanmaken'}
+                </Text>
               </Text>
-            </Text>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          )}
 
           {anyBusy && (
             <ActivityIndicator style={{ marginTop: spacing[1] }} color={colors.brandPrimary} />
@@ -406,6 +511,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.borderDefault, paddingHorizontal: spacing[2], paddingVertical: spacing[1.5],
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.md, color: colors.textPrimary,
   },
+  forgotRow: { alignSelf: 'flex-end', paddingVertical: spacing[0.5] },
   submitButton: { marginTop: spacing[1] },
   switchModeRow: { marginTop: spacing[2.5], paddingVertical: spacing[1] },
   switchModeText: {

@@ -14,7 +14,7 @@
  *    isPremium blijven lokaal (niet in de DB, resp. RevenueCat is de bron).
  */
 
-import type { GoalType, TrainingWeek } from '../data/trainingPlans';
+import { DEFAULT_TRAINING_DAYS, type GoalType, type TrainingWeek } from '../data/trainingPlans';
 import { VOICES, type VoiceType } from '../config/voiceConfig';
 import type { UserProfile, CompletedSession } from '../store/appStore';
 import type { ProfileRow } from '../services/syncService';
@@ -92,16 +92,21 @@ export function mergeProfile(
     // Defensief (nu niet bereikbaar): geen lokaal profiel, wel een remote rij.
     // Zonder geldig doel of startdatum is er niets bruikbaars om te herstellen.
     if (!remoteGoal || !remoteStart) return { profile: null, goalChanged: false };
+    // Zelfde terugvalwaarden als de onboarding (leeftijd 30, hartslag 220 - leeftijd),
+    // zodat de hartslagzones nooit op 0 uitkomen.
+    const age = remoteAge ?? 30;
     return {
       profile: {
-        name: remoteName ?? '',
+        name: remoteName ?? 'Hardloper',
         goal: remoteGoal,
         startDate: remoteStart,
-        maxHeartRate: remoteMaxHr ?? 0,
-        age: remoteAge ?? 0,
+        maxHeartRate: remoteMaxHr ?? 220 - age,
+        age,
         voiceGuidance: remoteVoiceGuidance ?? true,
         voiceType: remoteVoiceType ?? undefined,
         routePlannerEnabled: remotePlanner ?? undefined,
+        // trainingDays staan niet in de cloud: de standaarddagen van de onboarding.
+        trainingDays: [...DEFAULT_TRAINING_DAYS],
       },
       goalChanged: true,
     };
