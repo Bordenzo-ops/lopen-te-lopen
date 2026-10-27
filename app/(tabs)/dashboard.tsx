@@ -15,6 +15,7 @@ import { SessionCard } from '../../src/components/ui/SessionCard';
 import { StatRing } from '../../src/components/ui/StatRing';
 import { RaceCountdownCard } from '../../src/components/ui/RaceCountdownCard';
 import { Button } from '../../src/components/ui/Button';
+import { VoicePackPrompt } from '../../src/components/VoicePackPrompt';
 import { FadeSlideIn } from '../../src/components/motion/FadeSlideIn';
 import { ScaleIn } from '../../src/components/motion/ScaleIn';
 import { CountUpText } from '../../src/components/motion/CountUpText';
@@ -313,6 +314,10 @@ export default function DashboardScreen() {
             />
           </View>
         )}
+
+        {/* Stempakket-aanbieding: toont zichzelf alleen wanneer relevant, en
+            staat bewust onder de verlopen-melding maar boven de upsell. */}
+        <VoicePackPrompt />
 
         {/* Subtiele dashboard-upsell voor gratis gebruikers, permanent te sluiten.
             Verschijnt niet naast de "premium verlopen"-melding hierboven. */}

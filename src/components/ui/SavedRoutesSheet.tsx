@@ -24,6 +24,7 @@ import {
 } from 'react-native';
 import { MapPin, Bookmark, Trash2 } from 'lucide-react-native';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '../../theme/useTheme';
 import { SheetHandle, SheetCloseButton } from './sheetParts';
 import { useAppStore, selectSavedRoutes, type SavedRoute } from '../../store/appStore';
@@ -93,7 +94,8 @@ interface RouteRow {
 
 export function SavedRoutesSheet({ visible, currentPosition, onSelect, onClose }: SavedRoutesSheetProps) {
   const colors = useThemeColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
   const savedRoutes = useAppStore(selectSavedRoutes);
   const deleteSavedRoute = useAppStore(s => s.deleteSavedRoute);
   const { hasAccess } = usePremium();
@@ -237,7 +239,7 @@ export function SavedRoutesSheet({ visible, currentPosition, onSelect, onClose }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, insetBottom: number) => StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.6)',
@@ -249,7 +251,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderTopLeftRadius:  radius['2xl'],
     borderTopRightRadius: radius['2xl'],
     maxHeight: '80%',
-    paddingBottom: Platform.OS === 'ios' ? 30 : 20,
+    paddingBottom: Math.max(insetBottom, Platform.OS === 'ios' ? 30 : 20),
     ...shadows.lg,
   },
   title: {

@@ -38,6 +38,14 @@ De app start standaard een anonieme sessie zodat data alvast veilig staat.
 3. Laat de e-mailprovider aan staan (standaard), zodat een gebruiker later een
    e-mailaccount kan koppelen om data te herstellen.
 
+## 3b. Redirect-URL voor wachtwoord vergeten
+
+De wachtwoord-vergeten-mail stuurt de gebruiker terug naar de app via `lopentelopen://account`. Zet die URL op de toegestane lijst:
+
+1. Open in Supabase: Authentication, URL Configuration.
+2. Voeg bij Redirect URLs `lopentelopen://account` toe (of `lopentelopen://**`).
+3. Sla op. Zonder deze regel werkt de link in de mail niet.
+
 ## 4. Migraties draaien
 
 De tabellen profiles en runs (met Row Level Security) staan in

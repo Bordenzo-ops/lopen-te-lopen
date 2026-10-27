@@ -11,6 +11,7 @@ import {
   TouchableWithoutFeedback, ScrollView, Platform,
 } from 'react-native';
 import { palette, typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '../../theme/useTheme';
 import { SheetHandle, SheetCloseButton } from './sheetParts';
 import type { Session } from '../../data/trainingPlans';
@@ -127,7 +128,8 @@ interface SessionTypeSheetProps {
 
 export function SessionTypeSheet({ sessionType, onClose }: SessionTypeSheetProps) {
   const colors = useThemeColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
   if (!sessionType) return null;
   const info = SESSION_TYPE_INFO[sessionType];
   const accent = info.accentColor;
@@ -194,7 +196,7 @@ export function SessionTypeSheet({ sessionType, onClose }: SessionTypeSheetProps
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, insetBottom: number) => StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.6)',
@@ -206,7 +208,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderTopLeftRadius:  radius['2xl'],
     borderTopRightRadius: radius['2xl'],
     maxHeight: '85%',
-    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    paddingBottom: Math.max(insetBottom, Platform.OS === 'ios' ? 36 : 24),
     ...shadows.lg,
   },
   scroll: {

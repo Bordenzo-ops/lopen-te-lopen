@@ -46,6 +46,7 @@ import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { Share2, FileDown, Zap } from 'lucide-react-native';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '../../theme/useTheme';
 import { useAppStore } from '../../store/appStore';
 import type { CompletedSession } from '../../store/appStore';
@@ -148,7 +149,8 @@ export interface RunDetailSheetProps {
 
 export function RunDetailSheet({ visible, session, onClose }: RunDetailSheetProps) {
   const colors = useThemeColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
 
   const profile    = useAppStore(s => s.profile);
   const racePlan   = useAppStore(s => s.racePlan);
@@ -392,7 +394,7 @@ export function RunDetailSheet({ visible, session, onClose }: RunDetailSheetProp
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, insetBottom: number) => StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.65)',
@@ -407,7 +409,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderTopLeftRadius:  radius['2xl'],
     borderTopRightRadius: radius['2xl'],
     maxHeight: '88%',
-    paddingBottom: Platform.OS === 'ios' ? 30 : 20,
+    paddingBottom: Math.max(insetBottom, Platform.OS === 'ios' ? 30 : 20),
     ...shadows.lg,
   },
 

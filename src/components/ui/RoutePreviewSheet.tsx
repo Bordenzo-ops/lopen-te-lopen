@@ -42,6 +42,7 @@ import MapView, {
 } from 'react-native-maps';
 import { RefreshCw, Navigation, ArrowRight, MapPin, Bookmark, Check } from 'lucide-react-native';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors, useIsLightTheme } from '../../theme/useTheme';
 import { SheetHandle, SheetCloseButton } from './sheetParts';
 import { PremiumBadge } from './PremiumBadge';
@@ -115,7 +116,8 @@ export function RoutePreviewSheet({
 }: RoutePreviewSheetProps) {
   const colors = useThemeColors();
   const isLight = useIsLightTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
   const mapCoords = plannedRoute?.waypoints.map(wp => ({
     latitude:  wp.lat,
     longitude: wp.lon,
@@ -397,7 +399,7 @@ export function RoutePreviewSheet({
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, insetBottom: number) => StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.6)',
@@ -418,7 +420,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor:      colors.bgSurface,
     borderTopLeftRadius:  radius['2xl'],
     borderTopRightRadius: radius['2xl'],
-    paddingBottom:        Platform.OS === 'ios' ? 34 : 24,
+    paddingBottom:        Math.max(insetBottom, Platform.OS === 'ios' ? 34 : 24),
     ...shadows.lg,
   },
 

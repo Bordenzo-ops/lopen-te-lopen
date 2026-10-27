@@ -31,6 +31,7 @@ import {
 import Svg, { Defs, Pattern, Rect } from 'react-native-svg';
 import { Share2, Download, Camera } from 'lucide-react-native';
 import { palette, typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '../../theme/useTheme';
 import { SheetHandle, SheetCloseButton } from './sheetParts';
 import { ShareRunCard, CARD_WIDTH, CARD_HEIGHT, type ShareRunCardVariant } from './ShareRunCard';
@@ -96,7 +97,8 @@ export function ShareRunSheet({
 }: ShareRunSheetProps) {
   const { cardRef, isSharing, share, saveToLibrary, captureCard } = useShareRun();
   const colors = useThemeColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
   const [variant, setVariant] = useState<ShareRunCardVariant>('card');
 
   // De transparante variant heeft geen vaste CARD_HEIGHT — hij groeit mee met
@@ -281,7 +283,7 @@ export function ShareRunSheet({
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const makeStyles = (colors: ThemeColors, insetBottom: number) => StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.65)',
@@ -295,7 +297,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.bgSurface,
     borderTopLeftRadius:  radius['2xl'],
     borderTopRightRadius: radius['2xl'],
-    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
+    paddingBottom: Math.max(insetBottom, Platform.OS === 'ios' ? 34 : 24),
     ...shadows.lg,
   },
 
