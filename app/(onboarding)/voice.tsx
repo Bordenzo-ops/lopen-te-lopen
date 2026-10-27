@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Volume2, EyeOff, Check } from 'lucide-react-native';
@@ -12,7 +12,7 @@ import { VOICES, type VoiceType } from '../../src/config/voiceConfig';
 import type { GoalType } from '../../src/data/trainingPlans';
 import { DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
 import { getRaceById } from '../../src/data/rotterdamRaces';
-import { buildRacePlan } from '../../src/data/buildRacePlan';
+import { buildRacePlan, type RacePlan } from '../../src/data/buildRacePlan';
 import { usePremium } from '../../src/hooks/usePremium';
 import { PremiumBadge } from '../../src/components/ui/PremiumBadge';
 import { trackEvent } from '../../src/services/analyticsService';
@@ -55,9 +55,29 @@ export default function VoiceScreen() {
         ? parsedDays
         : DEFAULT_TRAINING_DAYS;
 
+    // Wedstrijdmodus: bouw het plan vooraf, zodat het doel uit het schema komt
+    // (niet uit de param) en we bij een mislukte bouw netjes terugvallen op
+    // vrij trainen in plaats van race-modus zonder schema.
+    let mode: 'training' | 'race' = schemaMode === 'race' ? 'race' : 'training';
+    let finalGoal = goal as GoalType;
+    let racePlan: RacePlan | null = null;
+    if (mode === 'race') {
+      const race = raceId ? getRaceById(raceId) : undefined;
+      racePlan = race ? buildRacePlan(race) : null;
+      if (racePlan) {
+        finalGoal = racePlan.goal;
+      } else {
+        mode = 'training';
+        Alert.alert(
+          'Wedstrijdschema niet beschikbaar',
+          'De wedstrijd is te dichtbij of niet meer beschikbaar. Je start met een vrij trainingsschema; een wedstrijd kies je later bij Wedstrijden.',
+        );
+      }
+    }
+
     completeOnboarding({
       name: name || 'Hardloper',
-      goal: goal as GoalType,
+      goal: finalGoal,
       startDate: new Date().toISOString(),
       age: parseInt(age) || 30,
       maxHeartRate: 220 - (parseInt(age) || 30),
@@ -66,7 +86,6 @@ export default function VoiceScreen() {
       trainingDays: chosenDays,
     });
 
-    const mode = schemaMode === 'race' ? 'race' : 'training';
     setSchemaMode(mode);
 
     // Funnelstap: onboarding afgerond (profiel plus schema staan klaar).
@@ -74,18 +93,11 @@ export default function VoiceScreen() {
     // we hoeveel mensen bij de start al meer dan 3 dagen kiezen.
     void trackEvent('onboarding_completed', {
       schemaMode: mode,
-      goal: goal ?? 'unknown',
+      goal: finalGoal ?? 'unknown',
       trainingDays: chosenDays.length,
     });
 
-    // Als wedstrijdmodus: zoek de race op en bouw direct het plan
-    if (mode === 'race' && raceId) {
-      const race = getRaceById(raceId);
-      if (race) {
-        const plan = buildRacePlan(race);
-        if (plan) setRacePlan(plan);
-      }
-    }
+    if (racePlan) setRacePlan(racePlan);
 
     router.replace('/(tabs)/dashboard');
   };

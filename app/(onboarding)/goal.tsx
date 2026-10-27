@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Animated, LayoutAnimation, Platform, UIManager,
+  ScrollView, Animated, LayoutAnimation, Platform, UIManager, Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { colors, palette, typography, spacing, radius, shadows, type ThemeColors
 import { useThemeColors } from '../../src/theme/useTheme';
 import { Button } from '../../src/components/ui/Button';
 import { trainingPlans } from '../../src/data/trainingPlans';
+import { buildRacePlan, canTrainForRace } from '../../src/data/buildRacePlan';
 import { getUpcomingRaces, weeksUntilLabel, formatRaceDate } from '../../src/data/rotterdamRaces';
 import type { GoalType } from '../../src/data/trainingPlans';
 import type { RotterdamRace } from '../../src/data/rotterdamRaces';
@@ -64,6 +65,19 @@ export default function GoalScreen() {
     if (mode === 'training' && selectedGoal) {
       router.push({ pathname: '/(onboarding)/profile', params: { goal: selectedGoal, schemaMode: 'training' } });
     } else if (mode === 'race' && selectedRace) {
+      // Het doel volgt uit het wedstrijdschema (marathon, 10 km, ...), niet
+      // vast uit een afstand. Lukt het bouwen niet (wedstrijd inmiddels te
+      // dichtbij), dan vallen we terug op vrij trainen in plaats van een
+      // race-modus zonder schema.
+      const plan = buildRacePlan(selectedRace);
+      if (!plan) {
+        Alert.alert(
+          'Te laat om te starten',
+          canTrainForRace(selectedRace).reason ?? 'De wedstrijd is te dichtbij voor een volwaardig schema.',
+          [{ text: 'Kies een vrij schema', onPress: () => { setSelectedRace(null); switchMode('training'); } }],
+        );
+        return;
+      }
       // Funnelstap: wedstrijddoel gekozen. Geen persoonsgegevens, alleen de
       // race-id en afstand zodat we per wedstrijd kunnen meten.
       void trackEvent('race_goal_chosen', {
@@ -72,7 +86,7 @@ export default function GoalScreen() {
       });
       router.push({
         pathname: '/(onboarding)/profile',
-        params: { goal: 'half_marathon', schemaMode: 'race', raceId: selectedRace.id },
+        params: { goal: plan.goal, schemaMode: 'race', raceId: selectedRace.id },
       });
       // Moment van hoogste motivatie: leg de paywall als modal over het
       // volgende onboardingscherm. Wegtikken (sluiten) brengt de gebruiker
@@ -282,13 +296,18 @@ function RaceModeContent({
           const isSelected = selected?.id === race.id;
           const accent = race.accentColor;
           const locked = !hasAccess && !isRaceDistanceFree(race.distance);
+          // Zelfde regel als de racekiezer: te dichtbij = niet te kiezen.
+          const { possible, reason } = canTrainForRace(race);
           return (
             <TouchableOpacity
               key={race.id}
               onPress={() => onSelect(race)}
+              disabled={!possible}
               activeOpacity={0.8}
+              accessibilityState={{ disabled: !possible, selected: isSelected }}
               style={[
                 styles.raceCard,
+                !possible && { opacity: 0.5 },
                 { borderColor: isSelected ? accent : colors.borderSubtle },
                 isSelected && { backgroundColor: accent + '0D' },
               ]}
@@ -328,6 +347,9 @@ function RaceModeContent({
                     </Text>
                   </View>
                 </View>
+                {reason && (
+                  <Text style={styles.raceReason}>{reason}</Text>
+                )}
               </View>
             </TouchableOpacity>
           );
@@ -471,6 +493,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   raceMeta: { flexDirection: 'row', gap: spacing[2], flexWrap: 'wrap', marginTop: 4 },
   raceMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  raceReason: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
+    color: colors.textSecondary, marginTop: 2,
+  },
   raceMetaText: {
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
     color: colors.textTertiary, textTransform: 'capitalize',

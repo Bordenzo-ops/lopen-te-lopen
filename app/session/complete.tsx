@@ -69,7 +69,7 @@ export default function SchemaCompleteScreen() {
 
   function handleNewGoal() {
     // Stuur de gebruiker terug naar onboarding zodat hij een nieuw doel kan kiezen
-    router.replace('/(onboarding)/goal');
+    router.push('/(onboarding)/goal');
   }
 
   return (

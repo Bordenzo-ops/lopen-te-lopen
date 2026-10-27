@@ -3,7 +3,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet, Alert, BackHandler, ActivityIndicator, Linking,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pause, Play, Square, ChevronDown, MapPin, Map, Info, Lock, Bookmark } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
@@ -233,6 +233,7 @@ export default function ActiveSessionScreen() {
   const hrMaxRef      = useRef(0);
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
 
   // ── Routeplanner ──────────────────────────────────────────────────────────
   // Gratis gebruikers mogen een beperkt aantal routes per week plannen; premium
@@ -887,6 +888,68 @@ export default function ActiveSessionScreen() {
   };
 
   // ── Stoppen ───────────────────────────────────────────────────────────────
+  const saveAndFinish = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    unsubscribeLocationsRef.current?.();
+    locationSub.current?.remove();
+    void stopBackgroundTracking();
+    void clearSnapshot();
+    void disconnectMonitor();
+    const finalDist = parseFloat(distanceRef.current.toFixed(2));
+    const avgPace   = finalDist > 0 ? Math.round(elapsed / finalDist) : 0;
+    const hrSamples = hrSamplesRef.current;
+    const avgHeartRate = hrSamples.length > 0
+      ? Math.round(hrSamples.reduce((sum, bpm) => sum + bpm, 0) / hrSamples.length)
+      : undefined;
+    const maxHeartRateBpm = hrMaxRef.current > 0 ? hrMaxRef.current : undefined;
+
+    // Race-felicitatie (fase E, zie voicePhrases.raceFinishUtterance):
+    // vervangt de standaard "Sessie voltooid!"-melding (onFinish)
+    // wanneer dit de RACE-sessie van de laatste week van een actief
+    // wedstrijdschema is. Detectie via dezelfde description die
+    // buildRacePlan.injectRaceName op precies díé ene sessie zet
+    // ("{racenaam}: RACE DAG!"), plus de weeknummer als extra
+    // zekerheid. Bewust VERVANGEN in plaats van na elkaar spreken:
+    // speakPhrases/onFinish beginnen altijd met stop() op de vorige
+    // uitspraak (zie voiceService.ts), dus een tweede melding vlak na
+    // "Sessie voltooid!" zou die gewoon afkappen — door elkaar heen
+    // praten dus. Eén heldere felicitatie is hier het betere moment.
+    if (isRaceDaySession) {
+      if (voiceEnabled) {
+        voiceService.speakPhrases(
+          raceFinishUtterance(racePlan.race.id, racePlan.race.name),
+          voiceType,
+        );
+      }
+    } else {
+      onFinish(finalDist, elapsed, completedSessionsCount);
+    }
+    completeSession(
+      {
+        actualDistanceKm: finalDist,
+        durationSeconds:  elapsed,
+        avgPaceSecPerKm:  avgPace,
+        avgHeartRate,
+        maxHeartRateBpm,
+        route:            routeRef.current,
+        splits:           splits,
+        source:           'app',
+      },
+      week?.sessions ?? [],
+    );
+    router.replace({
+      pathname: '/session/summary',
+      params: {
+        distanceKm:      finalDist.toFixed(2),
+        durationSeconds: String(elapsed),
+        avgPace:         String(avgPace),
+        sessionId,
+        weekNumber,
+        splits:          JSON.stringify(splits),
+      },
+    });
+  };
+
   const handleStop = () => {
     Alert.alert(
       'Sessie afsluiten',
@@ -896,65 +959,21 @@ export default function ActiveSessionScreen() {
         {
           text: 'Opslaan en afsluiten',
           onPress: () => {
-            if (timerRef.current) clearInterval(timerRef.current);
-            unsubscribeLocationsRef.current?.();
-            locationSub.current?.remove();
-            void stopBackgroundTracking();
-            void clearSnapshot();
-            void disconnectMonitor();
-            const finalDist = parseFloat(distanceRef.current.toFixed(2));
-            const avgPace   = finalDist > 0 ? Math.round(elapsed / finalDist) : 0;
-            const hrSamples = hrSamplesRef.current;
-            const avgHeartRate = hrSamples.length > 0
-              ? Math.round(hrSamples.reduce((sum, bpm) => sum + bpm, 0) / hrSamples.length)
-              : undefined;
-            const maxHeartRateBpm = hrMaxRef.current > 0 ? hrMaxRef.current : undefined;
-
-            // Race-felicitatie (fase E, zie voicePhrases.raceFinishUtterance):
-            // vervangt de standaard "Sessie voltooid!"-melding (onFinish)
-            // wanneer dit de RACE-sessie van de laatste week van een actief
-            // wedstrijdschema is. Detectie via dezelfde description die
-            // buildRacePlan.injectRaceName op precies díé ene sessie zet
-            // ("{racenaam}: RACE DAG!"), plus de weeknummer als extra
-            // zekerheid. Bewust VERVANGEN in plaats van na elkaar spreken:
-            // speakPhrases/onFinish beginnen altijd met stop() op de vorige
-            // uitspraak (zie voiceService.ts), dus een tweede melding vlak na
-            // "Sessie voltooid!" zou die gewoon afkappen — door elkaar heen
-            // praten dus. Eén heldere felicitatie is hier het betere moment.
-            if (isRaceDaySession) {
-              if (voiceEnabled) {
-                voiceService.speakPhrases(
-                  raceFinishUtterance(racePlan.race.id, racePlan.race.name),
-                  voiceType,
-                );
-              }
-            } else {
-              onFinish(finalDist, elapsed, completedSessionsCount);
+            // Geen afstand gemeten (GPS-uitval, geweigerde toestemming): vraag
+            // eerst of dit echt een training is, anders telt een lege run mee.
+            // Op de loopband zonder GPS kan opslaan wel de bedoeling zijn.
+            if (parseFloat(distanceRef.current.toFixed(2)) < 0.05) {
+              Alert.alert(
+                'Er is geen afstand gemeten',
+                'Wil je deze training toch opslaan?',
+                [
+                  { text: 'Weggooien', style: 'destructive', onPress: discardSession },
+                  { text: 'Toch opslaan', onPress: saveAndFinish },
+                ],
+              );
+              return;
             }
-            completeSession(
-              {
-                actualDistanceKm: finalDist,
-                durationSeconds:  elapsed,
-                avgPaceSecPerKm:  avgPace,
-                avgHeartRate,
-                maxHeartRateBpm,
-                route:            routeRef.current,
-                splits:           splits,
-                source:           'app',
-              },
-              week?.sessions ?? [],
-            );
-            router.replace({
-              pathname: '/session/summary',
-              params: {
-                distanceKm:      finalDist.toFixed(2),
-                durationSeconds: String(elapsed),
-                avgPace:         String(avgPace),
-                sessionId,
-                weekNumber,
-                splits:          JSON.stringify(splits),
-              },
-            });
+            saveAndFinish();
           },
         },
       ],
@@ -962,27 +981,27 @@ export default function ActiveSessionScreen() {
   };
 
   // ── Annuleren ─────────────────────────────────────────────────────────────
+  // Gedeeld afbreekpad: ruimt alles op zonder iets op te slaan (geen
+  // completeSession, geen Strava-upload).
+  const discardSession = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    unsubscribeLocationsRef.current?.();
+    locationSub.current?.remove();
+    void stopBackgroundTracking();
+    void clearSnapshot();
+    void disconnectMonitor();
+    stopVoice();
+    cancelSession();
+    router.back();
+  };
+
   const handleCancel = () => {
     Alert.alert(
       'Sessie annuleren',
       'Je voortgang wordt niet opgeslagen.',
       [
         { text: 'Doorgaan met lopen', style: 'cancel' },
-        {
-          text: 'Stop zonder opslaan',
-          style: 'destructive',
-          onPress: () => {
-            if (timerRef.current) clearInterval(timerRef.current);
-            unsubscribeLocationsRef.current?.();
-            locationSub.current?.remove();
-            void stopBackgroundTracking();
-            void clearSnapshot();
-            void disconnectMonitor();
-            stopVoice();
-            cancelSession();
-            router.back();
-          },
-        },
+        { text: 'Stop zonder opslaan', style: 'destructive', onPress: discardSession },
       ],
     );
   };
@@ -999,10 +1018,27 @@ export default function ActiveSessionScreen() {
     );
   }
 
+  // Uitweg tijdens countdown en GPS-/routewachtscherm. Op iOS is er geen
+  // terugknop (fullScreenModal), dus een zichtbare knop; absoluut gepositioneerd
+  // zodat de gecentreerde inhoud niet verschuift.
+  const cancelButton = (
+    <TouchableOpacity
+      onPress={handleCancel}
+      style={[styles.waitCancelBtn, { top: insets.top + spacing[1] }]}
+      activeOpacity={0.7}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel="Annuleren"
+    >
+      <Text style={styles.waitCancelText}>Annuleren</Text>
+    </TouchableOpacity>
+  );
+
   // ── Fullscreen countdown, vlak voor de start van GPS-tracking en timer ────
   if (countdownActive) {
     return (
       <View style={[styles.container, styles.countdownContainer]}>
+        {cancelButton}
         <SafeAreaView style={styles.countdownInner}>
           <Text style={styles.countdownLabel}>Klaar voor de start</Text>
           <Text style={styles.countdownNumber}>
@@ -1017,6 +1053,7 @@ export default function ActiveSessionScreen() {
   if (!gpsReady || !sessionStarted) {
     return (
       <View style={[styles.container, styles.loadingBg]}>
+        {cancelButton}
         <SafeAreaView style={styles.loadingInner}>
           {!showRouteQuestion && (
             <>
@@ -1557,6 +1594,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   savedRoutesLinkText: {
     fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
+  },
+
+  waitCancelBtn: {
+    position: 'absolute', left: spacing[2], zIndex: 10,
+    minHeight: 44, minWidth: 44, paddingHorizontal: spacing[1.5],
+    alignItems: 'center', justifyContent: 'center',
+  },
+  waitCancelText: {
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.base,
     color: colors.textSecondary,
   },
 

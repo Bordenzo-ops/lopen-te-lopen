@@ -233,7 +233,7 @@ export default function ScheduleScreen() {
               <Text style={styles.raceInfoMeta}>
                 {raceStatus?.status === 'voor'
                   ? `Je schema start op ${formatRaceDate(racePlan.startDate)}`
-                  : `Week ${currentWeek} van ${planTotal} · het schema volgt de kalender, ook als er een training gemist is`}
+                  : `Week ${Math.min(currentWeek, planTotal)} van ${planTotal} · het schema volgt de kalender, ook als er een training gemist is`}
               </Text>
             )}
           </View>
@@ -574,7 +574,7 @@ export default function ScheduleScreen() {
                           style={styles.weekControlBtn}
                           hitSlop={6}
                           accessibilityRole="button"
-                          accessibilityLabel="Week terug"
+                          accessibilityLabel={`Terug naar week ${currentWeek - 1}`}
                         >
                           <Text style={styles.weekControlText}>Week terug</Text>
                         </TouchableOpacity>

@@ -8,7 +8,7 @@ import { typography, spacing, radius, type ThemeColors } from '../../src/theme/t
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore, selectWeeklyKm, selectIsSessionCompleted, selectTotalKm, selectCurrentWeek } from '../../src/store/appStore';
 import { resolveActivePlan } from '../../src/data/activePlan';
-import { raceScheduleStatus } from '../../src/data/raceSchedule';
+import { raceScheduleStatus, parseLocalISODate } from '../../src/data/raceSchedule';
 import { formatRaceDate } from '../../src/data/rotterdamRaces';
 import { raceCountdown } from '../../src/data/raceDetails';
 import { SessionCard } from '../../src/components/ui/SessionCard';
@@ -98,6 +98,16 @@ export default function DashboardScreen() {
   // Kalenderstatus van het wedstrijdschema (zie schedule.tsx voor dezelfde
   // toepassing): bepaalt of we hier "week X van Y" of een startdatum tonen.
   const raceStatus  = useRace && racePlan ? raceScheduleStatus(racePlan, new Date()) : null;
+  // Wedstrijd is geweest: de racedag ligt voor vandaag, of de hele racewee is
+  // voorbij. Dan past een felicitatie en een nieuw doel beter dan "succes".
+  const raceOver = (() => {
+    if (!useRace || !racePlan) return false;
+    if (raceStatus?.status === 'na') return true;
+    const raceDay = parseLocalISODate(racePlan.race.date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return raceDay.getTime() < today.getTime();
+  })();
 
   // Werkelijk totaal km van het schema (voor de voortgangsring)
   const planTotalKm = activePlan.reduce((sum, w) => sum + w.totalKm, 0);
@@ -237,7 +247,7 @@ export default function DashboardScreen() {
             <Text style={styles.goal}>
               {raceStatus?.status === 'voor' && racePlan
                 ? `${planLabel} · start ${formatRaceDate(racePlan.startDate)}`
-                : `${planLabel} · week ${currentWeek} van ${totalWeeks}`}
+                : `${planLabel} · week ${Math.min(currentWeek, totalWeeks)} van ${totalWeeks}`}
             </Text>
           </View>
         </View>
@@ -439,7 +449,22 @@ export default function DashboardScreen() {
         )}
 
         {/* Volgende sessie */}
-        {returnState ? null : nextSession ? (
+        {raceOver ? (
+          <FadeSlideIn style={styles.weekCompleteCard}>
+            <ScaleIn>
+              <Text style={styles.weekCompleteEmoji}>🏅</Text>
+            </ScaleIn>
+            <Text style={styles.weekCompleteTitle}>Gefeliciteerd met je wedstrijd!</Text>
+            <Text style={styles.weekCompleteSub}>
+              {racePlan?.race.name ?? 'Je wedstrijd'} zit erop. Wat een prestatie. Tijd voor een nieuw doel?
+            </Text>
+            <Button
+              label="Kies een nieuw doel"
+              onPress={() => router.push('/(onboarding)/goal')}
+              size="sm"
+            />
+          </FadeSlideIn>
+        ) : returnState ? null : nextSession ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Volgende sessie</Text>
             <SessionCard
@@ -498,6 +523,37 @@ export default function DashboardScreen() {
             <Button
               label="Training toevoegen"
               onPress={() => router.push('/(tabs)/schedule')}
+              size="sm"
+            />
+          </FadeSlideIn>
+        ) : !week ? (
+          // Weeknummer valt buiten het schema (bijvoorbeeld na een wissel van
+          // doel naar een korter schema): geen crash, wel een duidelijke uitweg.
+          <FadeSlideIn style={styles.weekCompleteCard}>
+            <Text style={styles.weekCompleteTitle}>Deze week staat niet in je schema</Text>
+            <Text style={styles.weekCompleteSub}>
+              Je schema heeft {totalWeeks} weken. Bekijk je schema of kies een nieuw doel.
+            </Text>
+            <Button
+              label="Naar mijn schema"
+              onPress={() => router.push('/(tabs)/schedule')}
+              size="sm"
+            />
+          </FadeSlideIn>
+        ) : !useRace && !isCustom && currentWeek >= totalWeeks ? (
+          // Trainingsmodus: currentWeek stopt op totalWeeks, dus na de laatste
+          // week staat hier nog "week 8 van 8". Alles afgehandeld = schema klaar.
+          <FadeSlideIn style={styles.weekCompleteCard}>
+            <ScaleIn>
+              <Text style={styles.weekCompleteEmoji}>🏆</Text>
+            </ScaleIn>
+            <Text style={styles.weekCompleteTitle}>Schema afgerond!</Text>
+            <Text style={styles.weekCompleteSub}>
+              Je hebt alle {totalWeeks} weken van je schema gehad. Gefeliciteerd!
+            </Text>
+            <Button
+              label="Kies een nieuw doel"
+              onPress={() => router.push('/(onboarding)/goal')}
               size="sm"
             />
           </FadeSlideIn>
