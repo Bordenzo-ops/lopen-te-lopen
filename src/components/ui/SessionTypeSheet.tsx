@@ -102,6 +102,20 @@ export const SESSION_TYPE_INFO: Record<Session['type'], {
     waarom: 'Cross-training vermindert de kans op blessures, geeft je loopspieren rust en houdt je conditie op niveau op dagen dat hardlopen te veel zou zijn. Het maakt je ook een completer atleet.',
     accentColor: palette.green[500],
   },
+  runwalk: {
+    label: 'Lopen en wandelen',
+    emoji: '🚶',
+    tagline: 'Afwisselen tussen lopen en wandelen',
+    wat: 'Je wisselt rustig lopen af met wandelen. De stem zegt wanneer je loopt en wanneer je mag wandelen.',
+    hoe: [
+      'Begin met stevig wandelen om op te warmen.',
+      'Loop zo rustig dat je nog kunt praten.',
+      'Wandel tussendoor om op adem te komen.',
+      'Wandel aan het eind rustig uit.',
+    ],
+    waarom: 'Door lopen en wandelen af te wisselen bouw je rustig conditie op, zonder je lichaam te overvragen.',
+    accentColor: palette.zone.z2,
+  },
   interval: {
     label: 'Intervaltraining',
     emoji: '⏱️',

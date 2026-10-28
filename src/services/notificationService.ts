@@ -37,6 +37,7 @@
 import { useAppStore, weekStartISO } from '../store/appStore';
 import { resolveActivePlan } from '../data/activePlan';
 import { formatLocalISODate, parseLocalISODate, raceScheduleStatus } from '../data/raceSchedule';
+import { sessionPlannedSeconds } from '../data/runWalk';
 import type { Session, TrainingWeek } from '../data/trainingPlans';
 import { isSessionHandledInCurrentAttempt } from '../utils/trainingWeek';
 
@@ -304,6 +305,10 @@ function describeSession(session: Session): string | null {
     case 'tempo': return `${formatKm(session.distanceKm)} km tempo`;
     case 'interval': return 'intervaltraining';
     case 'cross': return 'crosstraining';
+    case 'runwalk': {
+      const sec = sessionPlannedSeconds(session);
+      return sec ? `lopen en wandelen, ± ${Math.round(sec / 60)} min` : 'lopen en wandelen';
+    }
     default: return null; // rust of onbekend: geen melding
   }
 }

@@ -34,6 +34,8 @@ export const PREMIUM_CONFIG = {
    */
   FREE_ROUTE_PLANS_PER_WEEK: 3,
 
+  // Trainingsdoelen (GoalType, inclusief het beginnersschema 'start') worden
+  // bewust NIET gegate: alleen wedstrijdafstanden, routes en stemmen zijn dat.
   /**
    * Wedstrijdschema's: welke afstanden mag een gratis gebruiker als
    * wedstrijddoel kiezen? Alle standaardschema's per wedstrijd zijn gratis,

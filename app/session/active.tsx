@@ -22,9 +22,13 @@ import { useRouteCoaching } from '../../src/hooks/useRouteCoaching';
 import { useHeartRateCoaching } from '../../src/hooks/useHeartRateCoaching';
 import { useTechniqueCoaching } from '../../src/hooks/useTechniqueCoaching';
 import { useIntervalCoaching } from '../../src/hooks/useIntervalCoaching';
+import { useRunWalkCoaching } from '../../src/hooks/useRunWalkCoaching';
 import * as voiceService from '../../src/services/voiceService';
-import { sessionIntroUtterance, intervalIntroUtterance, raceFinishUtterance } from '../../src/config/voicePhrases';
+import {
+  sessionIntroUtterance, intervalIntroUtterance, runWalkIntroUtterance, raceFinishUtterance,
+} from '../../src/config/voicePhrases';
 import { buildIntervalSegments, intervalStateAt } from '../../src/data/intervals';
+import { buildRunWalkSegments } from '../../src/data/runWalk';
 import { RoutePreviewSheet } from '../../src/components/ui/RoutePreviewSheet';
 import { SavedRoutesSheet } from '../../src/components/ui/SavedRoutesSheet';
 import { SessionTypeSheet } from '../../src/components/ui/SessionTypeSheet';
@@ -161,6 +165,7 @@ const sessionTypeShort: Record<string, string> = {
   rest:  'Rust',
   cross: 'Cross',
   interval: 'Interval',
+  runwalk: 'Lopen en wandelen',
 };
 
 // ── Scherm ────────────────────────────────────────────────────────────────────
@@ -175,6 +180,12 @@ export default function ActiveSessionScreen() {
   // Aantal eerder voltooide sessies: rouleert de dagdeel-begroeting en de
   // finish-afsluitzin over meerdere runs heen (CP4, zie voicePhrases.ts).
   const completedSessionsCount = useAppStore(s => s.completedSessions.length);
+  // Has this exact session been completed before? Used to play the one-off
+  // run/walk congratulations (celebrate) only the first time, without a new
+  // persisted field: a completed session id in the store is the "heard it" flag.
+  const sessionCompletedBefore = useAppStore(
+    s => s.completedSessions.some(c => c.sessionId === sessionId),
+  );
   const cancelSession   = useAppStore(s => s.cancelSession);
   const activeSession   = useAppStore(s => s.activeSession);
   const updateProfile   = useAppStore(s => s.updateProfile);
@@ -326,9 +337,13 @@ export default function ActiveSessionScreen() {
   // zonder zone-indicatie of coaching. Vóór de "!profile"-guard berekend
   // (rules of hooks): de hook hieronder moet altijd aangeroepen worden.
   const maxHrForZones = profile?.maxHeartRate || (profile?.age ? 220 - profile.age : null);
+  // Run/walk sessions (beginner plan): no heart-rate coaching. A beginner sits
+  // above the Z2 target while running, which would trigger "too high, slow
+  // down" in every run block and clash with the block cues.
+  const isRunWalk = session?.type === 'runwalk' && !!session.runWalk;
   const { onHeartRateUpdate: onHeartRateCoachingUpdate } = useHeartRateCoaching(
     voiceEnabled,
-    session?.zone,
+    isRunWalk ? undefined : session?.zone,
     maxHrForZones,
     voiceType,
     completedSessionsCount,
@@ -365,6 +380,29 @@ export default function ActiveSessionScreen() {
   isIntervalRef.current = isInterval;
   const intervalOnTickRef = useRef(intervalCoaching.onTick);
   intervalOnTickRef.current = intervalCoaching.onTick;
+
+  // ── Lopen/wandelen-coaching (sessietype 'runwalk') ─────────────────────────
+  const runWalkSegments = useMemo(
+    () => (session?.runWalk ? buildRunWalkSegments(session.runWalk) : []),
+    [session],
+  );
+  const runWalkCoaching = useRunWalkCoaching(
+    voiceEnabled, session?.runWalk, voiceType, completedSessionsCount,
+    {
+      // 10 s warning before a run block in weeks 1-4 (taken from the plan week,
+      // no hardcoded session ids).
+      warnBeforeRun: weekNum <= 4,
+      // One-off congratulation: only the first time this session is run.
+      celebrate: sessionCompletedBefore ? undefined : session?.runWalk?.celebrate,
+    },
+  );
+  const isRunWalkRef = useRef(isRunWalk);
+  isRunWalkRef.current = isRunWalk;
+  const runWalkOnTickRef = useRef(runWalkCoaching.onTick);
+  runWalkOnTickRef.current = runWalkCoaching.onTick;
+  // Interval and run/walk sessions are both driven by the segment clock.
+  const isTimedRef = useRef(isInterval || isRunWalk);
+  isTimedRef.current = isInterval || isRunWalk;
 
   // handleLocation hieronder leeft in een effect met een leeg dependency-array
   // en ziet dus alleen de waarden van de EERSTE render. Alles wat daar live
@@ -435,7 +473,25 @@ export default function ActiveSessionScreen() {
       // -check. Alleen met spraak aan en een bekend, loopbaar sessietype
       // (geen 'rest' — daar loop je niet naartoe — en geen sessie zonder
       // type, de toekomstige "vrije run" uit het ontwerpdoc).
-      if (voiceEnabled && !introSpokenRef.current && session && isInterval) {
+      // Run/walk: reset the cue state regardless of the voice setting (the
+      // haptics run without voice too).
+      if (isRunWalk) runWalkCoaching.reset();
+
+      if (voiceEnabled && !introSpokenRef.current && session && isRunWalk) {
+        // Run/walk session: own intro + warm-up line in ONE utterance (two
+        // separate speakPhrases calls would cut each other off). The final
+        // session (celebrate 'finalDone') gets its own intro, only the first time.
+        introSpokenRef.current = true;
+        void voiceService.speakPhrases(
+          runWalkIntroUtterance({
+            hour: new Date().getHours(),
+            greetingVariant: completedSessionsCount,
+            variant: completedSessionsCount,
+            final: !sessionCompletedBefore && session.runWalk?.celebrate === 'finalDone',
+          }),
+          voiceType,
+        );
+      } else if (voiceEnabled && !introSpokenRef.current && session && isInterval) {
         // Intervalsessie: eigen intro (dekt de warming-up al) in plaats van
         // de gewone sessie-intro, en de coachingtoestand van de nieuwe
         // sessie op nul zetten.
@@ -521,10 +577,10 @@ export default function ActiveSessionScreen() {
         setGpsReady(true);
         firstGpsRef.current = { lat: latitude, lon: longitude };
 
-        // Intervalsessie: geen routevraag, meteen starten zonder route (de
-        // segmentklok stuurt de sessie, een vooraf uitgestippelde route heeft
-        // hier geen functie).
-        if (isIntervalRef.current && !routePlanTriggered.current) {
+        // Interval- of lopen/wandelen-sessie: geen routevraag, meteen starten
+        // zonder route (de segmentklok stuurt de sessie, een vooraf
+        // uitgestippelde route heeft hier geen functie).
+        if (isTimedRef.current && !routePlanTriggered.current) {
           routePlanTriggered.current = true;
           startSessionNow(null);
         } else if (canUsePlannerRef.current && !routePlanTriggered.current) {
@@ -627,9 +683,10 @@ export default function ActiveSessionScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
-      // Km-/halverwege-cues slaan we over bij een intervalsessie: die wordt
-      // gestuurd door de segmentklok (useIntervalCoaching), niet door afstand.
-      if (!isIntervalRef.current) onKmUpdateRef.current(distanceRef.current, paceRef.current);
+      // Km-/halverwege-cues slaan we over bij een interval- of lopen/wandelen-
+      // sessie: die wordt gestuurd door de segmentklok (useIntervalCoaching /
+      // useRunWalkCoaching), niet door afstand.
+      if (!isTimedRef.current) onKmUpdateRef.current(distanceRef.current, paceRef.current);
       onRouteCoachingUpdateRef.current(latitude, longitude, distanceRef.current);
     };
 
@@ -774,6 +831,7 @@ export default function ActiveSessionScreen() {
         // Intervalcoaching: de segmentklok loopt gelijk met deze timer, dus
         // pauzeert vanzelf mee (deze tak draait alleen terwijl isRunning).
         if (isIntervalRef.current) intervalOnTickRef.current(next);
+        else if (isRunWalkRef.current) runWalkOnTickRef.current(next);
         // Techniek-cues (CP7): pauzeert om dezelfde reden vanzelf mee. De hook
         // zelf bepaalt of dit sessietype/tijdstip een cue oplevert.
         techniqueOnTickRef.current(next);
@@ -1199,7 +1257,27 @@ export default function ActiveSessionScreen() {
   // Intervalpaneel: huidige segmenttoestand o.b.v. de verstreken tijd. Alleen
   // berekend bij een intervalsessie, andere sessietypes gebruiken de gewone
   // afstand-voortgangsbalk hieronder en blijven ongewijzigd.
-  const ivState = isInterval ? intervalStateAt(intervalSegments, elapsed) : null;
+  // Ook gebruikt voor lopen/wandelen: dezelfde segmentklok, ander label.
+  const ivState = isInterval
+    ? intervalStateAt(intervalSegments, elapsed)
+    : isRunWalk ? intervalStateAt(runWalkSegments, elapsed) : null;
+  const panelLabel = !ivState ? ''
+    : isRunWalk
+      ? (ivState.phase === 'warmup' ? 'WARMING-UP'
+        : ivState.phase === 'work' ? 'LOPEN'
+        : ivState.phase === 'recovery' ? 'WANDELEN'
+        : 'UITWANDELEN')
+      : (ivState.phase === 'warmup' ? 'WARMING-UP'
+        : ivState.phase === 'work' ? `INTERVAL ${ivState.segment.repIndex ?? ''} / ${ivState.segment.repTotal ?? ''}`
+        : ivState.phase === 'recovery' ? 'HERSTEL'
+        : 'COOLING-DOWN');
+  // Run/walk: which run block this is ("Blok 3 van 8"; during a walk the block just finished).
+  const panelBlockText = isRunWalk && ivState && ivState.segment.repTotal && ivState.segment.repTotal > 1
+    && (ivState.phase === 'work' || ivState.phase === 'recovery')
+    ? (ivState.phase === 'work'
+      ? `Blok ${ivState.segment.repIndex} van ${ivState.segment.repTotal}`
+      : `Na blok ${ivState.segment.repIndex} van ${ivState.segment.repTotal}`)
+    : null;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bgBase }]}>
@@ -1268,18 +1346,18 @@ export default function ActiveSessionScreen() {
         </View>
 
         {/* Afstand progress bar, of het intervalpaneel bij een intervalsessie */}
-        {isInterval && ivState ? (
+        {(isInterval || isRunWalk) && ivState ? (
           <View style={styles.intervalPanel}>
             <Text style={[styles.intervalPhaseLabel, { color: zoneInfo[ivState.segment.zone].color }]}>
-              {ivState.phase === 'warmup' ? 'WARMING-UP'
-                : ivState.phase === 'work' ? `INTERVAL ${ivState.segment.repIndex ?? ''} / ${ivState.segment.repTotal ?? ''}`
-                : ivState.phase === 'recovery' ? 'HERSTEL'
-                : 'COOLING-DOWN'}
+              {panelLabel}
             </Text>
             <Text style={[styles.intervalCountdown, { color: zoneInfo[ivState.segment.zone].color }]}>
               {formatTime(ivState.segmentRemainingSec)}
             </Text>
-            {ivState.segment.repTotal ? (
+            {panelBlockText ? (
+              <Text style={styles.intervalBlockText}>{panelBlockText}</Text>
+            ) : null}
+            {ivState.segment.repTotal && (isInterval || ivState.segment.repTotal > 1) ? (
               <View style={styles.intervalDots}>
                 {Array.from({ length: ivState.segment.repTotal }).map((_, i) => (
                   <View
@@ -1712,6 +1790,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   intervalCountdown: {
     fontFamily: typography.fontFamily.display, fontSize: typography.fontSize['4xl'],
     letterSpacing: -2, fontVariant: ['tabular-nums'],
+  },
+  intervalBlockText: {
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
   },
   intervalDots: {
     flexDirection: 'row', gap: 6, marginTop: 2,

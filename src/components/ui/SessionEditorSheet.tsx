@@ -91,18 +91,22 @@ export function SessionEditorSheet({ visible, initialSession, onClose, onSave }:
   const [zone, setZone] = useState<HeartRateZone>('Z2');
   const [distanceKm, setDistanceKm] = useState(5);
   const [description, setDescription] = useState(DEFAULT_DESCRIPTION_FOR_TYPE.easy);
-  // True zolang een bestaande intervalsessie als intervaltraining behouden blijft.
-  // Intervallen aanmaken kan hier niet; de opbouw blijft alleen bewaard totdat
-  // de gebruiker een ander type kiest.
-  const [keepInterval, setKeepInterval] = useState(false);
+  // Set while an existing interval or run/walk session keeps its own structure.
+  // Creating those here is not possible; the structure is only preserved until
+  // the user picks another type.
+  const [keepStructure, setKeepStructure] = useState<'interval' | 'runwalk' | null>(null);
 
   // Zet de velden terug zodra de sheet opent, gebaseerd op de meegegeven sessie
   // (bewerken) of nette standaardwaarden (nieuwe sessie).
   useEffect(() => {
     if (!visible) return;
-    setKeepInterval(initialSession?.type === 'interval' && !!initialSession.interval);
+    setKeepStructure(
+      initialSession?.type === 'interval' && initialSession.interval ? 'interval'
+        : initialSession?.type === 'runwalk' && initialSession.runWalk ? 'runwalk'
+        : null,
+    );
     if (initialSession) {
-      const initType: EditableType = initialSession.type === 'rest' || initialSession.type === 'interval' ? 'easy' : initialSession.type;
+      const initType: EditableType = initialSession.type === 'rest' || initialSession.type === 'interval' || initialSession.type === 'runwalk' ? 'easy' : initialSession.type;
       setDay(initialSession.day);
       setType(initType);
       setZone(initialSession.zone);
@@ -119,23 +123,26 @@ export function SessionEditorSheet({ visible, initialSession, onClose, onSave }:
 
   const handleSelectType = (next: EditableType) => {
     setType(next);
-    // Een ander type kiezen laat de intervalopbouw vervallen.
-    setKeepInterval(false);
+    // Picking another type drops the interval / run-walk structure.
+    setKeepStructure(null);
     // Stel een passende zone voor; de gebruiker kan die daarna nog aanpassen.
     setZone(DEFAULT_ZONE_FOR_TYPE[next]);
     setDescription(DEFAULT_DESCRIPTION_FOR_TYPE[next]);
   };
 
   const handleSave = () => {
-    const keptInterval = keepInterval ? initialSession?.interval : undefined;
+    const keptInterval = keepStructure === 'interval' ? initialSession?.interval : undefined;
+    const keptRunWalk = keepStructure === 'runwalk' ? initialSession?.runWalk : undefined;
+    const keptType = keptInterval ? ('interval' as const) : keptRunWalk ? ('runwalk' as const) : null;
     const base = {
       day,
-      type: keptInterval ? ('interval' as const) : type,
+      type: keptType ?? type,
       distanceKm,
       zone,
-      description: description.trim() || (keptInterval ? initialSession?.description : undefined) || DEFAULT_DESCRIPTION_FOR_TYPE[type],
+      description: description.trim() || (keptType ? initialSession?.description : undefined) || DEFAULT_DESCRIPTION_FOR_TYPE[type],
       coachTip: initialSession?.coachTip ?? DEFAULT_COACHTIP_FOR_TYPE[type],
       ...(keptInterval ? { interval: keptInterval } : {}),
+      ...(keptRunWalk ? { runWalk: keptRunWalk } : {}),
     };
     if (initialSession) {
       onSave({ ...base, id: initialSession.id });
@@ -198,18 +205,20 @@ export function SessionEditorSheet({ visible, initialSession, onClose, onSave }:
           <View style={styles.block}>
             <Text style={styles.blockTitle}>Type training</Text>
             <View style={styles.typeGrid}>
-              {keepInterval && (
+              {keepStructure && (
                 <View
                   style={[styles.typeBtn, styles.typeBtnSelected]}
                   accessibilityRole="radio"
-                  accessibilityLabel="Intervaltraining"
+                  accessibilityLabel={keepStructure === 'interval' ? 'Intervaltraining' : 'Lopen en wandelen'}
                   accessibilityState={{ selected: true, disabled: true }}
                 >
-                  <Text style={[styles.typeBtnText, styles.typeBtnTextSelected]}>Intervaltraining</Text>
+                  <Text style={[styles.typeBtnText, styles.typeBtnTextSelected]}>
+                    {keepStructure === 'interval' ? 'Intervaltraining' : 'Lopen en wandelen'}
+                  </Text>
                 </View>
               )}
               {TYPE_OPTIONS.map(opt => {
-                const selected = !keepInterval && type === opt.value;
+                const selected = !keepStructure && type === opt.value;
                 return (
                   <TouchableOpacity
                     key={opt.value}

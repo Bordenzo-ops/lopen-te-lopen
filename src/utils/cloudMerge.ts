@@ -14,12 +14,13 @@
  *    isPremium blijven lokaal (niet in de DB, resp. RevenueCat is de bron).
  */
 
-import { DEFAULT_TRAINING_DAYS, type GoalType, type TrainingWeek } from '../data/trainingPlans';
+import { DEFAULT_TRAINING_DAYS, trainingPlans, type GoalType, type TrainingWeek } from '../data/trainingPlans';
 import { VOICES, type VoiceType } from '../config/voiceConfig';
 import type { UserProfile, CompletedSession } from '../store/appStore';
 import type { ProfileRow } from '../services/syncService';
 
-const GOALS: ReadonlyArray<GoalType> = ['5km', '10km', '15km', 'half_marathon', 'marathon'];
+// Derived from the plans so a new goal can never be forgotten here (a restore would drop it).
+const GOALS: ReadonlyArray<GoalType> = trainingPlans.map(p => p.id);
 
 /** Zelfde sleutel als clientRunId in syncService.ts (hier gedupliceerd om geen service te importeren). */
 function runKey(run: CompletedSession): string {

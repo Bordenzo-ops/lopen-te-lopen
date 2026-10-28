@@ -30,15 +30,11 @@ import {
   isWeekHandledInCurrentAttempt,
   getWeekReturnState,
 } from '../../src/utils/trainingWeek';
+import { GOAL_LABELS } from '../../src/data/trainingPlans';
+import { sessionPlannedSeconds } from '../../src/data/runWalk';
 import type { GoalType, Session } from '../../src/data/trainingPlans';
 
-const goalLabel: Record<GoalType, string> = {
-  '5km': '5 KM',
-  '10km': '10 KM',
-  '15km': '15 KM',
-  'half_marathon': 'Halve marathon',
-  'marathon': 'Marathon',
-};
+const goalLabel: Record<GoalType, string> = GOAL_LABELS;
 
 export default function DashboardScreen() {
   const profile = useAppStore(s => s.profile);
@@ -49,6 +45,7 @@ export default function DashboardScreen() {
   const weekStartedAt = useAppStore(s => s.weekStartedAt);
   const advanceTrainingWeek = useAppStore(s => s.advanceTrainingWeek);
   const restartTrainingWeek = useAppStore(s => s.restartTrainingWeek);
+  const changeTrainingGoal = useAppStore(s => s.changeTrainingGoal);
   const totalKm = useAppStore(selectTotalKm);
   const racePlan   = useAppStore(s => s.racePlan);
   const customPlan = useAppStore(s => s.customPlan);
@@ -165,6 +162,19 @@ export default function DashboardScreen() {
     void trackEvent('week_return_choice', { choice, gapDays, week: currentWeek });
     if (choice === 'advance') advanceTrainingWeek();
     else restartTrainingWeek();
+  };
+
+  // Na het startschema: expliciet doorstromen naar een volgend doel (geen
+  // automatische wissel). Zelfde logica en tekst als "Doel wijzigen" in Instellingen.
+  const handleContinueToGoal = (goal: GoalType) => {
+    Alert.alert(
+      `Doel wijzigen naar ${goalLabel[goal]}?`,
+      'Je begint dan in week 1 van het nieuwe schema. Je gelopen trainingen blijven bewaard.',
+      [
+        { text: 'Annuleren', style: 'cancel' },
+        { text: 'Wijzigen', onPress: () => changeTrainingGoal(goal) },
+      ],
+    );
   };
 
   // Sla de huidige sessie bewust over na een korte bevestiging. Geruststellende
@@ -487,7 +497,11 @@ export default function DashboardScreen() {
               }
             />
             <Button
-              label={`Start ${nextSession.distanceKm} km`}
+              label={
+                nextSession.type === 'runwalk' && sessionPlannedSeconds(nextSession)
+                  ? `Start training · ${Math.round(sessionPlannedSeconds(nextSession)! / 60)} min`
+                  : `Start ${nextSession.distanceKm} km`
+              }
               onPress={() =>
                 router.push({
                   pathname: '/session/active',
@@ -556,11 +570,31 @@ export default function DashboardScreen() {
             <Text style={styles.weekCompleteSub}>
               Je hebt alle {totalWeeks} weken van je schema gehad. Gefeliciteerd!
             </Text>
-            <Button
-              label="Kies een nieuw doel"
-              onPress={() => router.push('/(onboarding)/goal')}
-              size="sm"
-            />
+            {profile.goal === 'start' ? (
+              <>
+                <Button
+                  label="Door naar 5 km"
+                  onPress={() => handleContinueToGoal('5km')}
+                  size="sm"
+                />
+                <TouchableOpacity
+                  onPress={() => handleContinueToGoal('10km')}
+                  style={styles.skipBtn}
+                  activeOpacity={0.7}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Liever 10 km"
+                >
+                  <Text style={styles.skipBtnText}>Liever 10 km</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <Button
+                label="Kies een nieuw doel"
+                onPress={() => router.push('/(onboarding)/goal')}
+                size="sm"
+              />
+            )}
           </FadeSlideIn>
         ) : (
           <FadeSlideIn style={styles.weekCompleteCard}>

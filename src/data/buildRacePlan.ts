@@ -34,7 +34,7 @@
 import { startOfWeek, subWeeks } from 'date-fns';
 import { getTrainingPlan } from './trainingPlans';
 import type { TrainingWeek, Session, GoalType } from './trainingPlans';
-import type { RotterdamRace } from './rotterdamRaces';
+import type { RotterdamRace, RaceDistance } from './rotterdamRaces';
 // LET OP: bewust NIET weeksUntilRace uit rotterdamRaces.ts. Die telt
 // dag-gebaseerd vanaf vandaag (voor countdown-teksten als "5 weken te
 // gaan") en gebruikt daarmee een andere maat dan raceWeekForDate/
@@ -50,7 +50,7 @@ import type { RotterdamRace } from './rotterdamRaces';
 import { parseLocalISODate, formatLocalISODate, calendarWeeksAvailable } from './raceSchedule';
 
 // Minimale en maximale schema-lengte per afstand
-const PLAN_BOUNDS: Record<GoalType, { min: number; base: number; max: number }> = {
+const PLAN_BOUNDS: Record<RaceDistance, { min: number; base: number; max: number }> = {
   '5km':           { min: 4,  base: 8,  max: 14 },
   '10km':          { min: 6,  base: 12, max: 20 },
   '15km':          { min: 8,  base: 14, max: 22 },
@@ -62,7 +62,7 @@ const PLAN_BOUNDS: Record<GoalType, { min: number; base: number; max: number }> 
 const TAPER_WEEKS = 3;
 
 /** Bepaal het trainingsdoel op basis van de wedstrijdafstand. */
-function goalForDistance(distance: RotterdamRace['distance']): GoalType {
+function goalForDistance(distance: RotterdamRace['distance']): RaceDistance {
   switch (distance) {
     case 'marathon':      return 'marathon';
     case 'half_marathon': return 'half_marathon';
@@ -176,7 +176,7 @@ export function buildRacePlan(
   comfortableKm?: number,
 ): RacePlan | null {
   // Bepaal doel op basis van afstand
-  const goal: GoalType = goalForDistance(race.distance);
+  const goal: RaceDistance = goalForDistance(race.distance);
 
   const bounds       = PLAN_BOUNDS[goal];
   const availWeeks   = calendarWeeksAvailable(race.date, today);
@@ -321,7 +321,7 @@ export function canTrainForRace(
   today = new Date(),
 ): { possible: boolean; reason?: string } {
   const weeks = calendarWeeksAvailable(race.date, today);
-  const goal: GoalType = goalForDistance(race.distance);
+  const goal: RaceDistance = goalForDistance(race.distance);
   const { min } = PLAN_BOUNDS[goal];
 
   if (weeks < TAPER_WEEKS + 1) {

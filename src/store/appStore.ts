@@ -1185,7 +1185,7 @@ export const useAppStore = create<AppState>()(
           },
         });
         // Funnelstap: run gestart. Alleen het schematype, geen persoonsgegevens.
-        void trackEvent('run_started', { schemaMode: get().schemaMode });
+        void trackEvent('run_started', { schemaMode: get().schemaMode, sessionType: session.type });
       },
 
       updateActiveSession: (updates) =>
@@ -1291,6 +1291,7 @@ export const useAppStore = create<AppState>()(
           distanceKm: Math.round(completed.actualDistanceKm),
           source: completed.source,
           isOptional: activeSession.session.optional === true,
+          sessionType: activeSession.session.type,
         });
 
         // Best-effort automatische upload naar Strava. Faalt stil en zet de

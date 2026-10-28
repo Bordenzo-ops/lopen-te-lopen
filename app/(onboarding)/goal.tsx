@@ -26,6 +26,7 @@ if (Platform.OS === 'android') {
 // ── Meta ──────────────────────────────────────────────────────────────────────
 
 const goalMeta: Record<GoalType, { icon: React.ReactNode; tagline: string }> = {
+  'start':         { icon: <Clock size={26} color={colors.brandLight} strokeWidth={2} />,    tagline: 'Lopen en wandelen, op naar 30 minuten' },
   '5km':           { icon: <Target size={26} color={colors.brandLight} strokeWidth={2} />,   tagline: 'Ideaal als eerste doel' },
   '10km':          { icon: <Dumbbell size={26} color={colors.brandLight} strokeWidth={2} />, tagline: 'De klassieke uitdaging' },
   '15km':          { icon: <Flame size={26} color={colors.brandLight} strokeWidth={2} />,    tagline: 'Voor de 10 Engelse mijl' },
@@ -41,6 +42,35 @@ const distanceLabel: Record<RotterdamRace['distance'], string> = {
   'marathon':      'Marathon',
 };
 
+/** Zelfingeschat niveau: bepaalt of iemand bij het startschema, 5 km of de volledige doelkeuze uitkomt. */
+type RunnerLevel = 'none' | 'occasional' | 'regular';
+
+const RUNNER_LEVELS: ReadonlyArray<{
+  key: RunnerLevel;
+  title: string;
+  text: string;
+  icon: (color: string) => React.ReactNode;
+}> = [
+  {
+    key: 'none',
+    title: 'Ik loop nog niet',
+    text: 'Start vanaf nul: negen weken lopen en wandelen afwisselen tot je dertig minuten kunt lopen.',
+    icon: color => <Clock size={26} color={color} strokeWidth={2} />,
+  },
+  {
+    key: 'occasional',
+    title: 'Ik loop af en toe',
+    text: 'Je loopt weleens maar houdt het nog niet vol. Start met het 5 km-schema en bouw rustig op.',
+    icon: color => <Target size={26} color={color} strokeWidth={2} />,
+  },
+  {
+    key: 'regular',
+    title: 'Ik loop al regelmatig',
+    text: 'Je kunt al een halfuur lopen. Kies je eigen doel: 5 km, 10 km of marathon.',
+    icon: color => <Dumbbell size={26} color={color} strokeWidth={2} />,
+  },
+];
+
 /** Of de onboarding-paywall in deze appsessie al is getoond. */
 let onboardingPaywallShown = false;
 
@@ -52,18 +82,25 @@ export default function GoalScreen() {
   const [mode, setMode] = useState<'training' | 'race'>('training');
   const { hasAccess } = usePremium();
 
-  // Training-modus
+  // Training-modus: eerst een niveau-kaart; alleen "Ik loop al regelmatig"
+  // toont daaronder de bestaande doelkeuze.
+  const [level, setLevel] = useState<RunnerLevel | null>(null);
   const [selectedGoal, setSelectedGoal] = useState<GoalType | null>(null);
+  const trainingGoal: GoalType | null =
+    level === 'none' ? 'start'
+      : level === 'occasional' ? '5km'
+      : level === 'regular' ? selectedGoal
+      : null;
 
   // Wedstrijd-modus
   const upcomingRaces = getUpcomingRaces();
   const [selectedRace, setSelectedRace] = useState<RotterdamRace | null>(null);
 
-  const canContinue = mode === 'training' ? !!selectedGoal : !!selectedRace;
+  const canContinue = mode === 'training' ? !!trainingGoal : !!selectedRace;
 
   function handleContinue() {
-    if (mode === 'training' && selectedGoal) {
-      router.push({ pathname: '/(onboarding)/profile', params: { goal: selectedGoal, schemaMode: 'training' } });
+    if (mode === 'training' && trainingGoal) {
+      router.push({ pathname: '/(onboarding)/profile', params: { goal: trainingGoal, schemaMode: 'training' } });
     } else if (mode === 'race' && selectedRace) {
       // Het doel volgt uit het wedstrijdschema (marathon, 10 km, ...), niet
       // vast uit een afstand. Lukt het bouwen niet (wedstrijd inmiddels te
@@ -148,6 +185,8 @@ export default function GoalScreen() {
         {/* Inhoud op basis van modus */}
         {mode === 'training' ? (
           <TrainingModeContent
+            level={level}
+            onLevel={setLevel}
             selected={selectedGoal}
             onSelect={setSelectedGoal}
           />
@@ -198,15 +237,65 @@ function ModeTab({
 }
 
 function TrainingModeContent({
+  level, onLevel, selected, onSelect,
+}: {
+  level: RunnerLevel | null;
+  onLevel: (l: RunnerLevel) => void;
+  selected: GoalType | null;
+  onSelect: (g: GoalType) => void;
+}) {
+  const colors = useThemeColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Wat past bij jou?</Text>
+      <View style={styles.cards}>
+        {RUNNER_LEVELS.map(opt => {
+          const isSelected = level === opt.key;
+          return (
+            <TouchableOpacity
+              key={opt.key}
+              onPress={() => onLevel(opt.key)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={opt.title}
+              accessibilityState={{ selected: isSelected }}
+              style={[styles.goalCard, isSelected && styles.goalCardSelected]}
+            >
+              <View style={styles.goalLeft}>
+                <View style={styles.goalEmoji}>{opt.icon(colors.brandLight)}</View>
+                <View style={[styles.goalText, styles.levelText]}>
+                  <Text style={[styles.goalName, isSelected && styles.goalNameSelected]}>
+                    {opt.title}
+                  </Text>
+                  <Text style={styles.goalMeta}>{opt.text}</Text>
+                </View>
+              </View>
+              <View style={[styles.checkCircle, isSelected && styles.checkCircleSelected]}>
+                {isSelected && <Check size={14} color="#fff" strokeWidth={3} />}
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {level === 'regular' && (
+        <GoalList selected={selected} onSelect={onSelect} />
+      )}
+    </View>
+  );
+}
+
+function GoalList({
   selected, onSelect,
 }: { selected: GoalType | null; onSelect: (g: GoalType) => void }) {
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Kies je doel</Text>
+      <Text style={[styles.sectionTitle, styles.goalListTitle]}>Kies je doel</Text>
       <View style={styles.cards}>
-        {trainingPlans.map(plan => {
+        {trainingPlans.filter(plan => plan.id !== 'start').map(plan => {
           const meta = goalMeta[plan.id];
           const isSelected = selected === plan.id;
           return (
@@ -463,6 +552,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   goalLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing[1.5] },
   goalEmoji: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.brandPrimary + '14', alignItems: 'center', justifyContent: 'center' },
   goalText: { gap: 3 },
+  levelText: { flex: 1, flexShrink: 1 },
+  goalListTitle: { marginTop: spacing[1] },
   goalName: {
     fontFamily: typography.fontFamily.sansBold, fontSize: typography.fontSize.md, color: colors.textPrimary,
   },

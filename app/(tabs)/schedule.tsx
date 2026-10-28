@@ -17,6 +17,7 @@ import { raceScheduleStatus } from '../../src/data/raceSchedule';
 import { Dumbbell, Trophy } from 'lucide-react-native';
 import { useRacePace } from '../../src/hooks/useRacePace';
 import { formatPacePerKm } from '../../src/data/paceModel';
+import { sessionPlannedSeconds } from '../../src/data/runWalk';
 import { PressableScale } from '../../src/components/motion/PressableScale';
 import { ScaleIn } from '../../src/components/motion/ScaleIn';
 import { trackEvent } from '../../src/services/analyticsService';
@@ -512,7 +513,11 @@ export default function ScheduleScreen() {
                         {!canEditRow && isSkipped ? (
                           <Text style={styles.skippedMark}>overgeslagen</Text>
                         ) : (
-                          <Text style={styles.sessionKm}>{session.distanceKm} km</Text>
+                          <Text style={styles.sessionKm}>
+                            {session.type === 'runwalk' && sessionPlannedSeconds(session)
+                              ? `${Math.round(sessionPlannedSeconds(session)! / 60)} min`
+                              : `${session.distanceKm} km`}
+                          </Text>
                         )}
                         {!canEditRow && isCompleted && <Text style={styles.checkmark}>✓</Text>}
                         {canEditRow && (

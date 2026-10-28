@@ -6,6 +6,7 @@ import { useThemeColors } from '../../theme/useTheme';
 import { ZoneBadge } from './ZoneBadge';
 import { SessionTypeSheet } from './SessionTypeSheet';
 import { formatPacePerKm } from '../../data/paceModel';
+import { sessionPlannedSeconds } from '../../data/runWalk';
 import type { Session } from '../../data/trainingPlans';
 
 interface SessionCardProps {
@@ -30,7 +31,14 @@ const sessionTypeLabel: Record<Session['type'], string> = {
   rest:     'Rustdag',
   cross:    'Cross-training',
   interval: 'Intervaltraining',
+  runwalk:  'Lopen en wandelen',
 };
+
+/** "± 26 min" for a run/walk session; falls back to the estimated km if the structure is missing. */
+function runWalkMinutesLabel(session: Session): string {
+  const sec = sessionPlannedSeconds(session);
+  return sec ? `± ${Math.round(sec / 60)} min` : `~${session.distanceKm} km`;
+}
 
 const dayLabel = ['', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag', 'Zondag'];
 
@@ -103,9 +111,13 @@ export function SessionCard({ session, isCompleted = false, isSkipped = false, o
       {/* Stats row */}
       <View style={styles.stats}>
         <View style={styles.stat}>
-          <MapPin size={14} color={colors.textSecondary} strokeWidth={2} />
+          {session.type === 'runwalk'
+            ? <Timer size={14} color={colors.textSecondary} strokeWidth={2} />
+            : <MapPin size={14} color={colors.textSecondary} strokeWidth={2} />}
           <Text style={[styles.statValue, isCompleted && styles.textMuted]}>
-            {session.type === 'interval' ? `~${session.distanceKm} km` : `${session.distanceKm} km`}
+            {session.type === 'runwalk'
+              ? runWalkMinutesLabel(session)
+              : session.type === 'interval' ? `~${session.distanceKm} km` : `${session.distanceKm} km`}
           </Text>
         </View>
         <ZoneBadge zone={session.zone} size="sm" />

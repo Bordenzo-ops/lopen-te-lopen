@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Trophy, Share2, RefreshCw, ChevronRight, Dumbbell, Medal, Flame } from 'lucide-react-native';
@@ -18,16 +18,14 @@ import { resolveActivePlan } from '../../src/data/activePlan';
 import { Button } from '../../src/components/ui/Button';
 import { ShareRunSheet } from '../../src/components/ui/ShareRunSheet';
 import { ScaleIn } from '../../src/components/motion/ScaleIn';
+import { GOAL_LABELS } from '../../src/data/trainingPlans';
+import type { GoalType } from '../../src/data/trainingPlans';
 
-const goalLabel: Record<string, string> = {
-  '5km':           '5 KM',
-  '10km':          '10 KM',
-  '15km':          '15 KM',
-  'half_marathon': 'Halve Marathon',
-  'marathon':      'Marathon',
-};
+const goalLabel: Record<GoalType, string> = GOAL_LABELS;
 
-const nextGoalSuggestion: Record<string, string | null> = {
+const nextGoalSuggestion: Record<GoalType, GoalType | null> = {
+  // 'start' has its own two-button ending (see below), no single suggestion card.
+  'start':         null,
   '5km':           '10km',
   '10km':          '15km',
   '15km':          'half_marathon',
@@ -51,6 +49,7 @@ export default function SchemaCompleteScreen() {
   const racePlan          = useAppStore(s => s.racePlan);
   const customPlan        = useAppStore(s => s.customPlan);
   const schemaMode        = useAppStore(s => s.schemaMode);
+  const changeTrainingGoal = useAppStore(s => s.changeTrainingGoal);
   const [showShare, setShowShare] = useState(false);
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -66,6 +65,25 @@ export default function SchemaCompleteScreen() {
   const totalRuns  = completedSessions.length;
 
   const nextGoal = nextGoalSuggestion[profile.goal] ?? null;
+
+  // After the start plan: explicit choice, no automatic switch. Same logic and
+  // confirmation text as "Doel wijzigen" in Instellingen (keeps the profile).
+  function handleContinueToGoal(goal: GoalType) {
+    Alert.alert(
+      `Doel wijzigen naar ${goalLabel[goal]}?`,
+      'Je begint dan in week 1 van het nieuwe schema. Je gelopen trainingen blijven bewaard.',
+      [
+        { text: 'Annuleren', style: 'cancel' },
+        {
+          text: 'Wijzigen',
+          onPress: () => {
+            changeTrainingGoal(goal);
+            router.replace('/(tabs)/dashboard');
+          },
+        },
+      ],
+    );
+  }
 
   function handleNewGoal() {
     // Stuur de gebruiker terug naar onboarding zodat hij een nieuw doel kan kiezen
@@ -107,10 +125,30 @@ export default function SchemaCompleteScreen() {
         {/* Motivatietekst */}
         <View style={styles.quoteCard}>
           <Text style={styles.quoteText}>
-            "Elke grote prestatie begint met de beslissing om het te proberen.
-            Jij hebt het niet alleen geprobeerd, maar ook voltooid."
+            {profile.goal === 'start'
+              ? 'Je loopt dertig minuten aan één stuk. Dat is geen klein ding, dat heb je zelf gedaan. Wil je door? Het 5 km-schema is je volgende stap, en daarna wacht het 10 km-schema.'
+              : '"Elke grote prestatie begint met de beslissing om het te proberen. Jij hebt het niet alleen geprobeerd, maar ook voltooid."'}
           </Text>
         </View>
+
+        {/* Doorstroom na het startschema: expliciete keuze, geen automatische wissel */}
+        {profile.goal === 'start' && (
+          <View style={styles.startNextCard}>
+            <Button
+              label="Door naar 5 km"
+              onPress={() => handleContinueToGoal('5km')}
+              fullWidth
+              size="lg"
+            />
+            <Button
+              label="Liever 10 km"
+              variant="secondary"
+              onPress={() => handleContinueToGoal('10km')}
+              fullWidth
+              size="lg"
+            />
+          </View>
+        )}
 
         {/* Volgende uitdaging */}
         {nextGoal && (
@@ -249,6 +287,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontStyle: 'italic',
     lineHeight: typography.fontSize.base * typography.lineHeight.relaxed,
   },
+
+  startNextCard: { gap: spacing[1.5] },
 
   nextGoalCard: {
     backgroundColor: colors.bgCard,

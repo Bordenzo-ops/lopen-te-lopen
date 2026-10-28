@@ -15,17 +15,14 @@ import { Check } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../theme/tokens';
 import { useThemeColors } from '../theme/useTheme';
+import { GOAL_LABELS } from '../data/trainingPlans';
 import type { GoalType } from '../data/trainingPlans';
 import { SheetHandle, SheetCloseButton } from './ui/sheetParts';
 
 /** Kiesbare doelen, in oplopende volgorde, met de labels uit de rest van de app. */
-export const GOAL_OPTIONS: ReadonlyArray<{ key: GoalType; label: string }> = [
-  { key: '5km',           label: '5 KM' },
-  { key: '10km',          label: '10 KM' },
-  { key: '15km',          label: '15 KM' },
-  { key: 'half_marathon', label: 'Halve marathon' },
-  { key: 'marathon',      label: 'Marathon' },
-];
+export const GOAL_OPTIONS: ReadonlyArray<{ key: GoalType; label: string }> = (
+  ['start', '5km', '10km', '15km', 'half_marathon', 'marathon'] as const
+).map(key => ({ key, label: GOAL_LABELS[key] }));
 
 interface GoalPickerSheetProps {
   visible: boolean;

@@ -8,7 +8,7 @@ import { Volume2, RefreshCw, Pencil, Check, X, ExternalLink, Link2, Sun, Moon, C
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore, setSigningOut } from '../../src/store/appStore';
-import { zoneInfo } from '../../src/data/trainingPlans';
+import { zoneInfo, GOAL_LABELS } from '../../src/data/trainingPlans';
 import type { GoalType } from '../../src/data/trainingPlans';
 import { GoalPickerSheet } from '../../src/components/GoalPickerSheet';
 import * as voiceService from '../../src/services/voiceService';
@@ -462,10 +462,7 @@ export default function SettingsScreen() {
 
   const maxHr = profile.maxHeartRate;
 
-  const goalLabel: Record<string, string> = {
-    '5km': '5 KM', '10km': '10 KM', '15km': '15 KM',
-    'half_marathon': 'Halve marathon', 'marathon': 'Marathon',
-  };
+  const goalLabel: Record<GoalType, string> = GOAL_LABELS;
 
   const handleGoalSelected = (goal: GoalType) => {
     setShowGoalPicker(false);

@@ -24,6 +24,7 @@
  */
 
 import { getAllRaces } from '../data/rotterdamRaces';
+import type { RunWalkCueKind } from '../data/runWalk';
 
 // ── Hulpfuncties voor afronding/klemmen ─────────────────────────────────────
 
@@ -1051,6 +1052,50 @@ const PEP_TEXTS: string[] = [
   'Vertrouw op je voorbereiding en loop je eigen race.',
 ];
 
+// ── 20. Lopen/wandelen-cues — schema "Start vanaf nul" ──────────────────────
+// Eigen intro (rw_intro_1/2, of rw_intro_final op de eindsessie, gevolgd door
+// rw_warmup) en een set cues die tijdens de sessie klinken. Ids en teksten
+// komen uit StartVanafNul-inhoud.md sectie 4; de clipteksten zijn goedgekeurd.
+// Rouleren modulo de lengte van de lijst, zoals sectie 16. De fallbackText
+// schrijft "een" zonder trema (conventie van sectie 16); de clip houdt "één".
+const RW_INTRO_TEXTS: string[] = [
+  'Vandaag wissel je lopen en wandelen af. Ik zeg wanneer, jij volgt in je eigen tempo.',
+  'Welkom. Rustig beginnen is genoeg. Ik geef aan wanneer je loopt en wanneer je wandelt.',
+];
+
+const RW_RUN_TEXTS: string[] = [
+  'Nu lopen. Rustig tempo, je moet nog kunnen praten.',
+  'Tijd om te lopen. Kleine pasjes en ontspannen schouders.',
+  'Je mag weer lopen. Langzaam is prima.',
+  'En we lopen weer. Adem rustig in en uit.',
+];
+
+const RW_WALK_TEXTS: string[] = [
+  'Goed gedaan. Nu wandelen en op adem komen.',
+  'Dat ging goed. Wandel maar rustig door.',
+  'Mooi zo. Even wandelen, dat heb je verdiend.',
+  'Knap. Laat je ademhaling rustig worden terwijl je wandelt.',
+];
+
+// Clip text (with "één") and fallback text (with "een") differ for one id.
+const RW_FIXED_TEXTS: Record<string, string> = {
+  rw_warmup: 'We beginnen met stevig wandelen. Zo wordt je lichaam rustig wakker.',
+  rw_intro_final: 'Vandaag is het zover, je eindsessie. Begin rustig en geniet ervan.',
+  rw_half: 'Halverwege. Je doet het goed, blijf rustig ademen.',
+  rw_last_run: 'Dit is je laatste loopstuk van vandaag. Je bent er bijna.',
+  rw_cooldown: 'Je loopstukken zijn klaar. Wandel rustig uit en laat je hartslag zakken.',
+  rw_warn_run: 'Over tien seconden ga je lopen.',
+  rw_first_continuous: 'Je liep aan één stuk door, zonder wandelpauze. Wees trots op jezelf.',
+  rw_final_done: 'Dertig minuten aan één stuk. Je bent een loper, van harte gefeliciteerd.',
+};
+
+const RW_FALLBACK_OVERRIDES: Record<string, string> = {
+  rw_first_continuous: 'Je liep aan een stuk door, zonder wandelpauze. Wees trots op jezelf.',
+  rw_final_done: 'Dertig minuten aan een stuk. Je bent een loper, van harte gefeliciteerd.',
+};
+
+const rwFallback = (id: string): string => RW_FALLBACK_OVERRIDES[id] ?? RW_FIXED_TEXTS[id];
+
 // ── Catalogus-enumeratie ─────────────────────────────────────────────────────
 
 export interface CatalogPhrase {
@@ -1246,6 +1291,20 @@ export function allPhrases(): CatalogPhrase[] {
   // 19. Mentale pep-talk
   PEP_TEXTS.forEach((text, i) => {
     phrases.push({ id: `pep_${i}`, text });
+  });
+
+  // 20. Lopen/wandelen-cues
+  RW_INTRO_TEXTS.forEach((text, i) => {
+    phrases.push({ id: `rw_intro_${i + 1}`, text });
+  });
+  RW_RUN_TEXTS.forEach((text, i) => {
+    phrases.push({ id: `rw_run_${i + 1}`, text });
+  });
+  RW_WALK_TEXTS.forEach((text, i) => {
+    phrases.push({ id: `rw_walk_${i + 1}`, text });
+  });
+  Object.entries(RW_FIXED_TEXTS).forEach(([id, text]) => {
+    phrases.push({ id, text });
   });
 
   return phrases;
@@ -1703,6 +1762,76 @@ export function intervalCueUtterance(
 
     case 'cooldown':
       return { ids: ['iv_cooldown'], fallbackText: IV_FIXED_TEXTS.iv_cooldown };
+  }
+}
+
+/**
+ * Gesproken intro van een lopen/wandelen-sessie, in ÉÉN utterance (twee losse
+ * speakPhrases-aanroepen kappen elkaar af): optionele dagdeel-begroeting, dan
+ * rw_intro_1/2 (afwisselend per `variant`) of rw_intro_final op de eindsessie,
+ * dan rw_warmup.
+ */
+export function runWalkIntroUtterance(
+  opts?: { hour?: number; greetingVariant?: number; variant?: number; final?: boolean },
+): PhraseUtterance {
+  const ids: string[] = [];
+  let text = '';
+  if (opts?.hour !== undefined) {
+    const g = greetingForSessionStart(opts.hour, opts.greetingVariant);
+    ids.push(...g.ids);
+    text = `${g.fallbackText} `;
+  }
+
+  if (opts?.final) {
+    ids.push('rw_intro_final');
+    text += `${RW_FIXED_TEXTS.rw_intro_final} `;
+  } else {
+    const n = RW_INTRO_TEXTS.length;
+    const idx = (((opts?.variant ?? 0) % n) + n) % n;
+    ids.push(`rw_intro_${idx + 1}`);
+    text += `${RW_INTRO_TEXTS[idx]} `;
+  }
+
+  ids.push('rw_warmup');
+  text += RW_FIXED_TEXTS.rw_warmup;
+  return { ids, fallbackText: text };
+}
+
+/**
+ * Eén lopen/wandelen-cue tijdens de sessie. `opts.variant` rouleert modulo
+ * waar er varianten zijn (run, walk).
+ */
+export function runWalkCueUtterance(
+  kind: RunWalkCueKind,
+  opts?: { variant?: number },
+): PhraseUtterance {
+  const variant = opts?.variant ?? 0;
+  const fixed = (id: string): PhraseUtterance => ({ ids: [id], fallbackText: rwFallback(id) });
+
+  switch (kind) {
+    case 'run': {
+      const n = RW_RUN_TEXTS.length;
+      const idx = ((variant % n) + n) % n;
+      return { ids: [`rw_run_${idx + 1}`], fallbackText: RW_RUN_TEXTS[idx] };
+    }
+    case 'walk': {
+      const n = RW_WALK_TEXTS.length;
+      const idx = ((variant % n) + n) % n;
+      return { ids: [`rw_walk_${idx + 1}`], fallbackText: RW_WALK_TEXTS[idx] };
+    }
+    case 'lastRun':
+      return fixed('rw_last_run');
+    case 'getReady':
+      return fixed('rw_warn_run');
+    case 'sessionHalf':
+    case 'runHalf':
+      return fixed('rw_half');
+    case 'cooldown':
+      return fixed('rw_cooldown');
+    case 'firstContinuous':
+      return fixed('rw_first_continuous');
+    case 'finalDone':
+      return fixed('rw_final_done');
   }
 }
 

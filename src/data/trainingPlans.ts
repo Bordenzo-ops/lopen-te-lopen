@@ -13,8 +13,20 @@
 // Z4 Drempel:   81-90%
 // Z5 Max:       91-100%
 
+import { planStart } from './startPlan';
+
 export type HeartRateZone = 'Z1' | 'Z2' | 'Z3' | 'Z4' | 'Z5';
-export type GoalType = '5km' | '10km' | '15km' | 'half_marathon' | 'marathon';
+export type GoalType = 'start' | '5km' | '10km' | '15km' | 'half_marathon' | 'marathon';
+
+/** Display label per goal. Single source of truth: tsc enforces a label for every new goal. */
+export const GOAL_LABELS: Record<GoalType, string> = {
+  start: 'Start vanaf nul',
+  '5km': '5 KM',
+  '10km': '10 KM',
+  '15km': '15 KM',
+  half_marathon: 'Halve marathon',
+  marathon: 'Marathon',
+};
 
 export interface IntervalStructure {
   warmupMin:    number;        // rustig inlopen
@@ -26,15 +38,30 @@ export interface IntervalStructure {
   cooldownMin:  number;        // rustig uitlopen
 }
 
+export interface RunWalkBlock {
+  kind: 'run' | 'walk';
+  sec:  number;
+}
+
+export interface RunWalkStructure {
+  warmupWalkMin:   number;         // usually 5
+  blocks:          RunWalkBlock[]; // not necessarily uniform
+  cooldownWalkMin: number;         // usually 5
+  /** One-off congratulation at the end of the long run block of this session.
+   *  Whether it is shown only once per user is decided by the runtime. */
+  celebrate?: 'firstContinuous' | 'finalDone';
+}
+
 export interface Session {
   id: string;
   day: number;          // dag van de week (1=ma, 3=wo, 6=za)
-  type: 'easy' | 'tempo' | 'long' | 'rest' | 'cross' | 'interval';
+  type: 'easy' | 'tempo' | 'long' | 'rest' | 'cross' | 'interval' | 'runwalk';
   distanceKm: number;
   zone: HeartRateZone;
   description: string;
   coachTip: string;
   interval?: IntervalStructure; // alleen aanwezig bij type === 'interval'
+  runWalk?: RunWalkStructure;   // alleen aanwezig bij type === 'runwalk'
   /** True voor automatisch toegevoegde bonus-duurloopjes op vrije trainingsdagen.
    *  Optionele sessies tellen niet mee voor weekvoltooiing of weektotalen. */
   optional?: boolean;
@@ -583,6 +610,14 @@ const plan15km: TrainingWeek[] = [
 // ── Export ────────────────────────────────────
 export const trainingPlans: TrainingPlan[] = [
   {
+    id: 'start',
+    name: 'Start vanaf nul',
+    weeks: planStart.length,
+    targetDistance: 5,
+    description: 'Negen weken lopen en wandelen afwisselen, tot je dertig minuten aan één stuk loopt.',
+    plan: planStart,
+  },
+  {
     id: '5km',
     name: '5 KM Comfortabel',
     weeks: 8,
@@ -766,6 +801,8 @@ const MAX_BONUS_KM = 6;
  */
 export function addBonusRuns(week: TrainingWeek, days?: number[]): TrainingWeek {
   if (!isValidTrainingDays(days) || days.length <= 3) return week;
+  // Run/walk weeks (beginner plan) never get bonus runs: a continuous easy run is not doable yet.
+  if (week.sessions.some(s => s.type === 'runwalk')) return week;
   if (week.sessions.length === 0 || week.totalKm <= 0) return week;
   if (week.focus.toLowerCase().includes('herstel')) return week;
 

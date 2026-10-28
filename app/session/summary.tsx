@@ -10,6 +10,7 @@ import { useAppStore } from '../../src/store/appStore';
 import { zoneInfo } from '../../src/data/trainingPlans';
 import type { TrainingWeek } from '../../src/data/trainingPlans';
 import { resolveActivePlan } from '../../src/data/activePlan';
+import { sessionPlannedSeconds } from '../../src/data/runWalk';
 import { selectTotalKm, selectShowRunUpsell } from '../../src/store/appStore';
 import type { KmSplit } from '../../src/store/appStore';
 import { detectPersonalRecords, detectCumulativeMilestone } from '../../src/data/achievements';
@@ -73,7 +74,12 @@ export default function SummaryScreen() {
       .find(w => w.weekNumber === weekNumForReview)
       ?.sessions.find(s => s.id === sessionId);
     const kmForReview = parseFloat(distanceKm ?? '0');
-    const sessionWasComplete = sessionForReview ? kmForReview >= sessionForReview.distanceKm : true;
+    // Run/walk sessions are judged on time: a slow beginner may cover fewer km
+    // than the estimate and still have done the full session.
+    const plannedSecForReview = sessionForReview ? sessionPlannedSeconds(sessionForReview) : null;
+    const sessionWasComplete = sessionForReview?.type === 'runwalk' && plannedSecForReview
+      ? parseInt(durationSeconds ?? '0') >= plannedSecForReview * 0.9
+      : sessionForReview ? kmForReview >= sessionForReview.distanceKm : true;
 
     const timer = setTimeout(() => {
       void maybeAskForReview({
@@ -247,6 +253,11 @@ export default function SummaryScreen() {
   const schemaComplete = weekDone && weekNum >= totalWeeks;
 
   const getMessage = () => {
+    if (session?.type === 'runwalk') {
+      const planned = sessionPlannedSeconds(session);
+      if (planned && secs >= planned * 0.9) return 'Training voltooid!';
+      return 'Goed gedaan. Elke training brengt je dichter bij je doel.';
+    }
     if (km >= (session?.distanceKm ?? 0)) return 'Doelafstand gehaald!';
     if (km >= (session?.distanceKm ?? 0) * 0.8) return 'Goed bezig! Elke training brengt je dichter bij je doel.';
     return 'Elke meter telt. Ga zo door!';
