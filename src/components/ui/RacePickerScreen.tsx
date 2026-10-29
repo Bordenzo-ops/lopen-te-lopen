@@ -95,6 +95,11 @@ function raceMatchesRegistration(race: Race, openOnly: boolean): boolean {
   return race.subRaces?.some(sub => sub.registrationOpen) ?? false;
 }
 
+/** Count with the right Dutch singular/plural form, e.g. "1 stad" / "3 steden". */
+function countLabel(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
 // ── Subcomponents ─────────────────────────────────────────────────────────────
 
 function CountryRow({
@@ -113,7 +118,7 @@ function CountryRow({
         </View>
         <View>
           <Text style={styles.countryName}>{country.name}</Text>
-          <Text style={styles.countrySub}>{country.provinces.length} provincies · {totalRaces} wedstrijden</Text>
+          <Text style={styles.countrySub}>{countLabel(country.provinces.length, 'provincie', 'provincies')} · {countLabel(totalRaces, 'wedstrijd', 'wedstrijden')}</Text>
         </View>
       </View>
       {isOpen
@@ -138,7 +143,7 @@ function ProvinceRow({
         </View>
         <View>
           <Text style={styles.provinceName}>{province.name}</Text>
-          <Text style={styles.provinceSub}>{province.cities.length} steden · {totalRaces} wedstrijden</Text>
+          <Text style={styles.provinceSub}>{countLabel(province.cities.length, 'stad', 'steden')} · {countLabel(totalRaces, 'wedstrijd', 'wedstrijden')}</Text>
         </View>
       </View>
       {isOpen
@@ -161,7 +166,7 @@ function CityRow({
         <View style={[styles.cityDot, isOpen && styles.cityDotActive]} />
         <View>
           <Text style={styles.cityName}>{city.name}</Text>
-          <Text style={styles.citySub}>{upcoming} aankomende wedstrijden</Text>
+          <Text style={styles.citySub}>{countLabel(upcoming, 'aankomende wedstrijd', 'aankomende wedstrijden')}</Text>
         </View>
       </View>
       {isOpen
