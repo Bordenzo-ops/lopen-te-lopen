@@ -10,7 +10,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { deflateSync, inflateSync } from 'node:zlib';
@@ -202,6 +202,17 @@ function renderStoreScreenshots() {
       stripAlpha(outPath);
       console.log(`✓ store-assets/screenshots-2026-10/${f.dir}/${n}.png  (${f.W}x${f.H})  ${slide.type}  ${src.quality}`);
     }
+    // App Store Connect "medium display" slot (6.1"/6.3") only accepts 1206x2622:
+    // downscale the 6.9" render (same aspect within 0.06%) instead of a second layout.
+    const bigPath = join(ROOT, 'store-assets', 'screenshots-2026-10', 'app-store-6.9', `${n}.png`);
+    const medPath = join(ROOT, 'store-assets', 'screenshots-2026-10', 'app-store-6.3', `${n}.png`);
+    mkdirSync(dirname(medPath), { recursive: true });
+    const scaleHtml = join(dirname(medPath), '_scale.html');
+    writeFileSync(scaleHtml, `<html><body style="margin:0;background:#0A0F1A"><img src="${pathToFileURL(bigPath).href}" style="display:block;width:1206px;height:2622px"></body></html>`);
+    execFileSync(CHROME, chromeArgs([`--screenshot=${medPath}`, '--window-size=1206,2622', pathToFileURL(scaleHtml).href]), { stdio: 'ignore' });
+    rmSync(scaleHtml);
+    stripAlpha(medPath);
+    console.log(`✓ store-assets/screenshots-2026-10/app-store-6.3/${n}.png  (1206x2622)`);
   });
 
   // Websitebeelden (JPEG, 620 breed) uit dezelfde bronnen.

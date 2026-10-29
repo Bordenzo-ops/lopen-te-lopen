@@ -102,3 +102,9 @@ wedstrijdpagina heeft een scrollnaad-fout (dubbele tekstregel onder "Doeltijd en
 beeld ca. 40 px verschoven). Daarom bestaat de bron `wedstrijd` uit twee delen: de lange screenshot tot rij 4100
 en daarna de losse screenshot van het onderste deel (offset 2297, zie manifest). Is er een schone lange opname,
 dan kan dat één deel worden.
+
+### App Store "medium display" (6.1"/6.3")
+
+App Store Connect toont soms alleen het vak *iPhone with Dynamic Island (medium display)*; dat accepteert uitsluitend 1206x2622 (of 1179x2556). `render.mjs store-screenshots` maakt daarom naast `app-store-6.9/` ook `app-store-6.3/`: een exacte verkleining van de 6.9"-render (zelfde verhouding binnen 0,06%).
+
+De eerste set (oktober 2026) staat ook als Instagram-storyset in `store-assets/social/instagram-stories-2026-10/` (1080x2160 en 1320x2868); die map wordt niet door render overschreven.

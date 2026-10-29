@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SETS = [
   { dir: 'app-store-6.9', w: 1320, h: 2868 },
+  { dir: 'app-store-6.3', w: 1206, h: 2622 },
   { dir: 'google-play', w: 1080, h: 2160 },
 ];
 const count = JSON.parse(readFileSync(join(ROOT, 'scripts/brand-assets/store-screenshots.json'), 'utf8')).slides.length;
