@@ -1,0 +1,158 @@
+{
+  "_uitleg": [
+    "Een slide toevoegen = een regel in 'slides' (en eventueel een bron in 'sources').",
+    "sources.<id>.parts: bestand in sourceDir, top/bottom = croprijen in px van het bronbestand (statusbalk en Android-navigatiebalk eruit),",
+    "  offset = y-positie van rij 0 van dit bestand in het gedeelde kader (alleen nodig bij stitchen van overlappende stukken; later deel overschrijft eerder).",
+    "sources.<id>.quality: 'ok' | 'low' (render print een waarschuwing bij 'low').",
+    "phoneAspect: vaste schermverhouding (breedte/hoogte) van het telefoonvlak op alle slides. Een bron wordt een uitsnede (venster) van breedte/phoneAspect rijen.",
+    "slides[].winTop: startrij van het venster in het samengestelde beeld (px na crop), of \"end\" voor de onderkant. Standaard 0; spread-right begint standaard direct onder het linkervenster.",
+    "slides[].type: single | spread-left | spread-right. Spreads horen bij elkaar via dezelfde 'source'; links komt direct voor rechts.",
+    "Originelen vervangen: zelfde bestandsnaam in sourceDir, opnieuw renderen. Pas daarna zo nodig de croprijen aan (andere resolutie = andere px).",
+    "In kop/sub markeert *tekst* het oranje accent. Maximaal 8 slides (Play-limiet).",
+    "Bronnen zijn de originelen van 1200 px breed (camerabestandsnamen, Android-screenshots). De oude lage-resolutiebestanden staan nog in de map maar worden niet meer gebruikt.",
+    "Cropwaarden (px op 1200 breed): statusbalk loopt tot ca. rij 100; de app-tabbalk eindigt ca. 252 px onder de bovenrand van de tabbalk (daaronder begint de Android-navigatie)."
+  ],
+  "phoneAspect": 0.51,
+  "sourceDir": "_workspace/Screenshots Android",
+  "sources": {
+    "dashboard": {
+      "quality": "ok",
+      "parts": [
+        {
+          "file": "Screenshot_2026-10-29-21-40-29-641_com.lopentelopen.app.jpg",
+          "top": 120,
+          "bottom": 2740,
+          "offset": 0
+        }
+      ]
+    },
+    "wedstrijd": {
+      "quality": "ok",
+      "parts": [
+        {
+          "file": "Screenshot_2026-10-29-21-39-51-659_com.lopentelopen.app.jpg",
+          "top": 110,
+          "bottom": 4100,
+          "offset": 0
+        },
+        {
+          "file": "Screenshot_2026-10-29-21-53-09-086_com.lopentelopen.app.jpg",
+          "top": 1803,
+          "bottom": 2540,
+          "offset": 2297
+        }
+      ]
+    },
+    "wedstrijdschema": {
+      "quality": "ok",
+      "parts": [
+        {
+          "file": "Screenshot_2026-10-29-21-40-52-615_com.lopentelopen.app.jpg",
+          "top": 160,
+          "bottom": 6732,
+          "offset": 0
+        }
+      ]
+    },
+    "wedstrijd-kiezen": {
+      "quality": "ok",
+      "parts": [
+        {
+          "file": "Screenshot_2026-10-29-21-42-00-020_com.lopentelopen.app.jpg",
+          "top": 830,
+          "bottom": 4700,
+          "offset": 0
+        }
+      ]
+    },
+    "vrij-schema": {
+      "quality": "ok",
+      "parts": [
+        {
+          "file": "Screenshot_2026-10-29-21-41-26-012_com.lopentelopen.app.jpg",
+          "top": 169,
+          "bottom": 2522,
+          "offset": 0
+        }
+      ]
+    },
+    "instellingen-stem": {
+      "quality": "ok",
+      "parts": [
+        {
+          "file": "Screenshot_2026-10-29-21-42-59-274_com.lopentelopen.app.jpg",
+          "top": 2905,
+          "bottom": 5165,
+          "offset": 0
+        }
+      ]
+    }
+  },
+  "slides": [
+    {
+      "source": "dashboard",
+      "type": "single",
+      "kop": "Elke dag weten wat je *loopt*",
+      "sub": "Je training van vandaag, je voortgang en je wedstrijd in één scherm."
+    },
+    {
+      "source": "wedstrijd",
+      "type": "spread-left",
+      "kop": "Train voor jouw *marathon*",
+      "sub": "Tel af naar de start, met alle info over je wedstrijd."
+    },
+    {
+      "source": "wedstrijd",
+      "type": "spread-right",
+      "kop": "Parcours, doeltijd en *startvak*",
+      "sub": "Vul je verwachte eindtijd in voor een indicatief startvak-advies."
+    },
+    {
+      "source": "wedstrijdschema",
+      "type": "spread-left",
+      "kop": "Een schema tot aan de *startlijn*",
+      "sub": "25 weken opbouw, afgestemd op je racedatum."
+    },
+    {
+      "source": "wedstrijdschema",
+      "type": "spread-right",
+      "winTop": "end",
+      "kop": "Week voor week naar de *race-week*",
+      "sub": "Elke week met een eigen focus en een eigen weekafstand."
+    },
+    {
+      "source": "wedstrijd-kiezen",
+      "type": "single",
+      "kop": "Kies je wedstrijd in *Nederland* of België",
+      "sub": "Bekijk alle wedstrijden per land en provincie."
+    },
+    {
+      "source": "vrij-schema",
+      "type": "single",
+      "kop": "Pas je schema aan zoals *jij* wilt",
+      "sub": "Voeg sessies toe of haal ze weg in je eigen schema."
+    },
+    {
+      "source": "instellingen-stem",
+      "type": "single",
+      "kop": "Een Nederlandse *coach* in je oor",
+      "sub": "Kies uit vier Nederlandse en Vlaamse stemmen die je tijdens het lopen begeleiden."
+    }
+  ],
+  "website": [
+    {
+      "out": "_workspace/website/assets/screen-dashboard-2026-10.jpg",
+      "source": "dashboard",
+      "width": 620,
+      "height": 1330,
+      "quality": 0.85
+    },
+    {
+      "out": "_workspace/website/assets/screen-wedstrijd-2026-10.jpg",
+      "source": "wedstrijd",
+      "width": 620,
+      "height": 1330,
+      "quality": 0.85
+    }
+  ]
+}

@@ -62,3 +62,43 @@ met 4:4:4 chroma, samen ~135 KB.
 De Google Play feature graphic draagt bewust **geen** store-CTA. Een
 "Nu in de App Store"-knop op een Play-asset is tegenstrijdig en kan bij de
 review opvallen. De download-CTA staat alleen op de social-beelden.
+
+## Store-screenshots (Apple 6.9" + Google Play)
+
+```bash
+node scripts/brand-assets/render.mjs store-screenshots
+node scripts/brand-assets/verify-store-screenshots.mjs   # afmetingen + geen alfakanaal
+```
+
+Schrijft naar `store-assets/screenshots-2026-10/app-store-6.9/01.png…` (1320×2868, RGB zonder
+alfa) en `…/google-play/01.png…` (1080×2160). Dezelfde ontwerpen, per formaat opnieuw opgemaakt.
+Dezelfde run exporteert ook de websitebeelden (JPEG, 620 px breed) naar `_workspace/website/assets/`.
+
+Alles wordt gestuurd door `store-screenshots.json`:
+
+- `sources` — per bronbeeld de crop (`top`/`bottom` in px van het bronbestand; Android-statusbalk en
+  -navigatiebalk moeten eruit), `quality: 'ok' | 'low'` (bij `low` print render een waarschuwing) en
+  bij gestitchte beelden per deel een `offset`.
+- `slides` — een regel per slide: `source`, `type` (`single`, `spread-left`, `spread-right`), `kop`, `sub`.
+  `*woord*` krijgt het oranje accent. Maximaal 8 slides (Play-limiet).
+- Een **panorama** is een spread: de layout tekent één dubbelbrede wereld en toont de linker of
+  rechter helft. De oranje streep loopt over de naad door.
+- **Vaste telefoonmaat:** `phoneAspect` (nu 0.51) geldt voor alle slides; het telefoonvlak is per formaat
+  even breed en staat op dezelfde plek (Apple scherm 1045×2050, Play 782×1534, excl. rand). Een bron wordt een
+  **uitsnede**: venster = bronbreedte / phoneAspect rijen hoog. Het venster begint bovenaan, of bij `winTop` op de
+  slide (px in het samengestelde beeld na crop; `"end"` = onderkant van de bron). Bij een spread begint de rechterhelft
+  standaard direct onder de linker (doorlopend); met een eigen `winTop` sla je bewust een stuk over (slide 05).
+  Dit werkt in bronpixels, dus originelen met een andere resolutie schalen vanzelf mee; alleen `top`/`bottom`/`winTop` hoeven zo nodig bijgesteld.
+- Een slide toevoegen (bijv. "Start vanaf nul") = een bron en een regel in `slides`; render, klaar.
+
+Layouts: `store-screenshot.html` (single en spread-helft), `store-website-shot.html` (JPEG-export).
+
+**Originelen vervangen = zelfde bestandsnaam in `_workspace/Screenshots Android/`, opnieuw
+renderen.** Heeft het nieuwe origineel een andere resolutie, pas dan de `top`/`bottom`/`winTop`
+(in px) in de manifest aan en zet `quality` op `ok`.
+
+Bronnen zijn de 1200 px brede originelen (`Screenshot_2026-10-29-…jpg`). De lange scroll-screenshot van de
+wedstrijdpagina heeft een scrollnaad-fout (dubbele tekstregel onder "Doeltijd en startvak", daaronder is het
+beeld ca. 40 px verschoven). Daarom bestaat de bron `wedstrijd` uit twee delen: de lange screenshot tot rij 4100
+en daarna de losse screenshot van het onderste deel (offset 2297, zie manifest). Is er een schone lange opname,
+dan kan dat één deel worden.
