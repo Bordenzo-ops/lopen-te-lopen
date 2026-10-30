@@ -42,6 +42,7 @@ import MapView, {
 } from 'react-native-maps';
 import { RefreshCw, Navigation, ArrowRight, MapPin, Bookmark, Check } from 'lucide-react-native';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
+import { formatKm } from '../../utils/format';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors, useIsLightTheme } from '../../theme/useTheme';
 import { SheetHandle, SheetCloseButton } from './sheetParts';
@@ -79,7 +80,7 @@ interface RoutePreviewSheetProps {
  */
 function suggestRouteName(type: PlannedRoute['type'], distanceKm: number): string {
   const typeLabel = type === 'loop' ? 'Rondje' : 'Heen-en-terug';
-  const distanceLabel = distanceKm.toFixed(1).replace('.', ',');
+  const distanceLabel = formatKm(distanceKm, 1);
   return `${typeLabel} ${distanceLabel} km`;
 }
 
@@ -294,7 +295,7 @@ export function RoutePreviewSheet({
           <View style={styles.summary}>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryLabel}>Afstand</Text>
-              <Text style={styles.summaryValue}>{plannedRoute.totalDistanceKm.toFixed(1)} km</Text>
+              <Text style={styles.summaryValue}>{formatKm(plannedRoute.totalDistanceKm, 1)} km</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
@@ -322,7 +323,7 @@ export function RoutePreviewSheet({
             disabled={!plannedRoute || isLoading}
             activeOpacity={0.8}
           >
-            <Navigation size={18} color="#fff" strokeWidth={2} />
+            <Navigation size={18} color={colors.textInverse}strokeWidth={2} />
             <Text style={styles.primaryBtnText}>Start met route</Text>
           </TouchableOpacity>
 
@@ -371,7 +372,7 @@ export function RoutePreviewSheet({
                   accessibilityRole="button"
                   accessibilityLabel="Bevestig route bewaren"
                 >
-                  <Check size={18} color="#fff" strokeWidth={2.5} />
+                  <Check size={18} color={colors.textInverse}strokeWidth={2.5} />
                 </TouchableOpacity>
               </View>
             ) : (
@@ -620,7 +621,7 @@ const makeStyles = (colors: ThemeColors, insetBottom: number) => StyleSheet.crea
   primaryBtnText: {
     fontFamily: typography.fontFamily.sansSemi,
     fontSize:   typography.fontSize.base,
-    color:      '#fff',
+    color:      colors.textInverse,
   },
   secondaryBtn: {
     flexDirection:  'row',

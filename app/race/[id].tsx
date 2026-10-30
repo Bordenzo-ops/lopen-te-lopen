@@ -110,7 +110,12 @@ export default function RaceDetailScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
+      >
         <View style={styles.topRow}>
           <BackButton color={colors.textSecondary} />
         </View>
@@ -166,7 +171,10 @@ export default function RaceDetailScreen() {
             </View>
           ))}
           {details?.courseHighlights.map(line => (
-            <Text key={line} style={styles.bullet}>{'•'}  {line}</Text>
+            <View key={line} style={styles.bulletRow}>
+              <Text style={styles.bulletMark}>{'•'}</Text>
+              <Text style={styles.bulletText}>{line}</Text>
+            </View>
           ))}
           {race.url ? (
             <TouchableOpacity
@@ -191,11 +199,12 @@ export default function RaceDetailScreen() {
             <Text style={styles.body}>
               Vul je verwachte eindtijd in voor een indicatief startvak-advies.
             </Text>
+            <Text style={styles.inputLabel}>Doeltijd</Text>
             <TextInput
               style={styles.input}
               value={timeInput}
               onChangeText={setTimeInput}
-              placeholder="Doeltijd, bijvoorbeeld 4:15:00"
+              placeholder="Bijvoorbeeld 4:15:00"
               placeholderTextColor={colors.textTertiary}
               keyboardType="numbers-and-punctuation"
               autoCorrect={false}
@@ -227,16 +236,19 @@ export default function RaceDetailScreen() {
           </Card>
         )}
 
-        {/* Schema */}
-        {!countdown.isPast && (
+      </ScrollView>
+
+      {/* Schema: vaste voet, altijd in beeld */}
+      {!countdown.isPast && (
+        <View style={styles.footer}>
           <Button
             label={isGoalRace ? 'Bekijk je wedstrijdschema' : 'Train voor deze race'}
             onPress={handleSchedule}
             fullWidth
             size="lg"
           />
-        )}
-      </ScrollView>
+        </View>
+      )}
 
       <ShareCountdownSheet
         visible={showShare}
@@ -276,6 +288,7 @@ function CountdownUnit({
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   scroll: { padding: spacing[3], paddingBottom: spacing[6], gap: spacing[2] },
+  footer: { paddingHorizontal: spacing[3], paddingBottom: spacing[3], paddingTop: spacing[2] },
   topRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing[1] },
 
   header: { gap: 6 },
@@ -332,9 +345,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
     color: colors.textPrimary, flexShrink: 1, textAlign: 'right',
   },
-  bullet: {
+  bulletRow: { flexDirection: 'row', gap: spacing[1] },
+  bulletMark: {
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm,
-    color: colors.textSecondary, lineHeight: 20,
+    color: colors.textSecondary, lineHeight: 20, width: 8,
+  },
+  bulletText: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm,
+    color: colors.textSecondary, lineHeight: 20, flex: 1,
+  },
+  inputLabel: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
+    color: colors.textSecondary,
   },
   linkRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36 },
   linkText: {

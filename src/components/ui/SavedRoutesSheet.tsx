@@ -31,6 +31,7 @@ import { useAppStore, selectSavedRoutes, type SavedRoute } from '../../store/app
 import { PREMIUM_CONFIG } from '../../config/premiumConfig';
 import { usePremium } from '../../hooks/usePremium';
 import { haversineMeters } from '../../services/routeService';
+import { formatKm } from '../../utils/format';
 
 // ── Constanten ────────────────────────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ function formatStartDistance(meters: number): string {
   if (rounded < 1000) {
     return `Start ${rounded} m verderop`;
   }
-  const km = (rounded / 1000).toFixed(1).replace('.', ',');
+  const km = formatKm(rounded / 1000, 1);
   return `Start ${km} km verderop`;
 }
 
@@ -146,7 +147,7 @@ export function SavedRoutesSheet({ visible, currentPosition, onSelect, onClose }
           accessibilityRole="button"
           accessibilityLabel={[
             route.name,
-            `${route.distanceKm.toFixed(1)} km`,
+            `${formatKm(route.distanceKm, 1)} km`,
             typeLabel,
             distanceLabel,
           ].filter(Boolean).join(', ')}
@@ -159,7 +160,7 @@ export function SavedRoutesSheet({ visible, currentPosition, onSelect, onClose }
               {route.name}
             </Text>
             <Text style={[styles.rowMeta, muted && styles.rowTextMuted]} numberOfLines={1}>
-              {route.distanceKm.toFixed(1)} km · {typeLabel}
+              {formatKm(route.distanceKm, 1)} km ·{typeLabel}
               {distanceLabel ? ` · ${distanceLabel}` : ''}
             </Text>
           </View>

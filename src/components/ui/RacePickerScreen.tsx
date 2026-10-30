@@ -31,6 +31,7 @@ import {
   raceDistanceToKm, realismHint, racePaceSecPerKm, formatPacePerKm,
 } from '../../data/paceModel';
 import { PremiumBadge } from './PremiumBadge';
+import { Button } from './Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Modal } from 'react-native';
 import { useAppStore } from '../../store/appStore';
@@ -631,17 +632,13 @@ function FeaturedRaceCard({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const weeks  = weeksUntilRace(race.date);
   const accent = race.accentColor;
-  const months = Math.round(weeks / 4.3);
 
   return (
     <TouchableOpacity
-      style={[styles.featuredCard, { borderColor: accent + '55' }]}
+      style={styles.featuredCard}
       onPress={onPress}
       activeOpacity={0.85}
     >
-      {/* Achtergrond glow */}
-      <View style={[styles.featuredGlow, { backgroundColor: accent + '18' }]} />
-
       {/* Kroontje */}
       <View style={styles.featuredBadgeRow}>
         <View style={[styles.featuredBadge, { backgroundColor: accent + '22', borderColor: accent + '55' }]}>
@@ -666,11 +663,6 @@ function FeaturedRaceCard({
           <Text style={[styles.featuredStatValue, { color: accent }]}>{weeks}</Text>
           <Text style={styles.featuredStatLabel}>weken te gaan</Text>
         </View>
-        <View style={styles.featuredStatDivider} />
-        <View style={styles.featuredStat}>
-          <Text style={[styles.featuredStatValue, { color: accent }]}>{months}</Text>
-          <Text style={styles.featuredStatLabel}>maanden</Text>
-        </View>
       </View>
 
       {/* Datum */}
@@ -690,8 +682,8 @@ function FeaturedRaceCard({
           {locked ? 'Ontgrendel met premium' : 'Train voor dit doel'}
         </Text>
         {locked
-          ? <Lock size={15} color="#fff" strokeWidth={2.5} />
-          : <ChevronRight size={16} color="#fff" strokeWidth={2.5} />
+          ? <Lock size={15} color={colors.textInverse} strokeWidth={2.5} />
+          : <ChevronRight size={16} color={colors.textInverse} strokeWidth={2.5} />
         }
       </View>
     </TouchableOpacity>
@@ -901,7 +893,8 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
   }
 
   return (
-    <SafeAreaView style={styles.screen}>
+    // Top inset is handled by the parent tab screen (edges top), so none here.
+    <SafeAreaView style={styles.screen} edges={[]}>
       {/* Header */}
       <View style={styles.header}>
         {onBack && (
@@ -1045,7 +1038,6 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
         {/* Featured races, uitgelicht bovenaan */}
         {featuredRaces.length > 0 && (
           <View style={styles.featuredSection}>
-            <Text style={styles.featuredSectionLabel}>⭐ Ultiem doel</Text>
             {featuredRaces.map(race => (
               <FeaturedRaceCard
                 key={race.id}
@@ -1065,6 +1057,9 @@ export function RacePickerScreen({ onSelectRace, onBack }: RacePickerScreenProps
             <Text style={styles.emptyStateText}>
               Geen wedstrijden gevonden. Probeer een andere zoekterm of pas de filters aan.
             </Text>
+            {filtersActive && (
+              <Button label="Filters wissen" onPress={clearFilters} variant="secondary" size="sm" style={styles.emptyStateBtn} />
+            )}
           </View>
         )}
 
@@ -1209,7 +1204,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.brandPrimary, alignItems: 'center', justifyContent: 'center',
   },
   filterCountBadgeText: {
-    fontFamily: typography.fontFamily.sansBold, fontSize: typography.fontSize.xs, color: '#fff',
+    fontFamily: typography.fontFamily.sansBold, fontSize: typography.fontSize.xs, color: colors.textInverse,
   },
   filtersPanel: { gap: spacing[1], marginTop: spacing[1] },
   clearFiltersBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -1228,7 +1223,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   filterChipText: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.xs, color: colors.textSecondary,
   },
-  filterChipTextActive: { color: '#fff' },
+  filterChipTextActive: { color: colors.textInverse },
 
   list: { padding: spacing[2], gap: spacing[1.5], paddingBottom: spacing[6] },
 
@@ -1241,6 +1236,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm,
     color: colors.textSecondary, textAlign: 'center', lineHeight: typography.fontSize.sm * 1.55,
   },
+  emptyStateBtn: { marginTop: spacing[1.5] },
 
   // Land
   countryBlock: { gap: spacing[1] },
@@ -1347,7 +1343,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   raceMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   raceMetaText: {
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
-    color: colors.textTertiary, textTransform: 'capitalize',
+    color: colors.textTertiary,
   },
   pastLabel: {
     fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.xs, color: colors.textTertiary,
@@ -1376,25 +1372,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
 
   // Featured race hero-kaart
   featuredSection: { gap: spacing[1] },
-  featuredSectionLabel: {
-    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.xs,
-    color: colors.textTertiary, textTransform: 'uppercase', letterSpacing: typography.letterSpacing.widest,
-    paddingHorizontal: spacing[0.5],
-  },
   allRacesLabel: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.xs,
     color: colors.textTertiary, textTransform: 'uppercase', letterSpacing: typography.letterSpacing.widest,
     paddingHorizontal: spacing[0.5], marginTop: spacing[1],
   },
   featuredCard: {
-    borderRadius: radius['2xl'], borderWidth: 1.5,
+    borderRadius: radius['2xl'], borderWidth: 1.5, borderColor: colors.brandPrimary,
     backgroundColor: colors.bgCard, overflow: 'hidden',
     padding: spacing[2.5], gap: spacing[1.5],
     ...shadows.md,
-  },
-  featuredGlow: {
-    ...StyleSheet.absoluteFill,
-    borderRadius: radius['2xl'],
   },
   featuredBadgeRow: { flexDirection: 'row' },
   featuredBadge: {
@@ -1435,7 +1422,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   featuredDate: {
     fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.sm,
-    color: colors.textSecondary, textTransform: 'capitalize',
+    color: colors.textSecondary,
   },
   featuredQuote: {
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.sm,
@@ -1449,7 +1436,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: spacing[0.5],
   },
   featuredCtaText: {
-    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base, color: '#fff',
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base, color: colors.textInverse,
   },
 
   footnote: {
