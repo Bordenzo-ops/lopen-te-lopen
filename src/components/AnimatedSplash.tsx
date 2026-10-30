@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Image, StyleSheet } from 'react-native';
+import { AccessibilityInfo, Animated, Image, StyleSheet } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 
 // Op Android 12+ toont het OS zelf alleen een klein icoon op een
@@ -10,8 +10,8 @@ import * as SplashScreen from 'expo-splash-screen';
 
 // Hoe lang de fullscreen afbeelding zichtbaar blijft nadat de native splash
 // is verborgen, en hoe lang de daaropvolgende fade-out duurt.
-const VISIBLE_DURATION_MS = 1200;
-const FADE_OUT_DURATION_MS = 500;
+const VISIBLE_DURATION_MS = 300;
+const FADE_OUT_DURATION_MS = 250;
 
 // Veiligheidsnet: als de afbeelding om wat voor reden ook nooit "onLoadEnd"
 // meldt, verbergen we de native splash en de overlay alsnog na deze timeout,
@@ -32,6 +32,8 @@ export function AnimatedSplash({ children }: AnimatedSplashProps) {
   const handledRef = useRef(false);
   const fadeOutTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const safetyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Skip the scale animations when the user prefers reduced motion.
+  const reduceMotionRef = useRef(false);
 
   const handleReadyToDismiss = () => {
     if (handledRef.current) return;
@@ -43,11 +45,13 @@ export function AnimatedSplash({ children }: AnimatedSplashProps) {
     SplashScreen.hideAsync().catch(() => {});
 
     // Zichtbare periode: heel lichte, langzame inzoom voor een levend gevoel.
-    Animated.timing(scale, {
-      toValue: 1.04,
-      duration: VISIBLE_DURATION_MS,
-      useNativeDriver: true,
-    }).start();
+    if (!reduceMotionRef.current) {
+      Animated.timing(scale, {
+        toValue: 1.04,
+        duration: VISIBLE_DURATION_MS,
+        useNativeDriver: true,
+      }).start();
+    }
 
     fadeOutTimer.current = setTimeout(() => {
       // Fade-out: overlay vervaagt en zoomt tegelijk verder in, daarna pas
@@ -58,11 +62,15 @@ export function AnimatedSplash({ children }: AnimatedSplashProps) {
           duration: FADE_OUT_DURATION_MS,
           useNativeDriver: true,
         }),
-        Animated.timing(scale, {
-          toValue: 1.08,
-          duration: FADE_OUT_DURATION_MS,
-          useNativeDriver: true,
-        }),
+        ...(reduceMotionRef.current
+          ? []
+          : [
+              Animated.timing(scale, {
+                toValue: 1.08,
+                duration: FADE_OUT_DURATION_MS,
+                useNativeDriver: true,
+              }),
+            ]),
       ]).start(() => {
         setOverlayVisible(false);
       });
@@ -70,6 +78,11 @@ export function AnimatedSplash({ children }: AnimatedSplashProps) {
   };
 
   useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then(enabled => {
+        reduceMotionRef.current = enabled;
+      })
+      .catch(() => {});
     safetyTimer.current = setTimeout(handleReadyToDismiss, SAFETY_TIMEOUT_MS);
 
     return () => {

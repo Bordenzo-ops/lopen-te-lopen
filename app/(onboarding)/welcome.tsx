@@ -1,18 +1,14 @@
-import React, { useMemo, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CalendarDays, HeartPulse, MapPin } from 'lucide-react-native';
-import { typography, spacing, type ThemeColors } from '../../src/theme/tokens';
-import { useThemeColors } from '../../src/theme/useTheme';
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
+import { typography, spacing, darkColors as colors } from '../../src/theme/tokens';
 import { Button } from '../../src/components/ui/Button';
 import { trackEvent } from '../../src/services/analyticsService';
 import { useAppStore } from '../../src/store/appStore';
 
 export default function WelcomeScreen() {
-  const colors = useThemeColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-
   // Start van de funnel: het welkomstscherm is de eerste stap van de
   // onboarding. Eén keer bij het tonen. Best-effort, blokkeert niets.
   useEffect(() => {
@@ -30,64 +26,77 @@ export default function WelcomeScreen() {
     }, [onboardingDone]),
   );
   return (
-    <SafeAreaView style={styles.container}>
-      {/* ScrollView: bij grotere systeemlettergrootte of op kleine toestellen past
-          de inhoud niet altijd op het scherm, dus moet die kunnen scrollen. */}
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Hero area */}
-        <View style={styles.hero}>
-          <View style={styles.iconWrapper}>
-            <Text style={styles.emoji}>🏃</Text>
+    <View style={styles.container}>
+      {/* Brand image fills the screen so the native splash flows into it. */}
+      <Image
+        source={require('../../assets/splash-full.png')}
+        resizeMode="cover"
+        style={StyleSheet.absoluteFill}
+        accessible={false}
+      />
+      {/* Bottom gradient keeps buttons and text readable over the image. */}
+      <Svg width="100%" height="45%" style={styles.bottomFade} pointerEvents="none">
+        <Defs>
+          <LinearGradient id="welcomeFade" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor="#0A0F1A" stopOpacity={0} />
+            <Stop offset="0.75" stopColor="#0A0F1A" stopOpacity={1} />
+            <Stop offset="1" stopColor="#0A0F1A" stopOpacity={1} />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill="url(#welcomeFade)" />
+      </Svg>
+      <SafeAreaView style={styles.safeArea}>
+        {/* ScrollView: bij grotere systeemlettergrootte of op kleine toestellen past
+            de inhoud niet altijd op het scherm, dus moet die kunnen scrollen. */}
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          {/* Hero area */}
+          <View style={styles.hero}>
+            <Text style={styles.headline}>Van de bank{'\n'}naar de finish</Text>
+            <Text style={styles.sub}>
+              Van je eerste kilometer tot de finishlijn, met een schema dat bij jou past.
+            </Text>
           </View>
-          <Text style={styles.headline}>Van de bank{'\n'}naar de finish</Text>
-          <Text style={styles.sub}>
-            Van je eerste kilometer tot de finishlijn, met een schema dat bij jou past.
-          </Text>
-        </View>
 
-        {/* Features */}
-        <View style={styles.features}>
-          {[
-            { icon: <CalendarDays size={22} color={colors.brandLight} strokeWidth={2} />, text: 'Persoonlijk weekschema' },
-            { icon: <HeartPulse size={22} color={colors.brandLight} strokeWidth={2} />,   text: 'Training op hartslag' },
-            { icon: <MapPin size={22} color={colors.brandLight} strokeWidth={2} />,       text: 'GPS-tracking en live-tempo' },
-          ].map((f, i) => (
-            <View key={i} style={styles.feature}>
-              <View style={styles.featureIcon}>{f.icon}</View>
-              <Text style={styles.featureText}>{f.text}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* CTA */}
-        <View style={styles.actions}>
-          <Button
-            label="Start jouw schema"
-            onPress={() => router.push('/(onboarding)/goal')}
-            fullWidth
-            size="lg"
-          />
-          <TouchableOpacity
-            onPress={() => router.push({ pathname: '/account', params: { mode: 'login', from: 'welcome' } })}
-            style={styles.loginLink}
-            accessibilityRole="button"
-            accessibilityLabel="Ik heb al een account"
-          >
-            <Text style={styles.loginLinkText}>Ik heb al een account</Text>
-          </TouchableOpacity>
-          <Text style={styles.disclaimer}>
-            Gratis en zonder account. Je trainingen staan op je telefoon. Log je in, dan bewaren we ze ook veilig in de cloud.
-          </Text>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+          {/* CTA */}
+          <View style={styles.actions}>
+            <Button
+              label="Start jouw schema"
+              onPress={() => router.push('/(onboarding)/goal')}
+              fullWidth
+              size="lg"
+            />
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: '/account', params: { mode: 'login', from: 'welcome' } })}
+              style={styles.loginLink}
+              accessibilityRole="button"
+              accessibilityLabel="Ik heb al een account"
+            >
+              <Text style={styles.loginLinkText}>Ik heb al een account</Text>
+            </TouchableOpacity>
+            <Text style={styles.disclaimer}>
+              Gratis en zonder account. Je trainingen staan op je telefoon. Log je in, dan bewaren we ze ook veilig in de cloud.
+            </Text>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.bgBase,
+  },
+  bottomFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  safeArea: {
+    flex: 1,
+    backgroundColor: 'transparent',
   },
   content: {
     flexGrow: 1,
@@ -97,62 +106,24 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'space-between',
   },
   hero: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing[2.5],
-  },
-  iconWrapper: {
-    width: 96,
-    height: 96,
-    borderRadius: 28,
-    backgroundColor: colors.brandPrimary + '22',
-    borderWidth: 1,
-    borderColor: colors.brandPrimary + '44',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing[1],
-  },
-  emoji: {
-    fontSize: 48,
   },
   headline: {
     fontFamily: typography.fontFamily.display,
-    fontSize: typography.fontSize['3xl'],
+    fontSize: typography.fontSize['4xl'],
     color: colors.textPrimary,
-    textAlign: 'center',
-    lineHeight: typography.fontSize['3xl'] * typography.lineHeight.tight,
-    letterSpacing: typography.letterSpacing.tight,
+    textAlign: 'left',
+    lineHeight: typography.fontSize['4xl'] * typography.lineHeight.tight,
+    letterSpacing: -1,
   },
   sub: {
     fontFamily: typography.fontFamily.sans,
     fontSize: typography.fontSize.md,
     color: colors.textSecondary,
-    textAlign: 'center',
+    textAlign: 'left',
     lineHeight: typography.fontSize.md * typography.lineHeight.relaxed,
-    maxWidth: 300,
-  },
-  features: {
-    gap: spacing[2],
-  },
-  feature: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[2],
-    backgroundColor: colors.bgCard,
-    paddingVertical: spacing[2],
-    paddingHorizontal: spacing[2.5],
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-  },
-  featureIcon: {
-    width: 26,
-    alignItems: 'center',
-  },
-  featureText: {
-    fontFamily: typography.fontFamily.sansMedium,
-    fontSize: typography.fontSize.base,
-    color: colors.textPrimary,
-    flex: 1,
+    maxWidth: 320,
   },
   actions: {
     gap: spacing[1.5],

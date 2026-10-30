@@ -20,6 +20,7 @@ import { ShareRunSheet } from '../../src/components/ui/ShareRunSheet';
 import { ScaleIn } from '../../src/components/motion/ScaleIn';
 import { GOAL_LABELS } from '../../src/data/trainingPlans';
 import type { GoalType } from '../../src/data/trainingPlans';
+import { formatKm } from '../../src/utils/format';
 
 const goalLabel: Record<GoalType, string> = GOAL_LABELS;
 
@@ -109,7 +110,7 @@ export default function SchemaCompleteScreen() {
         {/* Statistieken */}
         <View style={styles.statsGrid}>
           <View style={styles.statCell}>
-            <Text style={styles.statValue}>{totalRunKm.toFixed(0)}</Text>
+            <Text style={styles.statValue}>{formatKm(totalRunKm, 0)}</Text>
             <Text style={styles.statLabel}>km gelopen</Text>
           </View>
           <View style={[styles.statCell, styles.statCellBorder]}>

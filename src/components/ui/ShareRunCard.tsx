@@ -35,6 +35,7 @@ import { View, Text, Image, StyleSheet } from 'react-native';
 import Svg, { Path, Defs, LinearGradient, Stop, Circle } from 'react-native-svg';
 import { palette, typography, radius, spacing } from '../../theme/tokens';
 import type { CompletedSession } from '../../store/appStore';
+import { formatKm } from '../../utils/format';
 import {
   ArtScrim,
   ART_TEXTURE,
@@ -269,7 +270,7 @@ export const ShareRunCard = forwardRef<View, ShareRunCardProps>(function ShareRu
         {/* ── Hero-stat: afstand ── */}
         <View style={[shared.heroRow, styles.heroRow]}>
           <Text style={[shared.heroValue, isTransparent && shared.heroValueTransparent]} {...NO_FONT_PADDING}>
-            {session.actualDistanceKm.toFixed(2)}
+            {formatKm(session.actualDistanceKm, 2)}
           </Text>
           <Text style={[shared.heroUnit, isTransparent && shared.heroUnitTransparent]}>km</Text>
         </View>

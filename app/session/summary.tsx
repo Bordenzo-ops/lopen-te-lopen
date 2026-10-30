@@ -24,6 +24,7 @@ import { usePremium } from '../../src/hooks/usePremium';
 import { ScaleIn } from '../../src/components/motion/ScaleIn';
 import { FadeSlideIn } from '../../src/components/motion/FadeSlideIn';
 import { CountUpText } from '../../src/components/motion/CountUpText';
+import { formatKm } from '../../src/utils/format';
 
 export default function SummaryScreen() {
   const { distanceKm, durationSeconds, avgPace, sessionId, weekNumber, splits: splitsParam } =
@@ -277,7 +278,7 @@ export default function SummaryScreen() {
 
         {/* Grote afstand */}
         <View style={styles.bigStat}>
-          <CountUpText value={km} format={(n) => n.toFixed(2)} textStyle={styles.bigStatValue} />
+          <CountUpText value={km} format={(n) => formatKm(n, 2)} textStyle={styles.bigStatValue} />
           <Text style={styles.bigStatUnit}>kilometer</Text>
         </View>
 

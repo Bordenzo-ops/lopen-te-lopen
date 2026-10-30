@@ -736,7 +736,7 @@ export default function SettingsScreen() {
       : 'Hiervoor is een nieuwe app-build nodig. Nog niet beschikbaar in deze versie.');
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -828,7 +828,7 @@ export default function SettingsScreen() {
                       accessibilityLabel={`Thema ${opt.label}`}
                       accessibilityState={{ selected: active }}
                     >
-                      <Icon size={18} color={active ? '#fff' : colors.textSecondary} strokeWidth={2} />
+                      <Icon size={18} color={active ? colors.textInverse : colors.textSecondary} strokeWidth={2} />
                       <Text style={[styles.themeBtnText, active && styles.themeBtnTextActive]}>{opt.label}</Text>
                     </TouchableOpacity>
                   );
@@ -1481,7 +1481,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   themeBtnText: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm, color: colors.textSecondary,
   },
-  themeBtnTextActive: { color: '#fff' },
+  themeBtnTextActive: { color: colors.textInverse },
   title: {
     fontFamily: typography.fontFamily.display, fontSize: typography.fontSize['2xl'],
     color: colors.textPrimary, letterSpacing: typography.letterSpacing.tight, marginBottom: spacing[1],
@@ -1556,7 +1556,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   timeBtnText: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm, color: colors.textSecondary,
   },
-  timeBtnTextActive: { color: '#fff' },
+  timeBtnTextActive: { color: colors.textInverse },
   switchLabel: {
     fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.base, color: colors.textPrimary,
   },
@@ -1591,7 +1591,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[1.5],
   },
   voicePackDownloadBtnText: {
-    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm, color: '#fff',
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm, color: colors.textInverse,
   },
   voicePackDeleteLink: {
     minHeight: 44, justifyContent: 'center', alignItems: 'flex-start',
@@ -1659,7 +1659,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   primaryActionBtnText: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
-    color: '#fff',
+    color: colors.textInverse,
   },
   accountButtonsRow: {
     flexDirection: 'row', gap: spacing[1],

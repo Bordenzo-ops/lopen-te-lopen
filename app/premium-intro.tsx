@@ -206,7 +206,7 @@ export default function PremiumIntroScreen() {
             <Rect x="0" y="0" width="100%" height="100%" rx={radius.lg} fill="url(#ctaGradient)" />
           </Svg>
           <Text style={styles.ctaText}>{PREMIUM_INTRO_CTA_PRIMARY}</Text>
-          <ArrowRight size={20} color={palette.neutral[0]} strokeWidth={2.5} />
+          <ArrowRight size={20} color={palette.neutral[950]} strokeWidth={2.5} />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -405,7 +405,7 @@ const makeStyles = () => StyleSheet.create({
   ctaText: {
     fontFamily: typography.fontFamily.sansSemi,
     fontSize: typography.fontSize.md,
-    color: palette.neutral[0],
+    color: palette.neutral[950],
   },
   secondaryButton: {
     marginTop: spacing[2],

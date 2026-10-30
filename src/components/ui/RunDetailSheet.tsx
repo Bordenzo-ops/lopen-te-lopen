@@ -57,6 +57,7 @@ import { exportSessionAsGpx } from '../../services/exportService';
 import { SheetHandle, SheetCloseButton } from './sheetParts';
 import { ZoneBadge } from './ZoneBadge';
 import { ShareRunSheet } from './ShareRunSheet';
+import { formatKm } from '../../utils/format';
 
 /**
  * Bronlabel per import-kanaal. Hier gedefinieerd (in plaats van in
@@ -268,7 +269,7 @@ export function RunDetailSheet({ visible, session, onClose }: RunDetailSheetProp
 
             {/* Grote afstand */}
             <View style={styles.bigStat}>
-              <Text style={styles.bigStatValue}>{session.actualDistanceKm.toFixed(2)}</Text>
+              <Text style={styles.bigStatValue}>{formatKm(session.actualDistanceKm, 2)}</Text>
               <Text style={styles.bigStatUnit}>kilometer</Text>
             </View>
 

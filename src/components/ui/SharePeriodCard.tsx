@@ -35,6 +35,7 @@ import { View, Text, Image, StyleSheet } from 'react-native';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { palette, typography, radius, spacing } from '../../theme/tokens';
 import type { PeriodStats, PeriodType } from '../../utils/periodStats';
+import { formatKm as formatKmNl } from '../../utils/format';
 import {
   ArtScrim,
   ART_HERO,
@@ -55,8 +56,8 @@ import {
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function formatKm(km: number | null): string {
-  if (km === null) return '0.0';
-  return km.toFixed(1);
+  if (km === null) return formatKmNl(0, 1);
+  return formatKmNl(km, 1);
 }
 
 /** "Deel je week" e.d. — ook gebruikt door SharePeriodSheet */

@@ -169,13 +169,13 @@ export default function GoalScreen() {
         {/* Mode toggle */}
         <View style={styles.modeToggle}>
           <ModeTab
-            icon={<Dumbbell size={16} color={mode === 'training' ? '#fff' : colors.textSecondary} strokeWidth={2} />}
+            icon={<Dumbbell size={16} color={mode === 'training' ? colors.textInverse : colors.textSecondary} strokeWidth={2} />}
             label="Vrij trainen"
             active={mode === 'training'}
             onPress={() => switchMode('training')}
           />
           <ModeTab
-            icon={<Trophy size={16} color={mode === 'race' ? '#fff' : colors.textSecondary} strokeWidth={2} />}
+            icon={<Trophy size={16} color={mode === 'race' ? colors.textInverse : colors.textSecondary} strokeWidth={2} />}
             label="Wedstrijd"
             active={mode === 'race'}
             onPress={() => switchMode('race')}
@@ -272,7 +272,7 @@ function TrainingModeContent({
                 </View>
               </View>
               <View style={[styles.checkCircle, isSelected && styles.checkCircleSelected]}>
-                {isSelected && <Check size={14} color="#fff" strokeWidth={3} />}
+                {isSelected && <Check size={14} color={colors.textInverse} strokeWidth={3} />}
               </View>
             </TouchableOpacity>
           );
@@ -317,7 +317,7 @@ function GoalList({
                 </View>
               </View>
               <View style={[styles.checkCircle, isSelected && styles.checkCircleSelected]}>
-                {isSelected && <Check size={14} color="#fff" strokeWidth={3} />}
+                {isSelected && <Check size={14} color={colors.textInverse} strokeWidth={3} />}
               </View>
             </TouchableOpacity>
           );
@@ -516,7 +516,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
     color: colors.textSecondary,
   },
-  modeTabLabelActive: { color: '#fff' },
+  modeTabLabelActive: { color: colors.textInverse },
 
   section: { gap: spacing[1.5] },
   sectionTitle: {

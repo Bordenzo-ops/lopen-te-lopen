@@ -337,7 +337,7 @@ const makeStyles = (colors: ThemeColors, insetBottom: number) => StyleSheet.crea
   scanBtnDisabled: { opacity: 0.6 },
   scanBtnText: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base,
-    color: '#fff',
+    color: colors.textInverse,
   },
   unpairBtn: {
     minHeight: 48,
