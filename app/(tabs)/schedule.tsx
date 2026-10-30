@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -8,7 +8,7 @@ import { typography, spacing, radius, type ThemeColors } from '../../src/theme/t
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore, selectIsSessionCompleted, selectCurrentWeek } from '../../src/store/appStore';
 import { getTrainingPlan, zoneInfo, DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
-import type { Session } from '../../src/data/trainingPlans';
+import type { Session, TrainingWeek } from '../../src/data/trainingPlans';
 import { resolveActivePlan } from '../../src/data/activePlan';
 import { DayPicker } from '../../src/components/ui/DayPicker';
 import { SessionEditorSheet } from '../../src/components/ui/SessionEditorSheet';
@@ -22,6 +22,7 @@ import { PressableScale } from '../../src/components/motion/PressableScale';
 import { ScaleIn } from '../../src/components/motion/ScaleIn';
 import { trackEvent } from '../../src/services/analyticsService';
 import { getSessionAttemptStatus } from '../../src/utils/trainingWeek';
+import { formatKm } from '../../src/utils/format';
 
 // Zachte fade + korte slide (8px) voor het uit-/inklappen van een weekblok.
 // `.reduceMotion` zorgt dat de systeeminstelling voor verminderde beweging
@@ -73,6 +74,28 @@ export default function ScheduleScreen() {
     if (!customActive && editMode) setEditMode(false);
   }, [customActive, editMode]);
 
+  // Index of the current week in the visible plan, written during render and
+  // read by the scroll effect below (which must sit before the early return).
+  const listRef = useRef<FlatList<TrainingWeek>>(null);
+  const currentWeekIndexRef = useRef(-1);
+
+  // Scroll to the current week when the screen opens and when the schema mode
+  // changes (not on every re-render). Weeks 1-2 stay at the top so the header
+  // remains in view. Rows have variable height, hence scrollToIndex plus the
+  // onScrollToIndexFailed fallback.
+  useEffect(() => {
+    if (currentWeek <= 2) return;
+    const timer = setTimeout(() => {
+      const index = currentWeekIndexRef.current;
+      if (index < 0) return;
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToIndex({ index, viewOffset: spacing[1], animated: false });
+      });
+    }, 50);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schemaMode]);
+
   if (!profile) return null;
 
   const trainingDays = profile.trainingDays ?? DEFAULT_TRAINING_DAYS;
@@ -93,6 +116,7 @@ export default function ScheduleScreen() {
   // springen. Een eigen vrij schema (customPlan) staat hier ook al in zijn
   // oorspronkelijke vorm in, want resolveActivePlan remapt dat bewust niet.
   const planWeeks = activePlan.weeks;
+  currentWeekIndexRef.current = planWeeks.findIndex(w => w.weekNumber === currentWeek);
   const planName  = activePlan.name;
   const planTotal = activePlan.totalWeeks;
   const weeksLeftLabel = useRace && racePlan ? weeksUntilLabel(racePlan.race.date) : null;
@@ -173,6 +197,14 @@ export default function ScheduleScreen() {
     );
   };
 
+  // Rows are not measured yet: jump near the target first, then retry.
+  const handleScrollToIndexFailed = (info: { index: number; averageItemLength: number }) => {
+    listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+    setTimeout(() => {
+      listRef.current?.scrollToIndex({ index: info.index, viewOffset: spacing[1], animated: false });
+    }, 100);
+  };
+
   const handleSaveSession = (session: Session | Omit<Session, 'id'>) => {
     if (!editorState) return;
     if ('id' in session) {
@@ -183,8 +215,10 @@ export default function ScheduleScreen() {
     setEditorState(null);
   };
 
-  return (
-    <SafeAreaView style={styles.container}>
+  // Screen header and zone legend scroll along with the list. Kept as a JSX
+  // element (not an inline component) so it does not remount on every render.
+  const listHeader = (
+    <>
       <View style={styles.header}>
         <Text style={styles.title}>Schema</Text>
 
@@ -197,7 +231,7 @@ export default function ScheduleScreen() {
             accessibilityLabel="Vrij schema"
             accessibilityState={{ selected: schemaMode === 'training' }}
           >
-            <Dumbbell size={13} color={schemaMode === 'training' ? '#fff' : colors.textSecondary} strokeWidth={2} />
+            <Dumbbell size={13} color={schemaMode === 'training' ? colors.textInverse : colors.textSecondary} strokeWidth={2} />
             <Text style={[styles.modeBtnLabel, schemaMode === 'training' && styles.modeBtnLabelActive]}>
               Vrij schema
             </Text>
@@ -209,7 +243,7 @@ export default function ScheduleScreen() {
             accessibilityLabel="Wedstrijdschema"
             accessibilityState={{ selected: schemaMode === 'race' }}
           >
-            <Trophy size={13} color={schemaMode === 'race' ? '#fff' : colors.textSecondary} strokeWidth={2} />
+            <Trophy size={13} color={schemaMode === 'race' ? colors.textInverse : colors.textSecondary} strokeWidth={2} />
             <Text style={[styles.modeBtnLabel, schemaMode === 'race' && styles.modeBtnLabelActive]}>
               Wedstrijdschema
             </Text>
@@ -386,18 +420,26 @@ export default function ScheduleScreen() {
         {(Object.keys(zoneInfo) as Array<keyof typeof zoneInfo>).map(zone => (
           <View key={zone} style={styles.zoneLegendItem}>
             <View style={[styles.zoneDot, { backgroundColor: zoneInfo[zone].color }]} />
-            <Text style={[styles.zoneLegendLabel, { color: zoneInfo[zone].color }]}>
+            <Text style={styles.zoneLegendLabel}>
               {zoneInfo[zone].label}
             </Text>
           </View>
         ))}
       </View>
+    </>
+  );
 
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
       <FlatList
+        ref={listRef}
         data={planWeeks}
+        extraData={[expandedWeek, editMode, completedSessions, skippedSessions, weekStartedAt, currentWeek, schemaMode, isCustom, paceForType]}
         keyExtractor={item => String(item.weekNumber)}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
+        ListHeaderComponent={listHeader}
+        onScrollToIndexFailed={handleScrollToIndexFailed}
         renderItem={({ item: week }) => {
           const isExpanded = expandedWeek === week.weekNumber;
           const isCurrent = week.weekNumber === currentWeek;
@@ -441,7 +483,7 @@ export default function ScheduleScreen() {
               >
                 <View style={styles.weekHeaderLeft}>
                   <View style={[styles.weekNumberBadge, isCurrent && styles.weekNumberBadgeActive, allDone && styles.weekNumberBadgeDone]}>
-                    <Text style={[styles.weekNumber, (isCurrent || allDone) && styles.weekNumberLight]}>
+                    <Text style={[styles.weekNumber, (isCurrent && !allDone) && styles.weekNumberLight]}>
                       {week.weekNumber}
                     </Text>
                   </View>
@@ -455,9 +497,9 @@ export default function ScheduleScreen() {
                 </View>
                 <View style={styles.weekHeaderRight}>
                   <View style={styles.weekKmBlock}>
-                    <Text style={styles.weekKm} numberOfLines={1}>{week.totalKm} km</Text>
+                    <Text style={styles.weekKm} numberOfLines={1}>{formatKm(week.totalKm)} km</Text>
                     <Text style={styles.weekKmLabel} numberOfLines={1}>
-                      {bonusKm > 0 ? `+${bonusKm} km bonus` : 'totaal'}
+                      {bonusKm > 0 ? `+${formatKm(bonusKm)} km bonus` : 'totaal'}
                     </Text>
                   </View>
                   {isCustom && editMode && (
@@ -516,7 +558,7 @@ export default function ScheduleScreen() {
                           <Text style={styles.sessionKm}>
                             {session.type === 'runwalk' && sessionPlannedSeconds(session)
                               ? `${Math.round(sessionPlannedSeconds(session)! / 60)} min`
-                              : `${session.distanceKm} km`}
+                              : `${formatKm(session.distanceKm)} km`}
                           </Text>
                         )}
                         {!canEditRow && isCompleted && <Text style={styles.checkmark}>✓</Text>}
@@ -630,7 +672,7 @@ export default function ScheduleScreen() {
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
-  header: { paddingHorizontal: spacing[3], paddingTop: spacing[2], paddingBottom: spacing[1] },
+  header: { paddingTop: spacing[2], paddingBottom: spacing[1] },
   title: {
     fontFamily: typography.fontFamily.display, fontSize: typography.fontSize['2xl'],
     color: colors.textPrimary, letterSpacing: typography.letterSpacing.tight,
@@ -658,7 +700,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.xs,
     color: colors.textSecondary,
   },
-  modeBtnLabelActive: { color: '#fff' },
+  modeBtnLabelActive: { color: colors.textInverse },
   raceInfo: { marginTop: 6, gap: 2 },
   raceInfoName: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm, color: colors.textPrimary,
@@ -682,7 +724,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing[2], alignSelf: 'flex-start',
   },
   noRaceBtnText: {
-    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm, color: '#fff',
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm, color: colors.textInverse,
   },
   customHeaderRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -773,7 +815,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   zoneLegend: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: spacing[3],
     paddingVertical: spacing[1],
     gap: spacing[1],
   },
@@ -790,8 +831,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   zoneLegendLabel: {
     fontFamily: typography.fontFamily.sansMedium,
     fontSize: typography.fontSize.xs,
+    color: colors.textSecondary,
   },
-  list: { paddingHorizontal: spacing[3], paddingBottom: spacing[6], paddingTop: spacing[1], gap: spacing[1] },
+  list: { paddingHorizontal: spacing[3], paddingBottom: spacing[6], gap: spacing[1] },
   weekBlock: {
     backgroundColor: colors.bgCard, borderRadius: radius.xl,
     borderWidth: 1, borderColor: colors.borderSubtle, overflow: 'hidden',
@@ -814,7 +856,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   weekNumber: {
     fontFamily: typography.fontFamily.sansBold, fontSize: typography.fontSize.sm, color: colors.textSecondary,
   },
-  weekNumberLight: { color: '#fff' },
+  weekNumberLight: { color: colors.textInverse },
   weekTitle: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base, color: colors.textPrimary,
   },

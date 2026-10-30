@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { Share2, CalendarX2, ChevronRight } from 'lucide-react-native';
@@ -15,6 +16,8 @@ import { formatPacePerKm, formatDuration } from '../../src/data/paceModel';
 import { getPeriodStats, type PeriodType, type PeriodStats } from '../../src/utils/periodStats';
 import { resolveActivePlan } from '../../src/data/activePlan';
 import { SharePeriodSheet } from '../../src/components/ui/SharePeriodSheet';
+import { Button } from '../../src/components/ui/Button';
+import { formatKm } from '../../src/utils/format';
 
 const periodOptions: { value: PeriodType; label: string; shareLabel: string }[] = [
   { value: 'week',    label: 'Week',      shareLabel: 'Deel je week' },
@@ -77,7 +80,7 @@ export default function LogbookScreen() {
   const activePeriodOption = periodOptions.find(p => p.value === period)!;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -108,7 +111,7 @@ export default function LogbookScreen() {
             <Text style={styles.statsPeriodLabel}>{stats.label}</Text>
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
-                <Text style={styles.statValue}>{stats.totalKm.toFixed(1)}</Text>
+                <Text style={styles.statValue}>{formatKm(stats.totalKm, 1)}</Text>
                 <Text style={styles.statLabel}>km</Text>
               </View>
               <View style={styles.statItem}>
@@ -162,9 +165,9 @@ export default function LogbookScreen() {
               <CalendarX2 size={28} color={colors.textTertiary} strokeWidth={1.5} />
               <Text style={styles.emptyStateTitle}>Nog geen runs gelopen</Text>
               <Text style={styles.emptyStateText}>
-                Zodra je je eerste training afrondt, verschijnt hij hier in je logboek. Ga naar
-                Dashboard om te starten!
+                Zodra je je eerste training afrondt, verschijnt hij hier in je logboek.
               </Text>
+              <Button label="Start je eerste training" onPress={() => router.push('/(tabs)/dashboard')} size="sm" />
             </View>
           ) : selectedRuns.length > 0 ? (
             <View style={styles.dayDetailList}>
@@ -175,14 +178,14 @@ export default function LogbookScreen() {
                   onPress={() => setRunToDetail(run)}
                   activeOpacity={0.7}
                   accessibilityRole="button"
-                  accessibilityLabel={`Bekijk details van de run op ${format(new Date(run.completedAt), 'd MMMM, HH:mm', { locale: nl })}, ${run.actualDistanceKm.toFixed(1)} kilometer`}
+                  accessibilityLabel={`Bekijk details van de run op ${format(new Date(run.completedAt), 'd MMMM, HH:mm', { locale: nl })}, ${formatKm(run.actualDistanceKm, 1)} kilometer`}
                 >
                   <View style={styles.runRowInfo}>
                     <Text style={styles.runRowDate}>
                       {format(new Date(run.completedAt), 'd MMMM, HH:mm', { locale: nl })}
                     </Text>
                     <View style={styles.runRowStats}>
-                      <Text style={styles.runRowStat}>{run.actualDistanceKm.toFixed(1)} km</Text>
+                      <Text style={styles.runRowStat}>{formatKm(run.actualDistanceKm, 1)} km</Text>
                       <Text style={styles.runRowDot}>·</Text>
                       <Text style={styles.runRowStat}>{formatDuration(run.durationSeconds)}</Text>
                       <Text style={styles.runRowDot}>·</Text>

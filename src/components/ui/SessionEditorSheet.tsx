@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
 import { SheetHandle, SheetCloseButton } from './sheetParts';
+import { formatKm } from '../../utils/format';
 import { zoneInfo } from '../../data/trainingPlans';
 import type { Session, HeartRateZone } from '../../data/trainingPlans';
 
@@ -280,7 +281,7 @@ export function SessionEditorSheet({ visible, initialSession, onClose, onSave }:
               >
                 <Minus size={18} color={colors.textPrimary} strokeWidth={2.5} />
               </TouchableOpacity>
-              <Text style={styles.stepperValue}>{distanceKm.toFixed(1)} km</Text>
+              <Text style={styles.stepperValue}>{formatKm(distanceKm, 1)} km</Text>
               <TouchableOpacity
                 onPress={() => setDistanceKm(v => Math.min(MAX_DISTANCE_KM, Math.round((v + DISTANCE_STEP_KM) * 10) / 10))}
                 style={styles.stepperBtn}
@@ -487,6 +488,6 @@ const makeStyles = (colors: ThemeColors, insetBottom: number) => StyleSheet.crea
   },
   saveBtnText: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base,
-    color: '#fff',
+    color: colors.textInverse,
   },
 });
