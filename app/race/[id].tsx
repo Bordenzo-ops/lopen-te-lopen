@@ -4,9 +4,10 @@
  * extra uitwerking (parcours, startvakken) komt uit src/data/raceDetails.ts.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Linking, Alert,
+  Keyboard, KeyboardAvoidingView,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -47,6 +48,15 @@ export default function RaceDetailScreen() {
     isGoalRace && raceTargetSeconds ? formatDuration(raceTargetSeconds) : '',
   );
   const [showShare, setShowShare] = useState(false);
+  // Keep the target time field in view: Android does not scroll a focused field
+  // above the keyboard.
+  const scrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    });
+    return () => sub.remove();
+  }, []);
 
   if (!race) {
     return (
@@ -110,7 +120,9 @@ export default function RaceDetailScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -249,6 +261,7 @@ export default function RaceDetailScreen() {
           />
         </View>
       )}
+      </KeyboardAvoidingView>
 
       <ShareCountdownSheet
         visible={showShare}

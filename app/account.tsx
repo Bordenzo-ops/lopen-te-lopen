@@ -21,7 +21,7 @@
  * hoeft te wachten op die listener voordat het teruggnavigeert.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -29,6 +29,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Alert,
@@ -302,6 +303,15 @@ export default function AccountScreen() {
   }
 
   const cleanEmail = email.trim();
+  // Keep the form in view: Android does not scroll a focused field above the keyboard.
+  const scrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    });
+    return () => sub.remove();
+  }, []);
+
   const isReset = mode === 'reset';
   const canSubmit = (isReset || cleanEmail.length > 0) && password.length > 0 && !anyBusy;
 
@@ -321,9 +331,10 @@ export default function AccountScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
       >
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
