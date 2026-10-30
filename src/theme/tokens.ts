@@ -10,12 +10,14 @@ export const palette = {
     200: '#FFC494',
     300: '#FF9B5A',
     400: '#FF7430',
-    500: '#F25011',  // main
+    500: '#FD7642',  // main
     600: '#D93A08',
     700: '#B42B09',
     800: '#8F230F',
     900: '#742012',
   },
+  // Deeper brand tone for the light theme: #FD7642 lacks contrast on white.
+  primaryOnLight: '#F25011',
   // Accent: frisse groene zone-kleur
   green: {
     50:  '#F0FDF4',
@@ -53,6 +55,8 @@ export const palette = {
   success: '#22C55E',
   warning: '#FBBF24',
   error:   '#EF4444',
+  // Lighter red for dark surfaces: 5.7:1 on bgCard, where #EF4444 only reaches 3.9:1.
+  errorOnDark: '#F87171',
   info:    '#60A5FA',
   // Premium-accent (goud)
   gold:    '#F59E0B',
@@ -82,7 +86,8 @@ export const colors = {
   brandDark:     palette.primary[700],
 
   // Borders
-  borderSubtle:  palette.neutral[800],
+  // Translucent, not neutral[800]: that equals bgCard, so card borders did not show.
+  borderSubtle:  'rgba(255,255,255,0.07)',
   borderDefault: palette.neutral[700],
   borderStrong:  palette.neutral[600],
 
@@ -96,7 +101,7 @@ export const colors = {
   // Semantic
   success: palette.success,
   warning: palette.warning,
-  error:   palette.error,
+  error:   palette.errorOnDark,
   info:    palette.info,
 
   // Premium-accent (goud), gebruikt op de paywall en premium-hints
@@ -124,7 +129,7 @@ export const lightColors: typeof colors = {
   textInverse:   palette.neutral[950],
 
   // Brand
-  brandPrimary:  palette.primary[500],
+  brandPrimary:  palette.primaryOnLight,
   brandLight:    palette.primary[600],
   brandDark:     palette.primary[700],
 

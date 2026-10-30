@@ -140,7 +140,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   label_primary: { color: colors.textInverse },
   label_secondary: { color: colors.textPrimary },
   label_ghost: { color: colors.brandPrimary },
-  label_destructive: { color: '#fff' },
+  label_destructive: { color: colors.textInverse },
 
   labelSize_sm: { fontSize: typography.fontSize.sm },
   labelSize_md: { fontSize: typography.fontSize.base },
