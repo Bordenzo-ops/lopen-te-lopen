@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Alert, BackHandler, ActivityIndicator, Linking,
+  View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, BackHandler, ActivityIndicator, Linking,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,7 +28,9 @@ import {
   sessionIntroUtterance, intervalIntroUtterance, runWalkIntroUtterance, raceFinishUtterance,
 } from '../../src/config/voicePhrases';
 import { buildIntervalSegments, intervalStateAt } from '../../src/data/intervals';
-import { buildRunWalkSegments } from '../../src/data/runWalk';
+import { buildRunWalkSegments, sessionPlannedSeconds } from '../../src/data/runWalk';
+import { formatKm } from '../../src/utils/format';
+import { PhaseBackdrop } from '../../src/components/motion/PhaseBackdrop';
 import { RoutePreviewSheet } from '../../src/components/ui/RoutePreviewSheet';
 import { SavedRoutesSheet } from '../../src/components/ui/SavedRoutesSheet';
 import { SessionTypeSheet } from '../../src/components/ui/SessionTypeSheet';
@@ -1092,6 +1094,13 @@ export default function ActiveSessionScreen() {
     </TouchableOpacity>
   );
 
+  // Briefing amount: minutes for run/walk (like the session card), km otherwise.
+  // Plain value, not a hook.
+  const briefingPlannedSec = isRunWalk ? sessionPlannedSeconds(session) : null;
+  const briefingAmount = briefingPlannedSec != null
+    ? `± ${Math.round(briefingPlannedSec / 60)} min`
+    : `${formatKm(session.distanceKm)} km`;
+
   // ── Fullscreen countdown, vlak voor de start van GPS-tracking en timer ────
   if (countdownActive) {
     return (
@@ -1121,7 +1130,7 @@ export default function ActiveSessionScreen() {
               <View style={styles.briefingCard}>
                 <Text style={styles.briefingGreeting}>{profile.name}, dit is jouw training</Text>
                 <Text style={styles.briefingType}>
-                  {sessionTypeShort[session.type] ?? zoneInfo[session.zone].label} · {session.distanceKm} km
+                  {sessionTypeShort[session.type] ?? zoneInfo[session.zone].label} · {briefingAmount}
                 </Text>
                 <Text style={styles.briefingTip} numberOfLines={3}>{session.coachTip}</Text>
               </View>
@@ -1161,7 +1170,7 @@ export default function ActiveSessionScreen() {
               </View>
               <Text style={styles.routeQuestionTitle}>Wil je een route plannen?</Text>
               <Text style={styles.routeQuestionSub}>
-                Voor deze training staat {session.distanceKm} km op het programma. De app kan een
+                Voor deze training staat {formatKm(session.distanceKm)} km op het programma. De app kan een
                 route van die lengte voor je uitstippelen vanaf je startpunt.
               </Text>
               {!hasAccess && (
@@ -1263,10 +1272,10 @@ export default function ActiveSessionScreen() {
     : isRunWalk ? intervalStateAt(runWalkSegments, elapsed) : null;
   const panelLabel = !ivState ? ''
     : isRunWalk
-      ? (ivState.phase === 'warmup' ? 'WARMING-UP'
-        : ivState.phase === 'work' ? 'LOPEN'
-        : ivState.phase === 'recovery' ? 'WANDELEN'
-        : 'UITWANDELEN')
+      ? (ivState.phase === 'warmup' ? 'Warming-up'
+        : ivState.phase === 'work' ? 'Lopen'
+        : ivState.phase === 'recovery' ? 'Wandelen'
+        : 'Uitwandelen')
       : (ivState.phase === 'warmup' ? 'WARMING-UP'
         : ivState.phase === 'work' ? `INTERVAL ${ivState.segment.repIndex ?? ''} / ${ivState.segment.repTotal ?? ''}`
         : ivState.phase === 'recovery' ? 'HERSTEL'
@@ -1278,9 +1287,17 @@ export default function ActiveSessionScreen() {
       ? `Blok ${ivState.segment.repIndex} van ${ivState.segment.repTotal}`
       : `Na blok ${ivState.segment.repIndex} van ${ivState.segment.repTotal}`)
     : null;
+  // The session has started past the early returns, so "not running" means paused
+  // (manually or automatically).
+  const isPaused = !isRunning;
+  // Run/walk shows the phase panel as the hero instead of the main clock.
+  const isRunWalkPanel = isRunWalk && !!ivState;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bgBase }]}>
+      {isRunWalk && ivState ? (
+        <PhaseBackdrop color={zoneInfo[ivState.segment.zone].color} />
+      ) : null}
       <SafeAreaView style={{ flex: 1 }}>
         {/* Top bar */}
         <View style={styles.topBar}>
@@ -1289,7 +1306,7 @@ export default function ActiveSessionScreen() {
           </TouchableOpacity>
           <View style={styles.sessionMeta}>
             <Text style={styles.sessionName}>{session.description}</Text>
-            <ZoneBadge zone={session.zone} size="sm" />
+            {!(isRunWalk && ivState) && <ZoneBadge zone={session.zone} size="sm" />}
           </View>
           <View style={styles.gpsIndicator}>
             <MapPin size={14} color={gpsError ? colors.error : colors.success} strokeWidth={2} />
@@ -1339,19 +1356,46 @@ export default function ActiveSessionScreen() {
             geplande route). */}
         <NextTurnBanner nextTurn={nextRouteTurn} isOffRoute={isOffRoute} accentColor={zoneColor} />
 
-        {/* Hoofdmetric: tijd */}
-        <View style={styles.mainMetric}>
-          <Text style={styles.timerLabel}>Looptijd</Text>
-          <Text style={styles.timer}>{formatTime(elapsed)}</Text>
-        </View>
+        {/* Scrollbare inhoud: de knoppen staan hieronder vast in beeld. Met een
+            uitgeklapte kaart staat scrollen uit zodat de kaart zelf kan pannen. */}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={!activePlannedRoute}
+        >
+        {/* Hoofdmetric: tijd (niet bij lopen/wandelen, daar is het paneel de held) */}
+        {!isRunWalkPanel && (
+          <View style={styles.mainMetric}>
+            <Text style={[styles.timerLabel, isPaused && { color: colors.textPrimary }]}>
+              {isPaused ? 'Gepauzeerd' : 'Looptijd'}
+            </Text>
+            <Text style={[styles.timer, isPaused && { opacity: 0.45 }]}>{formatTime(elapsed)}</Text>
+          </View>
+        )}
 
         {/* Afstand progress bar, of het intervalpaneel bij een intervalsessie */}
         {(isInterval || isRunWalk) && ivState ? (
           <View style={styles.intervalPanel}>
-            <Text style={[styles.intervalPhaseLabel, { color: zoneInfo[ivState.segment.zone].color }]}>
+            {isRunWalkPanel && isPaused ? (
+              <Text style={styles.pausedSmallLabel}>Gepauzeerd</Text>
+            ) : null}
+            <Text
+              style={[
+                isRunWalkPanel ? styles.runWalkPhaseLabel : styles.intervalPhaseLabel,
+                { color: zoneInfo[ivState.segment.zone].color },
+              ]}
+            >
               {panelLabel}
             </Text>
-            <Text style={[styles.intervalCountdown, { color: zoneInfo[ivState.segment.zone].color }]}>
+            <Text
+              style={[
+                isRunWalkPanel ? styles.runWalkCountdown : styles.intervalCountdown,
+                { color: zoneInfo[ivState.segment.zone].color },
+                isRunWalkPanel && isPaused && { opacity: 0.45 },
+              ]}
+              {...(isRunWalkPanel ? { adjustsFontSizeToFit: true, numberOfLines: 1 } : null)}
+            >
               {formatTime(ivState.segmentRemainingSec)}
             </Text>
             {panelBlockText ? (
@@ -1379,14 +1423,22 @@ export default function ActiveSessionScreen() {
               <View style={[styles.progressFill, { width: `${targetPct}%`, backgroundColor: zoneColor }]} />
             </View>
             <View style={styles.progressLabels}>
-              <Text style={styles.progressText}>{distanceKm.toFixed(2)} km</Text>
-              <Text style={styles.progressTarget}>Doel: {session.distanceKm} km</Text>
+              <Text style={styles.progressText}>{formatKm(distanceKm, 2)} km</Text>
+              <Text style={styles.progressTarget}>Doel: {formatKm(session.distanceKm)} km</Text>
             </View>
           </View>
         )}
 
         {/* Stats grid */}
         <View style={styles.statsGrid}>
+          {isRunWalkPanel && (
+            <View style={styles.statCell}>
+              <Text style={styles.statLabel}>Totaal</Text>
+              <Text style={styles.statValue}>{formatTime(elapsed)}</Text>
+              <Text style={styles.statUnit}>verstreken</Text>
+            </View>
+          )}
+          {!isRunWalkPanel && (
           <View style={styles.statCell}>
             <Text style={styles.statLabel}>Tempo</Text>
             <Text style={styles.statValue}>{formatPace(paceSecPerKm)}</Text>
@@ -1398,11 +1450,13 @@ export default function ActiveSessionScreen() {
               <Text style={styles.statUnit}>min/km</Text>
             )}
           </View>
-          <View style={[styles.statCell, styles.statCellCenter]}>
+          )}
+          <View style={[styles.statCell, isRunWalkPanel ? styles.statCellBorderLeft : styles.statCellCenter]}>
             <Text style={styles.statLabel}>Afstand</Text>
-            <Text style={[styles.statValue, { color: zoneColor }]}>{distanceKm.toFixed(2)}</Text>
+            <Text style={[styles.statValue, { color: zoneColor }]}>{formatKm(distanceKm, 2)}</Text>
             <Text style={styles.statUnit}>km</Text>
           </View>
+          {!isRunWalkPanel && (
           <TouchableOpacity
             style={styles.statCell}
             onPress={() => setShowTypeInfo(true)}
@@ -1417,6 +1471,7 @@ export default function ActiveSessionScreen() {
             <Text style={[styles.statValue, { color: zoneColor }]}>{sessionTypeShort[session.type] ?? session.zone}</Text>
             <Text style={styles.statUnit}>{session.zone} {zoneInfo[session.zone].label}</Text>
           </TouchableOpacity>
+          )}
 
           {/* Live hartslag, alleen zichtbaar met een gekoppelde BLE-hartslagmeter
               (Instellingen). Zonder koppeling, permissie of native module blijft
@@ -1465,8 +1520,9 @@ export default function ActiveSessionScreen() {
             <Text style={styles.tipText} numberOfLines={2}>{session.coachTip}</Text>
           </View>
         )}
+        </ScrollView>
 
-        {/* Knoppen */}
+        {/* Knoppen: vast onder de scrollinhoud, altijd in beeld */}
         <View style={styles.controls}>
           <TouchableOpacity
             onPress={() => setIsLocked(true)}
@@ -1480,6 +1536,7 @@ export default function ActiveSessionScreen() {
 
           <TouchableOpacity
             onPress={() => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
               const next = !isRunning;
               // Handmatige pauze/hervatten heeft altijd voorrang op auto-pauze.
               manuallyPausedRef.current = !next;
@@ -1504,7 +1561,7 @@ export default function ActiveSessionScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity onPress={handleStop} style={styles.stopBtn} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="Sessie stoppen en opslaan">
-            <Square size={24} color="#fff" strokeWidth={2} fill="#fff" />
+            <Square size={24} color={colors.textInverse} strokeWidth={2} fill={colors.textInverse} />
             <Text style={styles.stopLabel}>Stoppen</Text>
           </TouchableOpacity>
         </View>
@@ -1840,7 +1897,19 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   controls: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: spacing[3], paddingHorizontal: spacing[3],
+    gap: spacing[3], paddingHorizontal: spacing[3], paddingVertical: spacing[2],
+  },
+  scrollContent: { flexGrow: 1, justifyContent: 'center' },
+  runWalkPhaseLabel: {
+    fontFamily: typography.fontFamily.display, fontSize: typography.fontSize['3xl'],
+  },
+  runWalkCountdown: {
+    fontFamily: typography.fontFamily.display, fontSize: 80,
+    letterSpacing: -3, fontVariant: ['tabular-nums'],
+  },
+  pausedSmallLabel: {
+    fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.sm,
+    color: colors.textPrimary,
   },
   lockBtn: {
     width: 56, height: 56, borderRadius: 28,
@@ -1891,6 +1960,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing[3], paddingVertical: spacing[1.5], ...shadows.md,
   },
   stopLabel: {
-    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base, color: '#fff',
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.base, color: colors.textInverse,
   },
 });

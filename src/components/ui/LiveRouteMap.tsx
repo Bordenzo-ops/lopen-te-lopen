@@ -32,6 +32,7 @@ import { ChevronUp, ChevronDown, Navigation } from 'lucide-react-native';
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors, useIsLightTheme } from '../../theme/useTheme';
 import type { PlannedRoute } from '../../services/routeService';
+import { formatKm } from '../../utils/format';
 
 // ── Constanten ────────────────────────────────────────────────────────────────
 
@@ -336,7 +337,7 @@ export function LiveRouteMap({
         <Text style={styles.infoText}>
           {plannedRoute.type === 'loop' ? '🔄 Lus' : '↔️ Heen-en-terug'}
           {'  ·  '}
-          {plannedRoute.totalDistanceKm.toFixed(1)} km gepland
+          {formatKm(plannedRoute.totalDistanceKm, 1)} km gepland
         </Text>
       </View>
     </View>
