@@ -33,15 +33,13 @@ export function RaceCountdownCard({ race, onPress }: RaceCountdownCardProps) {
       accessibilityLabel={`${countdownText(countdown)} tot ${race.name}. Open de racepagina`}
     >
       <View style={styles.iconWrap}>
-        <Flag size={18} color={colors.brandPrimary} strokeWidth={2.2} />
+        <Flag size={18} color={colors.textSecondary} strokeWidth={2.2} />
       </View>
       <View style={styles.body}>
-        <Text style={styles.title} numberOfLines={1}>
-          {countdown.isPast || countdown.isToday
-            ? countdownText(countdown)
-            : `${countdownText(countdown)} te gaan`}
+        <Text style={styles.title} numberOfLines={1}>{countdownText(countdown)}</Text>
+        <Text style={styles.sub} numberOfLines={1}>
+          {countdown.isPast || countdown.isToday ? race.name : `tot ${race.name}`}
         </Text>
-        <Text style={styles.sub} numberOfLines={1}>{race.name}</Text>
       </View>
       <ChevronRight size={18} color={colors.textTertiary} strokeWidth={2} />
     </TouchableOpacity>
@@ -55,7 +53,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     gap: spacing[1.5],
     backgroundColor: colors.bgCard,
     borderWidth: 1,
-    borderColor: colors.brandPrimary + '33',
+    borderColor: colors.borderSubtle,
     borderRadius: radius.xl,
     paddingHorizontal: spacing[2],
     paddingVertical: spacing[1.5],
@@ -66,7 +64,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.brandPrimary + '14',
+    backgroundColor: colors.bgCardHover,
   },
   body: { flex: 1, gap: 2 },
   title: {

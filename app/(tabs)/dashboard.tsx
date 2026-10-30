@@ -33,6 +33,7 @@ import {
 } from '../../src/utils/trainingWeek';
 import { GOAL_LABELS } from '../../src/data/trainingPlans';
 import { sessionPlannedSeconds } from '../../src/data/runWalk';
+import { formatKm } from '../../src/utils/format';
 import type { GoalType, Session } from '../../src/data/trainingPlans';
 
 const goalLabel: Record<GoalType, string> = GOAL_LABELS;
@@ -274,7 +275,7 @@ export default function DashboardScreen() {
   const nextMilestone = milestones.find(m => !m.reached);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -290,179 +291,6 @@ export default function DashboardScreen() {
                 ? `${planLabel} · start ${formatRaceDate(racePlan.startDate)}`
                 : `${planLabel} · week ${Math.min(currentWeek, totalWeeks)} van ${totalWeeks}`}
             </Text>
-          </View>
-        </View>
-
-        {/* Countdown naar het gekozen racedoel; tik opent de racepagina. */}
-        {racePlan && !raceCountdown(racePlan.race.date).isPast && (
-          <RaceCountdownCard
-            race={racePlan.race}
-            onPress={() => router.push({ pathname: '/race/[id]', params: { id: racePlan.race.id } })}
-          />
-        )}
-
-        {/* Losstaande warming-up/cooling-down-routine (CP3): geen koppeling
-            aan een sessie of aan het schema, gewoon los te starten. */}
-        <View style={styles.routineRow}>
-          <TouchableOpacity
-            onPress={() => router.push('/routine/warmup')}
-            style={styles.routineBtn}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Start de warming-up-routine"
-          >
-            <Wind size={18} color={colors.brandPrimary} strokeWidth={2} />
-            <Text style={styles.routineBtnText}>Warming-up</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => router.push('/routine/cooldown')}
-            style={styles.routineBtn}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Start de cooling-down-routine"
-          >
-            <Snowflake size={18} color={colors.info} strokeWidth={2} />
-            <Text style={styles.routineBtnText}>Cooling-down</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Premium verlopen: eenmalige, vriendelijke melding. Schema en runs
-            blijven gewoon werken zonder premium, dus dit is bewust geen
-            waarschuwing maar een neutrale herinnering. De extra !hasAccess-
-            controle is een vangnet: zo kan een gebruiker met actief premium
-            deze melding nooit zien, ook niet als er ooit een verouderde
-            gepersisteerde vlag is blijven hangen. */}
-        {premiumExpiredNoticePending && !hasAccess && (
-          <View style={styles.expiredCard}>
-            <TouchableOpacity
-              onPress={dismissPremiumExpiredNotice}
-              style={styles.dismissBtn}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Melding sluiten"
-            >
-              <X size={16} color={colors.textTertiary} strokeWidth={2.5} />
-            </TouchableOpacity>
-            <Text style={styles.expiredText}>
-              Je premium is verlopen. Je schema en runs blijven gewoon werken. Premium
-              opnieuw activeren kan altijd.
-            </Text>
-            <Button
-              label="Premium opnieuw activeren"
-              onPress={() => router.push('/paywall')}
-              size="sm"
-            />
-          </View>
-        )}
-
-        {/* Stempakket-aanbieding: toont zichzelf alleen wanneer relevant, en
-            staat bewust onder de verlopen-melding maar boven de upsell. */}
-        <VoicePackPrompt />
-
-        {/* Strava-wachtlijst: Strava heeft weer plek (app_config.strava_open).
-            Alleen voor wie op de wachtlijst staat en nog niet gekoppeld is. */}
-        {stravaOpen && stravaWaitlisted && !stravaConnected && (
-          <View style={styles.stravaCard}>
-            <TouchableOpacity
-              onPress={handleStravaWaitlistDismiss}
-              style={styles.dismissBtn}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Kaart sluiten"
-            >
-              <X size={16} color={colors.textTertiary} strokeWidth={2.5} />
-            </TouchableOpacity>
-            <Text style={styles.returnTitle}>Strava koppelen kan weer</Text>
-            <Text style={styles.upsellText}>
-              Er is weer plek. Koppel je account en je runs gaan automatisch naar Strava.
-            </Text>
-            <Button label="Koppel Strava" onPress={handleStravaWaitlistConnect} size="sm" />
-          </View>
-        )}
-
-        {/* Subtiele dashboard-upsell voor gratis gebruikers, permanent te sluiten.
-            Verschijnt niet naast de "premium verlopen"-melding hierboven. */}
-        {!premiumExpiredNoticePending && !hasAccess && !dashboardUpsellDismissed && (
-          <View style={styles.upsellCard}>
-            <TouchableOpacity
-              onPress={dismissDashboardUpsell}
-              style={styles.dismissBtn}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Kaart sluiten"
-            >
-              <X size={16} color={colors.textTertiary} strokeWidth={2.5} />
-            </TouchableOpacity>
-            <View style={styles.upsellHeader}>
-              <Crown size={16} color={colors.premium} strokeWidth={2} />
-              <Text style={styles.upsellTitle}>Ontdek premium: 14 dagen gratis</Text>
-            </View>
-            <Text style={styles.upsellText}>
-              Onbeperkt routes plannen, stemcoaching en persoonlijk tempo-advies.
-            </Text>
-            <Button
-              label="Bekijk premium"
-              onPress={() => router.push('/paywall')}
-              size="sm"
-            />
-          </View>
-        )}
-
-        {/* Compacte streak-indicator, zichtbaar zodra er minstens 1 run is
-            (niet pas na 2 weken). Gebruikt dezelfde computeWeekStreak-logica
-            als de mijlpalenkaart verderop. Bij een onderbroken reeks
-            (currentWeekStreak 0 of 1) tonen we bewust dezelfde
-            "Eerste week bezig!"-tekst: een score van 0 of 1 week heeft geen
-            zinvol getal om te tonen, en dit blijft zo een simpele aanmoediging
-            in plaats van een technisch correcte maar verwarrende 0. */}
-        {stats.totalRuns >= 1 && (
-          <View style={styles.streakBadge}>
-            <Flame size={16} color={colors.brandPrimary} strokeWidth={2} />
-            <Text style={styles.streakBadgeText}>
-              {stats.currentWeekStreak >= 2
-                ? `${stats.currentWeekStreak} weken op rij`
-                : 'Eerste week bezig!'}
-            </Text>
-          </View>
-        )}
-
-        {/* Progress ring + week km */}
-        <View style={styles.statsRow}>
-          <View style={styles.ringCard}>
-            <StatRing
-              value={overallProgress}
-              size={ringSize}
-              color={colors.brandPrimary}
-              label={`${overallProgress}%`}
-              sublabel="schema"
-              countValue={overallProgress}
-              countFormat={(n) => `${Math.round(n)}%`}
-            />
-            <Text style={styles.ringLabel}>Voortgang</Text>
-          </View>
-          <View style={styles.ringCard}>
-            <StatRing
-              value={weekProgress}
-              size={ringSize}
-              color={colors.zone2}
-              label={`${weekKm.toFixed(1)}`}
-              sublabel={`van ${week?.totalKm ?? 0} km`}
-              countValue={weekKm}
-              countFormat={(n) => n.toFixed(1)}
-            />
-            <Text style={styles.ringLabel}>Deze week</Text>
-          </View>
-          <View style={styles.ringCard}>
-            <StatRing
-              value={planTotalKm > 0 ? Math.min(100, (totalKm / planTotalKm) * 100) : 0}
-              size={ringSize}
-              color={colors.info}
-              label={`${totalKm.toFixed(0)}`}
-              sublabel="km totaal"
-              countValue={totalKm}
-              countFormat={(n) => n.toFixed(0)}
-            />
-            <Text style={styles.ringLabel}>Totaal</Text>
           </View>
         </View>
 
@@ -551,7 +379,7 @@ export default function DashboardScreen() {
               label={
                 nextSession.type === 'runwalk' && sessionPlannedSeconds(nextSession)
                   ? `Start training · ${Math.round(sessionPlannedSeconds(nextSession)! / 60)} min`
-                  : `Start ${nextSession.distanceKm} km`
+                  : `Start ${formatKm(nextSession.distanceKm)} km`
               }
               onPress={() =>
                 router.push({
@@ -674,6 +502,179 @@ export default function DashboardScreen() {
           </FadeSlideIn>
         )}
 
+        {/* Losstaande warming-up/cooling-down-routine (CP3): geen koppeling
+            aan een sessie of aan het schema, gewoon los te starten. */}
+        <View style={styles.routineRow}>
+          <TouchableOpacity
+            onPress={() => router.push('/routine/warmup')}
+            style={styles.routineBtn}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Start de warming-up-routine"
+          >
+            <Wind size={16} color={colors.textSecondary} strokeWidth={2} />
+            <Text style={styles.routineBtnText}>Warming-up</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.push('/routine/cooldown')}
+            style={styles.routineBtn}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Start de cooling-down-routine"
+          >
+            <Snowflake size={16} color={colors.textSecondary} strokeWidth={2} />
+            <Text style={styles.routineBtnText}>Cooling-down</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Premium verlopen: eenmalige, vriendelijke melding. Schema en runs
+            blijven gewoon werken zonder premium, dus dit is bewust geen
+            waarschuwing maar een neutrale herinnering. De extra !hasAccess-
+            controle is een vangnet: zo kan een gebruiker met actief premium
+            deze melding nooit zien, ook niet als er ooit een verouderde
+            gepersisteerde vlag is blijven hangen. */}
+        {premiumExpiredNoticePending && !hasAccess && (
+          <View style={styles.expiredCard}>
+            <TouchableOpacity
+              onPress={dismissPremiumExpiredNotice}
+              style={styles.dismissBtn}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Melding sluiten"
+            >
+              <X size={16} color={colors.textTertiary} strokeWidth={2.5} />
+            </TouchableOpacity>
+            <Text style={styles.expiredText}>
+              Je premium is verlopen. Je schema en runs blijven gewoon werken. Premium
+              opnieuw activeren kan altijd.
+            </Text>
+            <Button
+              label="Premium opnieuw activeren"
+              onPress={() => router.push('/paywall')}
+              size="sm"
+            />
+          </View>
+        )}
+
+        {/* Stempakket-aanbieding: toont zichzelf alleen wanneer relevant, en
+            staat bewust onder de verlopen-melding maar boven de upsell. */}
+        <VoicePackPrompt />
+
+        {/* Strava-wachtlijst: Strava heeft weer plek (app_config.strava_open).
+            Alleen voor wie op de wachtlijst staat en nog niet gekoppeld is. */}
+        {stravaOpen && stravaWaitlisted && !stravaConnected && (
+          <View style={styles.stravaCard}>
+            <TouchableOpacity
+              onPress={handleStravaWaitlistDismiss}
+              style={styles.dismissBtn}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Kaart sluiten"
+            >
+              <X size={16} color={colors.textTertiary} strokeWidth={2.5} />
+            </TouchableOpacity>
+            <Text style={styles.returnTitle}>Strava koppelen kan weer</Text>
+            <Text style={styles.upsellText}>
+              Er is weer plek. Koppel je account en je runs gaan automatisch naar Strava.
+            </Text>
+            <Button label="Koppel Strava" onPress={handleStravaWaitlistConnect} size="sm" />
+          </View>
+        )}
+
+        {/* Subtiele dashboard-upsell voor gratis gebruikers, permanent te sluiten.
+            Verschijnt niet naast de "premium verlopen"-melding hierboven. */}
+        {!premiumExpiredNoticePending && !hasAccess && !dashboardUpsellDismissed && (
+          <View style={styles.upsellCard}>
+            <TouchableOpacity
+              onPress={dismissDashboardUpsell}
+              style={styles.dismissBtn}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Kaart sluiten"
+            >
+              <X size={16} color={colors.textTertiary} strokeWidth={2.5} />
+            </TouchableOpacity>
+            <View style={styles.upsellHeader}>
+              <Crown size={16} color={colors.premium} strokeWidth={2} />
+              <Text style={styles.upsellTitle}>Ontdek premium: 14 dagen gratis</Text>
+            </View>
+            <Text style={styles.upsellText}>
+              Onbeperkt routes plannen, stemcoaching en persoonlijk tempo-advies.
+            </Text>
+            <Button
+              label="Bekijk premium"
+              onPress={() => router.push('/paywall')}
+              size="sm"
+            />
+          </View>
+        )}
+
+        {/* Countdown naar het gekozen racedoel; tik opent de racepagina. */}
+        {racePlan && !raceCountdown(racePlan.race.date).isPast && (
+          <RaceCountdownCard
+            race={racePlan.race}
+            onPress={() => router.push({ pathname: '/race/[id]', params: { id: racePlan.race.id } })}
+          />
+        )}
+
+        {/* Compacte streak-indicator, zichtbaar zodra er minstens 1 run is
+            (niet pas na 2 weken). Gebruikt dezelfde computeWeekStreak-logica
+            als de mijlpalenkaart verderop. Bij een onderbroken reeks
+            (currentWeekStreak 0 of 1) tonen we bewust dezelfde
+            "Eerste week bezig!"-tekst: een score van 0 of 1 week heeft geen
+            zinvol getal om te tonen, en dit blijft zo een simpele aanmoediging
+            in plaats van een technisch correcte maar verwarrende 0. */}
+        {stats.totalRuns >= 1 && (
+          <View style={styles.streakBadge}>
+            <Flame size={16} color={colors.textSecondary} strokeWidth={2} />
+            <Text style={styles.streakBadgeText}>
+              {stats.currentWeekStreak >= 2
+                ? `${stats.currentWeekStreak} weken op rij`
+                : 'Eerste week bezig!'}
+            </Text>
+          </View>
+        )}
+
+        {/* Progress ring + week km */}
+        <View style={styles.statsRow}>
+          <View style={styles.ringCard}>
+            <StatRing
+              value={overallProgress}
+              size={ringSize}
+              color={colors.brandPrimary}
+              label={`${overallProgress}%`}
+              sublabel="schema"
+              countValue={overallProgress}
+              countFormat={(n) => `${Math.round(n)}%`}
+            />
+            <Text style={styles.ringLabel}>Voortgang</Text>
+          </View>
+          <View style={styles.ringCard}>
+            <StatRing
+              value={weekProgress}
+              size={ringSize}
+              color={colors.textSecondary}
+              label={formatKm(weekKm, 1)}
+              sublabel={`van ${formatKm(week?.totalKm ?? 0)} km`}
+              countValue={weekKm}
+              countFormat={(n) => formatKm(n, 1)}
+            />
+            <Text style={styles.ringLabel}>Deze week</Text>
+          </View>
+          <View style={styles.ringCard}>
+            <StatRing
+              value={planTotalKm > 0 ? Math.min(100, (totalKm / planTotalKm) * 100) : 0}
+              size={ringSize}
+              color={colors.textSecondary}
+              label={`${totalKm.toFixed(0)}`}
+              sublabel="km totaal"
+              countValue={totalKm}
+              countFormat={(n) => n.toFixed(0)}
+            />
+            <Text style={styles.ringLabel}>Totaal</Text>
+          </View>
+        </View>
+
         {/* Sessies deze week */}
         {week && (
           <View style={styles.section}>
@@ -723,7 +724,7 @@ export default function DashboardScreen() {
         {week && (
           <View style={styles.focusCard}>
             <View style={styles.focusHeader}>
-              <Flame size={16} color={colors.brandPrimary} strokeWidth={2} />
+              <Flame size={16} color={colors.textSecondary} strokeWidth={2} />
               <Text style={styles.focusLabel}>Focus deze week</Text>
             </View>
             <Text style={styles.focusText}>{week.focus}</Text>
@@ -740,7 +741,7 @@ export default function DashboardScreen() {
                   <TrendingUp size={18} color={colors.zone2} strokeWidth={2} />
                   <CountUpText
                     value={stats.longestRunKm}
-                    format={(n) => n.toFixed(1)}
+                    format={(n) => formatKm(n, 1)}
                     textStyle={styles.prValue}
                   />
                   <Text style={styles.prLabel}>langste (km)</Text>
@@ -812,12 +813,12 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   routineRow: { flexDirection: 'row', gap: spacing[1.5] },
   routineBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    backgroundColor: colors.bgCard, borderRadius: radius.lg, paddingVertical: spacing[1.5],
+    borderRadius: radius.lg, paddingVertical: spacing[1],
     borderWidth: 1, borderColor: colors.borderSubtle, minHeight: 44,
   },
   routineBtnText: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
-    color: colors.textPrimary,
+    color: colors.textSecondary,
   },
   expiredCard: {
     backgroundColor: colors.bgCard, borderRadius: radius.xl, padding: spacing[2],
@@ -863,13 +864,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   streakBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
-    backgroundColor: colors.brandPrimary + '14',
-    borderWidth: 1, borderColor: colors.brandPrimary + '33',
+    backgroundColor: colors.bgCard,
+    borderWidth: 1, borderColor: colors.borderSubtle,
     borderRadius: radius.full, paddingHorizontal: spacing[1.5], paddingVertical: 6,
   },
   streakBadgeText: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
-    color: colors.brandLight,
+    color: colors.textSecondary,
   },
   statsRow: { flexDirection: 'row', gap: spacing[2], justifyContent: 'space-between' },
   ringCard: { flex: 1, alignItems: 'center', gap: 6 },
@@ -926,7 +927,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   focusHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   focusLabel: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
-    color: colors.brandPrimary, textTransform: 'uppercase', letterSpacing: typography.letterSpacing.wider,
+    color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: typography.letterSpacing.wider,
   },
   focusText: {
     fontFamily: typography.fontFamily.sansMedium, fontSize: typography.fontSize.base,

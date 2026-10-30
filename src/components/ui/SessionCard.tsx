@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { MapPin, Clock, Zap, CheckCircle2, Info, Timer, MinusCircle } from 'lucide-react-native';
+import { MapPin, Clock, CheckCircle2, Info, Timer, MinusCircle } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
 import { ZoneBadge } from './ZoneBadge';
 import { SessionTypeSheet } from './SessionTypeSheet';
 import { formatPacePerKm } from '../../data/paceModel';
 import { sessionPlannedSeconds } from '../../data/runWalk';
+import { formatKm } from '../../utils/format';
 import type { Session } from '../../data/trainingPlans';
 
 interface SessionCardProps {
@@ -37,7 +38,7 @@ const sessionTypeLabel: Record<Session['type'], string> = {
 /** "± 26 min" for a run/walk session; falls back to the estimated km if the structure is missing. */
 function runWalkMinutesLabel(session: Session): string {
   const sec = sessionPlannedSeconds(session);
-  return sec ? `± ${Math.round(sec / 60)} min` : `~${session.distanceKm} km`;
+  return sec ? `± ${Math.round(sec / 60)} min` : `~${formatKm(session.distanceKm)} km`;
 }
 
 const dayLabel = ['', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag', 'Zondag'];
@@ -80,7 +81,7 @@ export function SessionCard({ session, isCompleted = false, isSkipped = false, o
           </TouchableOpacity>
           {/* Subtiele markering voor automatisch toegevoegde bonus-duurloopjes:
               een vrijblijvend aanbod, dus bewust ingetogen (geen accentkleur)
-              in plaats van iets dat om aandacht vraagt zoals "Volgende". */}
+              in plaats van iets dat om aandacht vraagt. */}
           {session.optional && (
             <View
               style={styles.bonusTag}
@@ -100,12 +101,6 @@ export function SessionCard({ session, isCompleted = false, isSkipped = false, o
             <Text style={styles.skippedLabel}>Overgeslagen</Text>
           </View>
         )}
-        {isNext && !isCompleted && !isSkipped && (
-          <View style={styles.nextBadge}>
-            <Zap size={11} color={colors.brandPrimary} strokeWidth={2.5} />
-            <Text style={styles.nextLabel}>Volgende</Text>
-          </View>
-        )}
       </View>
 
       {/* Stats row */}
@@ -117,7 +112,7 @@ export function SessionCard({ session, isCompleted = false, isSkipped = false, o
           <Text style={[styles.statValue, isCompleted && styles.textMuted]}>
             {session.type === 'runwalk'
               ? runWalkMinutesLabel(session)
-              : session.type === 'interval' ? `~${session.distanceKm} km` : `${session.distanceKm} km`}
+              : session.type === 'interval' ? `~${formatKm(session.distanceKm)} km` : `${formatKm(session.distanceKm)} km`}
           </Text>
         </View>
         <ZoneBadge zone={session.zone} size="sm" />
@@ -216,23 +211,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: typography.fontFamily.sansSemi,
     fontSize: typography.fontSize.xs,
     color: colors.brandLight,
-    letterSpacing: typography.letterSpacing.wide,
-  },
-  nextBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: colors.brandPrimary + '22',
-    paddingHorizontal: spacing[1],
-    paddingVertical: 3,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.brandPrimary + '44',
-  },
-  nextLabel: {
-    fontFamily: typography.fontFamily.sansSemi,
-    fontSize: typography.fontSize.xs,
-    color: colors.brandPrimary,
     letterSpacing: typography.letterSpacing.wide,
   },
   skippedTag: {
