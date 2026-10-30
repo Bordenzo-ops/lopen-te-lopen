@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { typography, spacing, type ThemeColors } from '../src/theme/tokens';
 import { useThemeColors } from '../src/theme/useTheme';
 import { handleStravaCallback } from '../src/services/stravaService';
+import { joinStravaWaitlist } from '../src/services/stravaWaitlistService';
 
 export default function StravaCallbackScreen() {
   const params = useLocalSearchParams<{
@@ -41,6 +42,21 @@ export default function StravaCallbackScreen() {
       setTimeout(() => {
         if (result.ok) {
           Alert.alert('Verbonden met Strava', `Welkom, ${result.athleteName}! Je runs worden vanaf nu automatisch geupload.`);
+        } else if (result.offerWaitlist) {
+          // Athlete cap reached (403): offer a spot on the waitlist.
+          Alert.alert('Verbinden mislukt', result.message ?? 'Er ging iets mis bij het verbinden met Strava.', [
+            { text: 'Nee, bedankt', style: 'cancel' },
+            {
+              text: 'Laat het me weten',
+              onPress: () => {
+                void joinStravaWaitlist();
+                Alert.alert(
+                  'Wachtlijst',
+                  'Je staat op de wachtlijst. We laten het je in de app weten zodra koppelen weer kan.',
+                );
+              },
+            },
+          ]);
         } else {
           Alert.alert('Verbinden mislukt', result.message ?? 'Er ging iets mis bij het verbinden met Strava.');
         }

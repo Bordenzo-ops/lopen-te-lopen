@@ -49,6 +49,7 @@ export type AnalyticsEvent =
   | 'week_return_choice'
   | 'strava_connected'
   | 'strava_connect_failed'
+  | 'strava_waitlist_joined'
   | 'goal_changed';
 
 /** Kleine, generieke eigenschappen bij een event. Geen persoonsgegevens. */

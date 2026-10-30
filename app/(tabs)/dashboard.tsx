@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useCallback, useEffect, useRef, useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions, Alert } from 'react-native';
-import { router } from 'expo-router';
-import { retryStravaQueue } from '../../src/services/stravaService';
+import { router, useFocusEffect } from 'expo-router';
+import { retryStravaQueue, connectStrava } from '../../src/services/stravaService';
+import { checkStravaWaitlistOpen, leaveStravaWaitlist } from '../../src/services/stravaWaitlistService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Play, TrendingUp, Flame, Timer, Award, Crown, X, Wind, Snowflake } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
@@ -36,6 +37,9 @@ import type { GoalType, Session } from '../../src/data/trainingPlans';
 
 const goalLabel: Record<GoalType, string> = GOAL_LABELS;
 
+/** Strava waitlist check runs at most once per app session (no polling). */
+let stravaWaitlistChecked = false;
+
 export default function DashboardScreen() {
   const profile = useAppStore(s => s.profile);
   const currentWeek = useAppStore(selectCurrentWeek);
@@ -56,6 +60,9 @@ export default function DashboardScreen() {
   const dismissPremiumExpiredNotice = useAppStore(s => s.dismissPremiumExpiredNotice);
   const dashboardUpsellDismissed = useAppStore(s => s.dashboardUpsellDismissed);
   const dismissDashboardUpsell = useAppStore(s => s.dismissDashboardUpsell);
+  const stravaWaitlisted = useAppStore(s => s.stravaWaitlisted);
+  const stravaConnected = useAppStore(s => s.stravaConnected);
+  const [stravaOpen, setStravaOpen] = useState(false);
   const { width } = useWindowDimensions();
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -65,6 +72,29 @@ export default function DashboardScreen() {
   useEffect(() => {
     void retryStravaQueue();
   }, []);
+
+  // Strava-wachtlijst: bij focus checken of koppelen weer kan, hooguit eens
+  // per app-sessie. Alleen voor wie op de wachtlijst staat en nog niet
+  // gekoppeld is; de check zelf faalt stil.
+  useFocusEffect(
+    useCallback(() => {
+      if (stravaWaitlistChecked) return;
+      const { stravaWaitlisted: waiting, stravaConnected: connected } = useAppStore.getState();
+      if (!waiting || connected) return;
+      stravaWaitlistChecked = true;
+      void checkStravaWaitlistOpen().then(setStravaOpen);
+    }, []),
+  );
+
+  const handleStravaWaitlistConnect = async () => {
+    const result = await connectStrava();
+    if (!result.ok && result.message) Alert.alert('Verbinden mislukt', result.message);
+  };
+
+  const handleStravaWaitlistDismiss = () => {
+    setStravaOpen(false);
+    void leaveStravaWaitlist();
+  };
 
   // App-open-trigger voor het premium value-scherm: hooguit één keer per
   // mount, met een korte vertraging zodat het dashboard eerst rustig kan
@@ -328,6 +358,27 @@ export default function DashboardScreen() {
         {/* Stempakket-aanbieding: toont zichzelf alleen wanneer relevant, en
             staat bewust onder de verlopen-melding maar boven de upsell. */}
         <VoicePackPrompt />
+
+        {/* Strava-wachtlijst: Strava heeft weer plek (app_config.strava_open).
+            Alleen voor wie op de wachtlijst staat en nog niet gekoppeld is. */}
+        {stravaOpen && stravaWaitlisted && !stravaConnected && (
+          <View style={styles.stravaCard}>
+            <TouchableOpacity
+              onPress={handleStravaWaitlistDismiss}
+              style={styles.dismissBtn}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Kaart sluiten"
+            >
+              <X size={16} color={colors.textTertiary} strokeWidth={2.5} />
+            </TouchableOpacity>
+            <Text style={styles.returnTitle}>Strava koppelen kan weer</Text>
+            <Text style={styles.upsellText}>
+              Er is weer plek. Koppel je account en je runs gaan automatisch naar Strava.
+            </Text>
+            <Button label="Koppel Strava" onPress={handleStravaWaitlistConnect} size="sm" />
+          </View>
+        )}
 
         {/* Subtiele dashboard-upsell voor gratis gebruikers, permanent te sluiten.
             Verschijnt niet naast de "premium verlopen"-melding hierboven. */}
@@ -775,6 +826,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   upsellCard: {
     backgroundColor: colors.bgCard, borderRadius: radius.xl, padding: spacing[2],
     borderWidth: 1, borderColor: colors.premium + '44', gap: spacing[1.5],
+  },
+  stravaCard: {
+    backgroundColor: colors.bgCard, borderRadius: radius.xl, padding: spacing[2],
+    borderWidth: 1, borderColor: colors.brandPrimary + '33', gap: spacing[1.5],
   },
   returnCard: {
     backgroundColor: colors.bgCard, borderRadius: radius.xl, padding: spacing[2],

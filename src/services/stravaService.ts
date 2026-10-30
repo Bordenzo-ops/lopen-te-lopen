@@ -38,6 +38,7 @@ import { generateGpx } from './exportService';
 import type { CompletedSession } from '../store/appStore';
 import { useAppStore } from '../store/appStore';
 import { trackEvent } from './analyticsService';
+import { leaveStravaWaitlist } from './stravaWaitlistService';
 
 const TOKEN_STORAGE_KEY = 'strava-tokens';
 const OAUTH_STATE_KEY = 'strava-oauth-state';
@@ -206,7 +207,7 @@ export async function handleStravaCallback(params: {
   athlete_name?: string;
   error?: string;
   state?: string;
-}): Promise<{ ok: boolean; athleteName?: string; message?: string }> {
+}): Promise<{ ok: boolean; athleteName?: string; message?: string; offerWaitlist?: boolean }> {
   const bewaardeState = await verbruikBewaardeOAuthState();
 
   // CSRF-controle: connectStrava bewaart altijd eerst een state, dus een
@@ -221,7 +222,12 @@ export async function handleStravaCallback(params: {
     // Measured so we can see how many runners hit the athlete cap while the
     // Strava capacity review is pending.
     void trackEvent('strava_connect_failed', { reason: params.error });
-    return { ok: false, message: vertaalStravaFout(params.error) };
+    return {
+      ok: false,
+      message: vertaalStravaFout(params.error),
+      // The waitlist is only offered after the athlete-cap 403.
+      offerWaitlist: params.error === 'strava_fout_403',
+    };
   }
   if (!params.access_token || !params.refresh_token || !params.expires_at) {
     return { ok: false, message: 'Onvolledig antwoord van Strava ontvangen.' };
@@ -237,6 +243,8 @@ export async function handleStravaCallback(params: {
 
   useAppStore.getState().setStravaConnected(true, athleteName);
   void trackEvent('strava_connected');
+  // Connected, so the waitlist spot is no longer needed (no-op if not on it).
+  void leaveStravaWaitlist();
   return { ok: true, athleteName };
 }
 
@@ -246,7 +254,7 @@ function vertaalStravaFout(error: string): string {
   // Strava answers the token exchange with 403 once the app's athlete
   // capacity is full; retrying won't help until Strava raises the limit.
   if (error === 'strava_fout_403') {
-    return 'Strava laat op dit moment nog maar een beperkt aantal koppelingen met onze app toe. We hebben een uitbreiding aangevraagd. Probeer het over een paar weken opnieuw; je runs blijven intussen gewoon in de app bewaard.';
+    return 'Strava laat op dit moment nog maar een beperkt aantal koppelingen met onze app toe. We hebben een uitbreiding aangevraagd. Je runs blijven intussen gewoon in de app bewaard. Wil je een seintje zodra koppelen weer kan?';
   }
   return 'Verbinden met Strava is niet gelukt. Probeer het opnieuw.';
 }

@@ -340,6 +340,9 @@ interface AppState {
   stravaAutoUpload: boolean;
   /** SessionId's van runs die nog niet succesvol geupload zijn */
   stravaUploadQueue: string[];
+  /** Staat de gebruiker op de Strava-wachtlijst (lokale vlag, niet gesynct)? */
+  stravaWaitlisted: boolean;
+  setStravaWaitlisted: (waitlisted: boolean) => void;
   setStravaConnected: (connected: boolean, athleteName?: string) => void;
   setStravaAutoUpload: (enabled: boolean) => void;
   /** Voegt een sessionId toe aan de uploadwachtrij, zonder duplicaten */
@@ -684,7 +687,9 @@ export const useAppStore = create<AppState>()(
       stravaAthleteName: undefined,
       stravaAutoUpload: true,
       stravaUploadQueue: [],
+      stravaWaitlisted: false,
 
+      setStravaWaitlisted: (waitlisted) => set({ stravaWaitlisted: waitlisted }),
       setStravaConnected: (connected, athleteName) =>
         set({
           stravaConnected: connected,
@@ -1473,6 +1478,7 @@ export const useAppStore = create<AppState>()(
           stravaConnected: false,
           stravaAthleteName: undefined,
           stravaUploadQueue: [],
+          stravaWaitlisted: false,
           hrMonitorDeviceId: null,
           hrMonitorDeviceName: null,
           cloudSyncEnabled: false,
@@ -1696,6 +1702,7 @@ export const useAppStore = create<AppState>()(
         stravaAthleteName:      state.stravaAthleteName,
         stravaAutoUpload:       state.stravaAutoUpload,
         stravaUploadQueue:      state.stravaUploadQueue,
+        stravaWaitlisted:       state.stravaWaitlisted,
         healthConnectEnabled:   state.healthConnectEnabled,
         healthKitEnabled:       state.healthKitEnabled,
         // BLE-hartslagmeter-koppeling: alleen het id/naam, geen live verbinding.
