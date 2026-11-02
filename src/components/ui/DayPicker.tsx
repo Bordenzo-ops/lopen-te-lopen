@@ -75,7 +75,7 @@ export function DayPicker({ value, onChange, min = 3, max = 7 }: DayPickerProps)
               accessibilityLabel={d.long}
               accessibilityState={{ checked: selected }}
             >
-              <Text style={[styles.dayLabel, selected && styles.dayLabelSelected]}>
+              <Text numberOfLines={1} style={[styles.dayLabel, selected && styles.dayLabelSelected]}>
                 {d.short}
               </Text>
             </Tappable>
@@ -93,10 +93,10 @@ export function DayPicker({ value, onChange, min = 3, max = 7 }: DayPickerProps)
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   wrap: { gap: spacing[1] },
-  row: { flexDirection: 'row', gap: 6, justifyContent: 'space-between' },
+  row: { flexDirection: 'row', gap: 6, alignSelf: 'stretch' },
   dayBtn: {
     flex: 1,
-    minWidth: 44,
+    minWidth: 0,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',

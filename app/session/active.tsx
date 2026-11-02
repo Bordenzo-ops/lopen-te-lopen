@@ -1197,7 +1197,7 @@ export default function ActiveSessionScreen() {
               </View>
 
               <View style={styles.gpsTextBlock}>
-                <ActivityIndicator size="small" color={colors.brandPrimary} style={{ marginBottom: spacing[1] }} />
+                <ActivityIndicator size="large" color={colors.textSecondary} style={{ marginBottom: spacing[1] }} />
                 <Text style={styles.gpsWaitTitle}>GPS-signaal zoeken...</Text>
                 <Text style={styles.gpsWaitSub}>
                   We zoeken je locatie. Geen signaal na 30 seconden?{'\n'}

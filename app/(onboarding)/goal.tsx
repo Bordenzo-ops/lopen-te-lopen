@@ -546,13 +546,14 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // Training cards
   goalCard: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: spacing[1.5],
     backgroundColor: colors.bgCard, borderRadius: radius.xl,
     padding: spacing[2], borderWidth: 1.5, borderColor: colors.borderSubtle,
   },
   goalCardSelected: { borderColor: colors.brandPrimary, backgroundColor: colors.brandPrimary + '11' },
-  goalLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing[1.5] },
+  goalLeft: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing[1.5] },
   goalEmoji: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.brandPrimary + '14', alignItems: 'center', justifyContent: 'center' },
-  goalText: { gap: 3 },
+  goalText: { flex: 1, flexShrink: 1, gap: 3 },
   levelText: { flex: 1, flexShrink: 1 },
   goalListTitle: { marginTop: spacing[1] },
   goalName: {

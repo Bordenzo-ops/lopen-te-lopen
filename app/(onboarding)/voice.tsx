@@ -149,8 +149,8 @@ export default function VoiceScreen() {
             accessibilityLabel="Gesproken begeleiding"
             accessibilityState={{ selected: voiceGuidance }}
           >
-            <View style={[styles.optionIcon, { backgroundColor: '#34D399' + '22' }]}>
-              <Volume2 size={28} color="#34D399" strokeWidth={1.5} />
+            <View style={styles.optionIcon}>
+              <Volume2 size={28} color={voiceGuidance ? colors.brandPrimary : colors.textSecondary} strokeWidth={1.5} />
             </View>
             <View style={styles.optionText}>
               <Text style={[styles.optionTitle, voiceGuidance && styles.optionTitleSelected]}>
@@ -173,8 +173,8 @@ export default function VoiceScreen() {
             accessibilityLabel="Alleen scherm"
             accessibilityState={{ selected: !voiceGuidance }}
           >
-            <View style={[styles.optionIcon, { backgroundColor: '#60A5FA' + '22' }]}>
-              <EyeOff size={28} color="#60A5FA" strokeWidth={1.5} />
+            <View style={styles.optionIcon}>
+              <EyeOff size={28} color={!voiceGuidance ? colors.brandPrimary : colors.textSecondary} strokeWidth={1.5} />
             </View>
             <View style={styles.optionText}>
               <Text style={[styles.optionTitle, !voiceGuidance && styles.optionTitleSelected]}>
@@ -282,8 +282,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.bgCard, borderRadius: radius.xl,
     borderWidth: 1.5, borderColor: colors.borderSubtle, padding: spacing[2],
   },
-  optionSelected: { borderColor: colors.brandPrimary, backgroundColor: colors.brandPrimary + '0D' },
-  optionIcon: { width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  optionSelected: { borderColor: colors.brandPrimary },
+  optionIcon: {
+    width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.bgCardHover,
+  },
   optionText: { flex: 1, gap: 4 },
   optionTitle: {
     fontFamily: typography.fontFamily.sansBold, fontSize: typography.fontSize.base, color: colors.textPrimary,
@@ -311,7 +314,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.bgCard, borderRadius: radius.lg,
     borderWidth: 1.5, borderColor: colors.borderSubtle,
   },
-  voiceListItemSelected: { borderColor: colors.brandPrimary, backgroundColor: colors.brandPrimary + '11' },
+  voiceListItemSelected: { borderColor: colors.brandPrimary },
   voiceListName: {
     fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
     color: colors.textSecondary,
