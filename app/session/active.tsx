@@ -202,7 +202,9 @@ export default function ActiveSessionScreen() {
 
   // Houd het scherm aan tijdens de hele actieve sessie, zodat de run niet
   // onderbreekt doordat het scherm vergrendelt.
-  useKeepAwake();
+  // Releasing can fail when Android has already torn down the activity (app
+  // closed mid-session); that is harmless, so do not report it as an error.
+  useKeepAwake(undefined, { suppressDeactivateWarnings: true });
 
   const [elapsed, setElapsed]               = useState(0);
   const [isRunning, setIsRunning]           = useState(false);

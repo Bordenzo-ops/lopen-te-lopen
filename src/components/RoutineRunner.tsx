@@ -77,7 +77,9 @@ export function RoutineRunner({ mode }: { mode: Mode }) {
   const [variant] = useState(() => useAppStore.getState().completedSessions.length);
 
   // Houdt het scherm aan tijdens de routine, net als tijdens een actieve run.
-  useKeepAwake();
+  // Releasing can fail when Android has already torn down the activity (app
+  // closed mid-session); that is harmless, so do not report it as an error.
+  useKeepAwake(undefined, { suppressDeactivateWarnings: true });
 
   // -1 = intro, 0..stepCount-1 = stappen, stepCount = done.
   const [phase, setPhase] = useState(-1);
