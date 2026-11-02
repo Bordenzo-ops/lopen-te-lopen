@@ -18,6 +18,7 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
+import { animation } from '../../theme/tokens';
 
 // Eén geanimeerd Pressable-component (geen extra wrapper-View) zodat layout-
 // kritische stijlen zoals `flex: 1` of `width: '100%'` zich precies zo
@@ -27,17 +28,20 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 // Zachte, coachende spring: hoge damping en gematigde stiffness geven een
 // vlotte terugkeer zonder merkbare overshoot ("geen bounce-overkill").
-const SPRING_CONFIG = { damping: 20, stiffness: 300, mass: 0.5 };
-const PRESSED_SCALE = 0.97;
+const SPRING_CONFIG = animation.spring;
+const DEFAULT_PRESSED_SCALE = 0.97;
 
 interface PressableScaleProps extends Omit<PressableProps, 'style' | 'children'> {
   style?: StyleProp<ViewStyle>;
   children?: React.ReactNode;
+  /** Scale while pressed. Defaults to 0.97. */
+  scaleTo?: number;
 }
 
 export function PressableScale({
   style,
   children,
+  scaleTo = DEFAULT_PRESSED_SCALE,
   disabled,
   onPressIn,
   onPressOut,
@@ -52,7 +56,7 @@ export function PressableScale({
 
   const handlePressIn: NonNullable<PressableProps['onPressIn']> = (event) => {
     if (!reducedMotion) {
-      scale.value = withSpring(PRESSED_SCALE, SPRING_CONFIG);
+      scale.value = withSpring(scaleTo, SPRING_CONFIG);
     }
     onPressIn?.(event);
   };

@@ -6,6 +6,7 @@ import { ChevronLeft, Volume2, EyeOff, Check } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { Button } from '../../src/components/ui/Button';
+import { Tappable } from '../../src/components/motion/Tappable';
 import { useAppStore } from '../../src/store/appStore';
 import * as voiceService from '../../src/services/voiceService';
 import { VOICES, type VoiceType } from '../../src/config/voiceConfig';
@@ -140,9 +141,9 @@ export default function VoiceScreen() {
         </View>
 
         <View style={styles.options}>
-          <TouchableOpacity
+          <Tappable
             onPress={() => setVoiceGuidance(true)}
-            activeOpacity={0.8}
+            haptic="select"
             style={[styles.option, voiceGuidance && styles.optionSelected]}
             accessibilityRole="radio"
             accessibilityLabel="Gesproken begeleiding"
@@ -162,11 +163,11 @@ export default function VoiceScreen() {
             <View style={[styles.radio, voiceGuidance && styles.radioSelected]}>
               {voiceGuidance && <View style={styles.radioInner} />}
             </View>
-          </TouchableOpacity>
+          </Tappable>
 
-          <TouchableOpacity
+          <Tappable
             onPress={() => setVoiceGuidance(false)}
-            activeOpacity={0.8}
+            haptic="select"
             style={[styles.option, !voiceGuidance && styles.optionSelected]}
             accessibilityRole="radio"
             accessibilityLabel="Alleen scherm"
@@ -186,7 +187,7 @@ export default function VoiceScreen() {
             <View style={[styles.radio, !voiceGuidance && styles.radioSelected]}>
               {!voiceGuidance && <View style={styles.radioInner} />}
             </View>
-          </TouchableOpacity>
+          </Tappable>
         </View>
 
         {/* Stemkeuze, alleen relevant bij gesproken begeleiding */}
@@ -199,10 +200,10 @@ export default function VoiceScreen() {
               {VOICES.filter(v => v.elevenVoiceId).map(voiceDef => {
                 const isActive = voiceType === voiceDef.key;
                 return (
-                  <TouchableOpacity
+                  <Tappable
                     key={voiceDef.key}
                     onPress={() => previewVoice(voiceDef.key)}
-                    activeOpacity={0.8}
+                    haptic="select"
                     style={[styles.voiceListItem, isActive && styles.voiceListItemSelected]}
                     accessibilityRole="radio"
                     accessibilityLabel={`${voiceDef.name}, ${voiceDef.accentLabel}`}
@@ -215,7 +216,7 @@ export default function VoiceScreen() {
                       <Text style={styles.voiceListAccent}>{voiceDef.accentLabel}</Text>
                     </View>
                     {isActive && <Check size={18} color={colors.brandPrimary} strokeWidth={2.5} />}
-                  </TouchableOpacity>
+                  </Tappable>
                 );
               })}
             </View>

@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
+import { Tappable } from '../motion/Tappable';
 
 // Weekdagnummers: 1=ma t/m 7=zo.
 const WEEK_DAYS: { value: number; short: string; long: string }[] = [
@@ -65,10 +66,10 @@ export function DayPicker({ value, onChange, min = 3, max = 7 }: DayPickerProps)
         {WEEK_DAYS.map(d => {
           const selected = value.includes(d.value);
           return (
-            <TouchableOpacity
+            <Tappable
               key={d.value}
               onPress={() => toggleDay(d.value)}
-              activeOpacity={0.8}
+              haptic="select"
               style={[styles.dayBtn, selected && styles.dayBtnSelected]}
               accessibilityRole="checkbox"
               accessibilityLabel={d.long}
@@ -77,7 +78,7 @@ export function DayPicker({ value, onChange, min = 3, max = 7 }: DayPickerProps)
               <Text style={[styles.dayLabel, selected && styles.dayLabelSelected]}>
                 {d.short}
               </Text>
-            </TouchableOpacity>
+            </Tappable>
           );
         })}
       </View>

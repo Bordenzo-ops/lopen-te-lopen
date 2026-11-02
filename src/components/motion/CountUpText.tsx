@@ -86,7 +86,7 @@ export function CountUpText({
   );
 
   return (
-    <Text style={textStyle} numberOfLines={numberOfLines}>
+    <Text style={[textStyle, { fontVariant: ['tabular-nums'] }]} numberOfLines={numberOfLines}>
       {formatRef.current(displayValue)}
     </Text>
   );

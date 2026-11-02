@@ -7,10 +7,11 @@
  */
 
 import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Flag, ChevronRight } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
+import { Tappable } from '../motion/Tappable';
 import type { Race } from '../../data/rotterdamRaces';
 import { raceCountdown, countdownText } from '../../data/raceDetails';
 
@@ -25,10 +26,10 @@ export function RaceCountdownCard({ race, onPress }: RaceCountdownCardProps) {
   const countdown = raceCountdown(race.date);
 
   return (
-    <TouchableOpacity
+    <Tappable
       style={styles.card}
       onPress={onPress}
-      activeOpacity={0.8}
+      haptic="tap"
       accessibilityRole="button"
       accessibilityLabel={`${countdownText(countdown)} tot ${race.name}. Open de racepagina`}
     >
@@ -42,7 +43,7 @@ export function RaceCountdownCard({ race, onPress }: RaceCountdownCardProps) {
         </Text>
       </View>
       <ChevronRight size={18} color={colors.textTertiary} strokeWidth={2} />
-    </TouchableOpacity>
+    </Tappable>
   );
 }
 

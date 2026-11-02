@@ -130,6 +130,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: typography.fontSize.lg,
     color: colors.textPrimary,
     textAlign: 'center',
+    fontVariant: ['tabular-nums'],
   },
   sublabel: {
     fontFamily: 'Inter_400Regular',

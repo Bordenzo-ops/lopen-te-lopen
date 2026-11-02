@@ -10,6 +10,7 @@ import {
 import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
 import { PressableScale } from '../motion/PressableScale';
+import { haptics } from '../../utils/haptics';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'destructive';
 type Size = 'sm' | 'md' | 'lg';
@@ -43,7 +44,10 @@ export function Button({
 
   return (
     <PressableScale
-      onPress={onPress}
+      onPress={() => {
+        haptics.tap();
+        onPress();
+      }}
       disabled={isDisabled}
       accessibilityRole="button"
       accessibilityLabel={label}

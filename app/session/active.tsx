@@ -31,6 +31,7 @@ import { buildIntervalSegments, intervalStateAt } from '../../src/data/intervals
 import { buildRunWalkSegments, sessionPlannedSeconds } from '../../src/data/runWalk';
 import { formatKm } from '../../src/utils/format';
 import { PhaseBackdrop } from '../../src/components/motion/PhaseBackdrop';
+import { ScaleIn } from '../../src/components/motion/ScaleIn';
 import { RoutePreviewSheet } from '../../src/components/ui/RoutePreviewSheet';
 import { SavedRoutesSheet } from '../../src/components/ui/SavedRoutesSheet';
 import { SessionTypeSheet } from '../../src/components/ui/SessionTypeSheet';
@@ -1072,7 +1073,7 @@ export default function ActiveSessionScreen() {
       <SafeAreaView style={styles.container}>
         <Text style={styles.errorText}>Sessie niet gevonden</Text>
         <TouchableOpacity onPress={() => router.back()} style={styles.backLink}>
-          <Text style={styles.backLinkText}>Terug naar dashboard</Text>
+          <Text style={styles.backLinkText}>Terug naar Vandaag</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -1108,9 +1109,12 @@ export default function ActiveSessionScreen() {
         {cancelButton}
         <SafeAreaView style={styles.countdownInner}>
           <Text style={styles.countdownLabel}>Klaar voor de start</Text>
-          <Text style={styles.countdownNumber}>
-            {countdownValue !== null && countdownValue > 0 ? countdownValue : 'Start'}
-          </Text>
+          {/* Remount per value so every digit (and "Start") eases in from slightly larger */}
+          <ScaleIn key={countdownValue} fromScale={1.25}>
+            <Text style={styles.countdownNumber}>
+              {countdownValue !== null && countdownValue > 0 ? countdownValue : 'Start'}
+            </Text>
+          </ScaleIn>
         </SafeAreaView>
       </View>
     );
@@ -1875,6 +1879,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   statValue: {
     fontFamily: typography.fontFamily.display, fontSize: typography.fontSize['2xl'],
     color: colors.textPrimary, letterSpacing: typography.letterSpacing.tight,
+    fontVariant: ['tabular-nums'],
   },
   statUnit: {
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,

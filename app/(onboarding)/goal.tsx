@@ -9,6 +9,7 @@ import { ChevronLeft, Check, Trophy, Dumbbell, Calendar, Clock, Target, Medal, F
 import { colors, palette, typography, spacing, radius, shadows, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { Button } from '../../src/components/ui/Button';
+import { Tappable } from '../../src/components/motion/Tappable';
 import { trainingPlans } from '../../src/data/trainingPlans';
 import { buildRacePlan, canTrainForRace } from '../../src/data/buildRacePlan';
 import { getUpcomingRaces, weeksUntilLabel, formatRaceDate } from '../../src/data/rotterdamRaces';
@@ -222,17 +223,17 @@ function ModeTab({
   const colors = useThemeColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
-    <TouchableOpacity
+    <Tappable
       style={[styles.modeTabBtn, active && styles.modeTabBtnActive]}
       onPress={onPress}
-      activeOpacity={0.8}
+      haptic="select"
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected: active }}
     >
       {icon}
       <Text style={[styles.modeTabLabel, active && styles.modeTabLabelActive]}>{label}</Text>
-    </TouchableOpacity>
+    </Tappable>
   );
 }
 
@@ -253,10 +254,10 @@ function TrainingModeContent({
         {RUNNER_LEVELS.map(opt => {
           const isSelected = level === opt.key;
           return (
-            <TouchableOpacity
+            <Tappable
               key={opt.key}
               onPress={() => onLevel(opt.key)}
-              activeOpacity={0.8}
+              haptic="select"
               accessibilityRole="button"
               accessibilityLabel={opt.title}
               accessibilityState={{ selected: isSelected }}
@@ -274,7 +275,7 @@ function TrainingModeContent({
               <View style={[styles.checkCircle, isSelected && styles.checkCircleSelected]}>
                 {isSelected && <Check size={14} color={colors.textInverse} strokeWidth={3} />}
               </View>
-            </TouchableOpacity>
+            </Tappable>
           );
         })}
       </View>
@@ -299,10 +300,10 @@ function GoalList({
           const meta = goalMeta[plan.id];
           const isSelected = selected === plan.id;
           return (
-            <TouchableOpacity
+            <Tappable
               key={plan.id}
               onPress={() => onSelect(plan.id)}
-              activeOpacity={0.8}
+              haptic="select"
               style={[styles.goalCard, isSelected && styles.goalCardSelected]}
             >
               <View style={styles.goalLeft}>
@@ -319,11 +320,11 @@ function GoalList({
               <View style={[styles.checkCircle, isSelected && styles.checkCircleSelected]}>
                 {isSelected && <Check size={14} color={colors.textInverse} strokeWidth={3} />}
               </View>
-            </TouchableOpacity>
+            </Tappable>
           );
         })}
       </View>
-      {selected && (
+  {selected && (
         <View style={styles.descriptionBox}>
           <Text style={styles.descriptionText}>
             {trainingPlans.find(p => p.id === selected)?.description}
@@ -388,11 +389,11 @@ function RaceModeContent({
           // Zelfde regel als de racekiezer: te dichtbij = niet te kiezen.
           const { possible, reason } = canTrainForRace(race);
           return (
-            <TouchableOpacity
+            <Tappable
               key={race.id}
               onPress={() => onSelect(race)}
               disabled={!possible}
-              activeOpacity={0.8}
+              haptic="select"
               accessibilityState={{ disabled: !possible, selected: isSelected }}
               style={[
                 styles.raceCard,
@@ -440,7 +441,7 @@ function RaceModeContent({
                   <Text style={styles.raceReason}>{reason}</Text>
                 )}
               </View>
-            </TouchableOpacity>
+            </Tappable>
           );
         })}
       </View>

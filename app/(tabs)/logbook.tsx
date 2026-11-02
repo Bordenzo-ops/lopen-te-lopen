@@ -17,6 +17,7 @@ import { getPeriodStats, type PeriodType, type PeriodStats } from '../../src/uti
 import { resolveActivePlan } from '../../src/data/activePlan';
 import { SharePeriodSheet } from '../../src/components/ui/SharePeriodSheet';
 import { Button } from '../../src/components/ui/Button';
+import { Tappable } from '../../src/components/motion/Tappable';
 import { formatKm } from '../../src/utils/format';
 
 const periodOptions: { value: PeriodType; label: string; shareLabel: string }[] = [
@@ -91,11 +92,11 @@ export default function LogbookScreen() {
         <View style={styles.section}>
           <View style={styles.segmentControl}>
             {periodOptions.map(opt => (
-              <TouchableOpacity
+              <Tappable
                 key={opt.value}
                 style={[styles.segmentBtn, period === opt.value && styles.segmentBtnActive]}
                 onPress={() => setPeriod(opt.value)}
-                activeOpacity={0.8}
+                haptic="select"
                 accessibilityRole="button"
                 accessibilityLabel={opt.label}
                 accessibilityState={{ selected: period === opt.value }}
@@ -103,7 +104,7 @@ export default function LogbookScreen() {
                 <Text style={[styles.segmentBtnLabel, period === opt.value && styles.segmentBtnLabelActive]}>
                   {opt.label}
                 </Text>
-              </TouchableOpacity>
+              </Tappable>
             ))}
           </View>
 
@@ -172,11 +173,11 @@ export default function LogbookScreen() {
           ) : selectedRuns.length > 0 ? (
             <View style={styles.dayDetailList}>
               {selectedRuns.map((run, idx) => (
-                <TouchableOpacity
+                <Tappable
                   key={`${run.sessionId}-${idx}`}
                   style={styles.runRow}
                   onPress={() => setRunToDetail(run)}
-                  activeOpacity={0.7}
+                  haptic="tap"
                   accessibilityRole="button"
                   accessibilityLabel={`Bekijk details van de run op ${format(new Date(run.completedAt), 'd MMMM, HH:mm', { locale: nl })}, ${formatKm(run.actualDistanceKm, 1)} kilometer`}
                 >
@@ -212,7 +213,7 @@ export default function LogbookScreen() {
                     <Share2 size={18} color={colors.brandPrimary} strokeWidth={2} />
                   </TouchableOpacity>
                   <ChevronRight size={18} color={colors.textTertiary} strokeWidth={2} />
-                </TouchableOpacity>
+                </Tappable>
               ))}
             </View>
           ) : (

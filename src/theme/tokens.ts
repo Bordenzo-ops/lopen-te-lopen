@@ -252,18 +252,18 @@ export const shadows = {
 };
 
 // ── Animaties ─────────────────────────────────
+// Motion tokens. Durations in ms; keep routine UI under 300 ms. Every animated
+// component must also honour reduced motion (see src/components/motion/).
 export const animation = {
   duration: {
-    instant:  100,
-    fast:     200,
-    normal:   300,
-    slow:     500,
+    press:    100,  // press feedback (scale, opacity)
+    select:   150,  // toggles, chips, segmented controls
+    enter:    200,  // content appearing or expanding in place
+    sheet:    280,  // bottom sheets and overlays
+    page:     320,  // cross-screen and hero moments
   },
-  easing: {
-    easeOut:    'ease-out',
-    easeIn:     'ease-in',
-    easeInOut:  'ease-in-out',
-  },
+  // Spring for anything that moves or scales: settles fast, no visible bounce.
+  spring: { damping: 20, stiffness: 300, mass: 0.5 },
 };
 
 export default { palette, colors, spacing, typography, radius, shadows, animation };

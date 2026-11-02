@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { MapPin, Clock, CheckCircle2, Info, Timer, MinusCircle } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
+import { Tappable } from '../motion/Tappable';
 import { ZoneBadge } from './ZoneBadge';
 import { SessionTypeSheet } from './SessionTypeSheet';
 import { formatPacePerKm } from '../../data/paceModel';
@@ -51,9 +52,10 @@ export function SessionCard({ session, isCompleted = false, isSkipped = false, o
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
-    <TouchableOpacity
+    <Tappable
       onPress={onPress}
-      activeOpacity={onPress ? 0.75 : 1}
+      disabled={!onPress}
+      haptic="tap"
       style={[
         styles.container,
         isNext && styles.containerNext,
@@ -136,7 +138,7 @@ export function SessionCard({ session, isCompleted = false, isSkipped = false, o
         sessionType={showInfo ? session.type : null}
         onClose={() => setShowInfo(false)}
       />
-    </TouchableOpacity>
+    </Tappable>
   );
 }
 
