@@ -621,10 +621,11 @@ export function getPackInfo(voice: VoiceType): VoicePackInfo {
 }
 
 /**
- * Vaste, geschatte pakketgrootte voor de UI ("± 14 MB", zie ontwerpdoc: ±560
- * clips à ±25 kB). Bewust geen netwerkcall — dit is alleen een indicatie
- * voordat er gedownload wordt.
+ * Vaste, geschatte pakketgrootte voor de UI. Bewust geen netwerkcall: dit is
+ * alleen een indicatie voordat er gedownload wordt. Gemeten in november 2026:
+ * 1.256 clips, 27 MB (vrouwenstem) en 31 MB (mannenstem). Pas aan als het
+ * pakket flink groeit.
  */
 export function getRemotePackSizeLabel(): string {
-  return '± 14 MB';
+  return '± 30 MB';
 }
