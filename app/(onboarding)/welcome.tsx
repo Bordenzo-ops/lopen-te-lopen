@@ -1,14 +1,28 @@
 import React, { useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, useWindowDimensions } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
+import { Headphones, CalendarCheck, Footprints } from 'lucide-react-native';
 import { typography, spacing, darkColors as colors } from '../../src/theme/tokens';
 import { Button } from '../../src/components/ui/Button';
 import { trackEvent } from '../../src/services/analyticsService';
 import { useAppStore } from '../../src/store/appStore';
 
+// Bottom fade built from plain Views (no SVG): alpha eases from 0 to 1.
+const FADE_BANDS = 16;
+const FADE_ALPHAS = Array.from({ length: FADE_BANDS }, (_, i) =>
+  Math.min(1, Math.pow(i / 12, 1.6)),
+);
+
+const PROMISES = [
+  { Icon: Headphones, text: 'Een Nederlandse coach in je oor' },
+  { Icon: CalendarCheck, text: 'Een schema tot je wedstrijddag' },
+  { Icon: Footprints, text: 'Begin gerust bij nul' },
+];
+
 export default function WelcomeScreen() {
+  const { width, height } = useWindowDimensions();
+
   // Start van de funnel: het welkomstscherm is de eerste stap van de
   // onboarding. Eén keer bij het tonen. Best-effort, blokkeert niets.
   useEffect(() => {
@@ -27,24 +41,23 @@ export default function WelcomeScreen() {
   );
   return (
     <View style={styles.container}>
-      {/* Brand image fills the screen so the native splash flows into it. */}
-      <Image
-        source={require('../../assets/splash-full.png')}
-        resizeMode="cover"
-        style={StyleSheet.absoluteFill}
-        accessible={false}
-      />
-      {/* Bottom gradient keeps buttons and text readable over the image. */}
-      <Svg width="100%" height="45%" style={styles.bottomFade} pointerEvents="none">
-        <Defs>
-          <LinearGradient id="welcomeFade" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor="#0A0F1A" stopOpacity={0} />
-            <Stop offset="0.75" stopColor="#0A0F1A" stopOpacity={1} />
-            <Stop offset="1" stopColor="#0A0F1A" stopOpacity={1} />
-          </LinearGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill="url(#welcomeFade)" />
-      </Svg>
+      {/* Brand image with explicit size so Android always renders it. */}
+      <View style={[styles.imageWrap, { width, height }]} pointerEvents="none">
+        <Image
+          source={require('../../assets/splash-full.png')}
+          resizeMode="cover"
+          fadeDuration={0}
+          style={{ width, height }}
+          accessible={false}
+          importantForAccessibility="no-hide-descendants"
+        />
+      </View>
+      {/* Bottom fade keeps buttons and text readable over the image. */}
+      <View style={styles.bottomFade} pointerEvents="none">
+        {FADE_ALPHAS.map((alpha, i) => (
+          <View key={i} style={{ flex: 1, backgroundColor: `rgba(10,15,26,${alpha})` }} />
+        ))}
+      </View>
       <SafeAreaView style={styles.safeArea}>
         {/* ScrollView: bij grotere systeemlettergrootte of op kleine toestellen past
             de inhoud niet altijd op het scherm, dus moet die kunnen scrollen. */}
@@ -56,6 +69,16 @@ export default function WelcomeScreen() {
               Van je eerste kilometer tot de finishlijn, met een schema dat bij jou past.
             </Text>
           </View>
+
+          <View style={styles.bottom}>
+            <View style={styles.promises}>
+              {PROMISES.map(({ Icon, text }) => (
+                <View key={text} style={styles.promiseRow}>
+                  <Icon size={18} color={colors.brandLight} />
+                  <Text style={styles.promiseText}>{text}</Text>
+                </View>
+              ))}
+            </View>
 
           {/* CTA */}
           <View style={styles.actions}>
@@ -77,6 +100,7 @@ export default function WelcomeScreen() {
               Gratis en zonder account. Je trainingen staan op je telefoon. Log je in, dan bewaren we ze ook veilig in de cloud.
             </Text>
           </View>
+          </View>
         </ScrollView>
       </SafeAreaView>
     </View>
@@ -88,11 +112,33 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bgBase,
   },
+  imageWrap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
   bottomFade: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
+    height: '48%',
+  },
+  bottom: {
+    gap: spacing[3],
+  },
+  promises: {
+    gap: spacing[1],
+  },
+  promiseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1.5],
+  },
+  promiseText: {
+    fontFamily: typography.fontFamily.sansSemi,
+    fontSize: typography.fontSize.base,
+    color: colors.textPrimary,
   },
   safeArea: {
     flex: 1,
