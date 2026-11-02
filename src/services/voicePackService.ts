@@ -38,7 +38,7 @@
 
 // @ts-ignore: al geinstalleerd, zelfde importpatroon als exportService.ts/voiceService.ts
 import { File, Directory, Paths } from 'expo-file-system';
-import type { VoiceType } from '../config/voiceConfig';
+import { VOICES, type VoiceType } from '../config/voiceConfig';
 import { sanitizeEnvValue, isHttpsUrl } from '../utils/env';
 import { hasPremiumAccess } from '../config/premiumConfig';
 import { useAppStore } from '../store/appStore';
@@ -69,6 +69,16 @@ function voiceDir(voice: VoiceType): Directory {
 
 function localManifestFile(voice: VoiceType): File {
   return new File(voiceDir(voice), 'manifest.json');
+}
+
+const PENDING_MARKER_NAME = 'download.pending';
+const DOWNLOAD_CONCURRENCY = 8;
+/** Wait before retry 1 and retry 2 of a single failed file. */
+const RETRY_DELAYS_MS = [500, 1500];
+const PROGRESS_THROTTLE_MS = 100;
+
+function pendingMarkerFile(voice: VoiceType): File {
+  return new File(voiceDir(voice), PENDING_MARKER_NAME);
 }
 
 // ── In-memory caches per stem ────────────────────────────────────────────────
@@ -241,33 +251,87 @@ export async function downloadPack(
       return { ok: false, error: 'Kon geen opslagruimte reserveren op dit toestel.' };
     }
 
-    const entries = Object.entries(remoteManifest.files);
-    const total = entries.length;
-    let done = 0;
+    // Marker that survives an interrupted download so the app can resume it
+    // on the next start (see getInterruptedDownloads). Removed after success.
+    try {
+      pendingMarkerFile(voice).write('1');
+    } catch {
+      // Not critical: without a marker the download just is not auto-resumed
+    }
 
-    for (const [, filename] of entries) {
+    const filenames = Object.values(remoteManifest.files);
+    const total = filenames.length;
+    const missing: string[] = [];
+    for (const filename of filenames) {
+      if (!new File(dir, filename).exists) missing.push(filename);
+    }
+    let done = total - missing.length;
+    onProgress?.(done, total);
+
+    // Fixed pool of concurrent workers; each takes the next missing file via
+    // a shared index counter. Latency per request dominates, so parallelism
+    // is what makes this fast.
+    let nextIndex = 0;
+    let failed = false;
+    let lastProgressAt = 0;
+
+    const reportProgress = () => {
+      if (!onProgress) return;
+      const now = Date.now();
+      if (done === total || now - lastProgressAt >= PROGRESS_THROTTLE_MS) {
+        lastProgressAt = now;
+        onProgress(done, total);
+      }
+    };
+
+    const downloadWithRetry = async (filename: string): Promise<boolean> => {
       const destFile = new File(dir, filename);
-      if (!destFile.exists) {
+      for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
         try {
           await File.downloadFileAsync(`${baseUrl}/${filename}`, destFile, { idempotent: true });
+          return true;
         } catch {
-          // Bewust GEEN lokaal manifest schrijven: de al gedownloade
-          // bestanden blijven staan (naam = contenthash) zodat een volgende
-          // poging alleen het ontbrekende restant opnieuw ophaalt.
-          onProgress?.(done, total);
-          return { ok: false, error: 'Geen verbinding. Download afgebroken, probeer het later opnieuw.' };
+          if (attempt < RETRY_DELAYS_MS.length) {
+            await new Promise<void>(resolve => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+          }
         }
       }
-      done++;
+      return false;
+    };
+
+    const worker = async () => {
+      while (!failed && nextIndex < missing.length) {
+        const filename = missing[nextIndex++];
+        const ok = await downloadWithRetry(filename);
+        if (!ok) {
+          failed = true;
+          return;
+        }
+        done++;
+        reportProgress();
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length: Math.min(DOWNLOAD_CONCURRENCY, missing.length) }, () => worker()),
+    );
+
+    if (failed) {
+      // Bewust GEEN lokaal manifest schrijven: de al gedownloade
+      // bestanden blijven staan (naam = contenthash) zodat een volgende
+      // poging alleen het ontbrekende restant opnieuw ophaalt. Het
+      // download.pending-bestand blijft ook staan voor automatisch hervatten.
       onProgress?.(done, total);
+      return { ok: false, error: 'Geen verbinding. Download afgebroken, probeer het later opnieuw.' };
     }
 
     // Verweesde oude bestanden opruimen (bv. na een nieuwe versie met
-    // vervangen/verwijderde clips) — alles behalve manifest.json en de
-    // bestanden die in het NIEUWE manifest voorkomen.
+    // vervangen/verwijderde clips) — alles behalve manifest.json, de
+    // pending-marker en de bestanden die in het NIEUWE manifest voorkomen.
     try {
       const keep = new Set(Object.values(remoteManifest.files));
       keep.add('manifest.json');
+      keep.add(PENDING_MARKER_NAME);
       for (const entry of dir.list()) {
         if (entry instanceof File && !keep.has(entry.name)) {
           entry.delete();
@@ -285,10 +349,37 @@ export async function downloadPack(
       return { ok: false, error: 'Kon het stempakket niet lokaal opslaan.' };
     }
 
+    try {
+      const marker = pendingMarkerFile(voice);
+      if (marker.exists) marker.delete();
+    } catch {
+      // Harmless: getInterruptedDownloads ignores voices whose pack is available
+    }
+
     invalidateCaches(voice);
     return { ok: true };
   } catch {
     return { ok: false, error: 'Onbekende fout bij downloaden.' };
+  }
+}
+
+/**
+ * Voices whose download was started but never finished: a `download.pending`
+ * marker exists and the pack is not (yet) available. Fails silently to [].
+ */
+export function getInterruptedDownloads(): VoiceType[] {
+  try {
+    const result: VoiceType[] = [];
+    for (const voice of VOICES.map(v => v.key)) {
+      try {
+        if (pendingMarkerFile(voice).exists && !isPackAvailable(voice)) result.push(voice);
+      } catch {
+        // Skip this voice
+      }
+    }
+    return result;
+  } catch {
+    return [];
   }
 }
 

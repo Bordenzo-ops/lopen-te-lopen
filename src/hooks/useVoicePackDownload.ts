@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { downloadPack, isPackAvailable, type DownloadPackResult } from '../services/voicePackService';
+import { downloadPack, getInterruptedDownloads, isPackAvailable, type DownloadPackResult } from '../services/voicePackService';
 import type { VoiceType } from '../config/voiceConfig';
 
 type ProgressListener = (done: number, total: number) => void;
@@ -26,6 +26,10 @@ interface InFlight {
 }
 
 let inFlight: InFlight | null = null;
+
+// Notified when a new download starts, so mounted hooks can attach to a
+// download they did not start themselves (e.g. automatic resume).
+const startedListeners = new Set<(voice: VoiceType) => void>();
 
 /** Is er op dit moment een download voor deze stem bezig? */
 export function isVoicePackDownloading(voice: VoiceType): boolean {
@@ -69,7 +73,26 @@ export function startVoicePackDownload(
     }
   })();
   inFlight = entry;
+  startedListeners.forEach(l => {
+    try { l(voice); } catch { /* listener mag de download niet breken */ }
+  });
   return entry.promise;
+}
+
+/**
+ * Resumes downloads that were interrupted earlier (app closed or connection
+ * lost mid-download), one voice at a time. Best-effort: never throws.
+ */
+export async function resumeInterruptedVoicePackDownloads(): Promise<void> {
+  try {
+    for (const voice of getInterruptedDownloads()) {
+      // Stop after the first failure: no connection means the rest would fail too
+      const result = await startVoicePackDownload(voice);
+      if (!result.ok) break;
+    }
+  } catch {
+    // Best-effort
+  }
 }
 
 export interface UseVoicePackDownload {
@@ -91,6 +114,8 @@ export function useVoicePackDownload(voice: VoiceType): UseVoicePackDownload {
   );
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  // Synchronous mirror of "this hook is attached to a download"
+  const busyRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -111,12 +136,14 @@ export function useVoicePackDownload(voice: VoiceType): UseVoicePackDownload {
   );
 
   const start = useCallback(() => {
+    busyRef.current = true;
     setError(null);
     setBusy(true);
     setProgressPct(0);
     void startVoicePackDownload(voice, (done, total) => {
       if (mountedRef.current) setProgressPct(total > 0 ? Math.round((done / total) * 100) : 0);
     }).then(result => {
+      busyRef.current = false;
       if (!mountedRef.current) return;
       setBusy(false);
       setProgressPct(null);
@@ -127,9 +154,21 @@ export function useVoicePackDownload(voice: VoiceType): UseVoicePackDownload {
 
   // Sluit aan op een download die al elders (bv. paywall) gestart is.
   useEffect(() => {
-    if (isVoicePackDownloading(voice) && !busy) start();
+    if (isVoicePackDownloading(voice) && !busyRef.current) start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voice]);
+
+  // Sluit ook aan op een download die start nadat de hook al gemount is
+  // (bv. automatisch hervatten bij app-start of terug naar de voorgrond).
+  useEffect(() => {
+    const onStarted = (startedVoice: VoiceType) => {
+      if (startedVoice === voice && !busyRef.current && mountedRef.current) start();
+    };
+    startedListeners.add(onStarted);
+    return () => {
+      startedListeners.delete(onStarted);
+    };
+  }, [voice, start]);
 
   return { available, busy, progressPct, error, start };
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, Switch, TouchableOpacity, StyleSheet, ScrollView,
   Alert, TextInput, KeyboardAvoidingView, Platform, Linking, Share,
@@ -14,7 +14,8 @@ import { GoalPickerSheet } from '../../src/components/GoalPickerSheet';
 import * as voiceService from '../../src/services/voiceService';
 import type { VoiceType } from '../../src/config/voiceConfig';
 import { VOICES, voiceDefinition } from '../../src/config/voiceConfig';
-import { downloadPack, deletePack, getPackInfo, getRemotePackSizeLabel, isPackUpdateAvailable } from '../../src/services/voicePackService';
+import { useVoicePackDownload } from '../../src/hooks/useVoicePackDownload';
+import { deletePack, getPackInfo, getRemotePackSizeLabel, isPackUpdateAvailable } from '../../src/services/voicePackService';
 import { router, useFocusEffect } from 'expo-router';
 import {
   getCurrentSession,
@@ -431,12 +432,30 @@ export default function SettingsScreen() {
   }
 
   const activeVoiceType: VoiceType = profile?.voiceType ?? 'female';
-  const [voicePackBusy, setVoicePackBusy] = useState(false);
-  const [voicePackProgressPct, setVoicePackProgressPct] = useState<number | null>(null);
-  const [voicePackError, setVoicePackError] = useState<string | null>(null);
+  // Gedeelde, module-brede download: loopt door als je dit scherm verlaat en
+  // toont bij terugkomst weer de voortgang.
+  const {
+    available: voicePackAvailable,
+    busy: voicePackBusy,
+    progressPct: voicePackProgressPct,
+    error: hookVoicePackError,
+    start: startVoicePackDownloadFromHook,
+  } = useVoicePackDownload(activeVoiceType);
+  // Eigen foutstatus bovenop de hook, zodat een foutmelding ook weg kan na verwijderen.
+  const [dismissedVoicePackError, setDismissedVoicePackError] = useState<string | null>(null);
+  const voicePackError = hookVoicePackError !== dismissedVoicePackError ? hookVoicePackError : null;
   // Alleen om na download/verwijdering opnieuw te renderen: voicePackService
   // houdt zijn eigen (niet-reactieve) in-memory caches bij.
   const [voicePackVersion, setVoicePackVersion] = useState(0);
+  const wasVoicePackBusyRef = useRef(false);
+  useEffect(() => {
+    // Download finished (also an update, where `available` stays true): refresh
+    if (wasVoicePackBusyRef.current && !voicePackBusy) setVoicePackVersion(v => v + 1);
+    wasVoicePackBusyRef.current = voicePackBusy;
+  }, [voicePackBusy]);
+  useEffect(() => {
+    if (voicePackAvailable) setVoicePackVersion(v => v + 1);
+  }, [voicePackAvailable]);
   const voicePackInfo = useMemo(
     () => getPackInfo(activeVoiceType),
     [activeVoiceType, voicePackVersion],
@@ -662,23 +681,9 @@ export default function SettingsScreen() {
     }
   }
 
-  async function handleDownloadVoicePack() {
-    setVoicePackError(null);
-    setVoicePackBusy(true);
-    setVoicePackProgressPct(0);
-    try {
-      const result = await downloadPack(activeVoiceType, (done, total) => {
-        setVoicePackProgressPct(total > 0 ? Math.round((done / total) * 100) : 0);
-      });
-      if (!result.ok) {
-        setVoicePackError(result.error ?? 'Downloaden mislukt. Probeer het later opnieuw.');
-      } else {
-        setVoicePackVersion(v => v + 1);
-      }
-    } finally {
-      setVoicePackBusy(false);
-      setVoicePackProgressPct(null);
-    }
+  function handleDownloadVoicePack() {
+    setDismissedVoicePackError(null);
+    startVoicePackDownloadFromHook();
   }
 
   function handleDeleteVoicePack() {
@@ -692,7 +697,7 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: () => {
             deletePack(activeVoiceType);
-            setVoicePackError(null);
+            setDismissedVoicePackError(hookVoicePackError);
             setVoicePackVersion(v => v + 1);
           },
         },

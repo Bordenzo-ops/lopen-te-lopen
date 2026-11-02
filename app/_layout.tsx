@@ -27,6 +27,7 @@ import {
 import { onAuthChange } from '../src/services/authService';
 import { retryStravaQueue } from '../src/services/stravaService';
 import { maybeAutoUpdatePack } from '../src/services/voicePackService';
+import { resumeInterruptedVoicePackDownloads } from '../src/hooks/useVoicePackDownload';
 import { refreshRaceData } from '../src/services/raceDataService';
 import { startRecoveryLinkCapture } from '../src/services/recoveryLink';
 import { flushEvents } from '../src/services/analyticsService';
@@ -168,6 +169,18 @@ export default function RootLayout() {
       sub.remove();
       unsubscribe();
     };
+  }, [hasHydrated]);
+
+  // Resumes a voice pack download that was interrupted earlier (app closed or
+  // connection lost): once after hydration and whenever the app returns to the
+  // foreground. Best-effort, never blocks and never throws.
+  useEffect(() => {
+    if (!hasHydrated) return;
+    void resumeInterruptedVoicePackDownloads().catch(() => {});
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void resumeInterruptedVoicePackDownloads().catch(() => {});
+    });
+    return () => sub.remove();
   }, [hasHydrated]);
 
   // Een tik op een van onze meldingen opent het relevante scherm (training van
