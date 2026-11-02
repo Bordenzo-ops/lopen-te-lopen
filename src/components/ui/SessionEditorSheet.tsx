@@ -5,16 +5,15 @@
  * voegen of te bewerken. Verschijnt vanuit het Schema-tabblad in bewerkmodus.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, Modal, TouchableOpacity, KeyboardAvoidingView,
-  TouchableWithoutFeedback, ScrollView, TextInput, Platform,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput,
 } from 'react-native';
 import { Minus, Plus } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
+import { typography, spacing, radius, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
-import { SheetHandle, SheetCloseButton } from './sheetParts';
+import { BottomSheet } from './BottomSheet';
+import { SheetHandle, SheetCloseButton, SheetGrabZone } from './sheetParts';
 import { formatKm } from '../../utils/format';
 import { zoneInfo } from '../../data/trainingPlans';
 import type { Session, HeartRateZone } from '../../data/trainingPlans';
@@ -83,9 +82,12 @@ interface SessionEditorSheetProps {
 
 export function SessionEditorSheet({ visible, initialSession, onClose, onSave }: SessionEditorSheetProps) {
   const colors = useThemeColors();
-  const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
-  const isEditing = !!initialSession;
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  // The parent clears initialSession as soon as it closes the sheet; keep the
+  // last value while the exit animation runs so the title does not flip.
+  const lastSessionRef = useRef(initialSession);
+  if (visible) lastSessionRef.current = initialSession;
+  const isEditing = !!(visible ? initialSession : lastSessionRef.current);
 
   const [day, setDay] = useState(1);
   const [type, setType] = useState<EditableType>('easy');
@@ -152,31 +154,13 @@ export function SessionEditorSheet({ visible, initialSession, onClose, onSave }:
     }
   };
 
-  if (!visible) return null;
-
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      statusBarTranslucent
-      onRequestClose={onClose}
-    >
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.backdrop} />
-      </TouchableWithoutFeedback>
-
-      {/* KeyboardAvoidingView rond de sheet (zelfde patroon als
-          RoutePreviewSheet): het omschrijvingsveld onderin zou anders onder
-          het toetsenbord verdwijnen op iOS. */}
-      <KeyboardAvoidingView
-        style={styles.sheetKeyboardWrap}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-      <View style={styles.sheet}>
+    // avoidKeyboard: the description field would otherwise end up under the keyboard.
+    <BottomSheet visible={visible} onClose={onClose} avoidKeyboard>
+      <SheetGrabZone>
         <SheetHandle />
-
         <Text style={styles.title}>{isEditing ? 'Sessie bewerken' : 'Sessie toevoegen'}</Text>
+      </SheetGrabZone>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
           {/* Dag */}
@@ -331,34 +315,14 @@ export function SessionEditorSheet({ visible, initialSession, onClose, onSave }:
         </View>
 
         {/* Laatste kind, zie sheetParts. */}
-        <SheetCloseButton onPress={onClose} />
-      </View>
-      </KeyboardAvoidingView>
-    </Modal>
+        <SheetCloseButton />
+    </BottomSheet>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const makeStyles = (colors: ThemeColors, insetBottom: number) => StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  // Absolute positionering staat op de KeyboardAvoidingView-wrapper, zodat
-  // de 'padding'-behavior op iOS de hele sheet omhoog kan duwen.
-  sheetKeyboardWrap: {
-    position: 'absolute',
-    bottom: 0, left: 0, right: 0,
-  },
-  sheet: {
-    backgroundColor: colors.bgSurface,
-    borderTopLeftRadius:  radius['2xl'],
-    borderTopRightRadius: radius['2xl'],
-    maxHeight: '88%',
-    paddingBottom: Math.max(insetBottom, Platform.OS === 'ios' ? 30 : 20),
-    ...shadows.lg,
-  },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   title: {
     fontFamily: typography.fontFamily.sansBold,
     fontSize: typography.fontSize.xl,

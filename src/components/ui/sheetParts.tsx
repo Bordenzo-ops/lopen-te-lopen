@@ -17,18 +17,56 @@
  * van de sheet zelf: die is hoog genoeg, dus de knop valt binnen de grenzen
  * van zijn ouder, en als laatste kind ligt hij boven de inhoud.
  *
- *   <View style={styles.sheet}>
- *     <SheetHandle />
+ *   <BottomSheet visible={visible} onClose={onClose}>
+ *     <SheetGrabZone>
+ *       <SheetHandle />
+ *       ...titelbalk...
+ *     </SheetGrabZone>
  *     ...inhoud...
- *     <SheetCloseButton onPress={onClose} />
- *   </View>
+ *     <SheetCloseButton />
+ *   </BottomSheet>
  */
 
-import React from 'react';
+import React, { createContext, useContext } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { GestureDetector, type GestureType } from 'react-native-gesture-handler';
 import { X } from 'lucide-react-native';
 import { spacing, radius } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
+
+// Provided by BottomSheet. Lives here (not in BottomSheet.tsx) so the parts
+// below can read it without a circular import.
+interface BottomSheetContextValue {
+  /** Closes the sheet with its exit animation (calls the sheet's onClose). */
+  close: () => void;
+  /** Swipe-down gesture, attached to the grab zone by SheetGrabZone. */
+  pan: GestureType | null;
+}
+
+export const BottomSheetContext = createContext<BottomSheetContextValue>({
+  close: () => {},
+  pan: null,
+});
+
+/** Lets children of a BottomSheet close it with animation. */
+export function useBottomSheet() {
+  return useContext(BottomSheetContext);
+}
+
+/**
+ * Drag zone at the top of a BottomSheet: wrap the SheetHandle and the title
+ * bar in this. Only this zone reacts to the swipe-down gesture, so scrolling
+ * the content below keeps working. Outside a BottomSheet it is a plain View.
+ */
+export function SheetGrabZone({ children }: { children: React.ReactNode }) {
+  const { pan } = useBottomSheet();
+  if (!pan) return <View>{children}</View>;
+  return (
+    <GestureDetector gesture={pan}>
+      <View>{children}</View>
+    </GestureDetector>
+  );
+}
 
 /** Greepje bovenaan de sheet. Blijft 12 punten hoog, zodat de inhoud
  *  eronder op zijn plaats blijft. */
@@ -48,14 +86,16 @@ export function SheetCloseButton({
   onPress,
   accessibilityLabel = 'Sluiten',
 }: {
-  onPress: () => void;
+  /** Optional: inside a BottomSheet the default closes it with animation. */
+  onPress?: () => void;
   accessibilityLabel?: string;
 }) {
   const colors = useThemeColors();
+  const { close } = useBottomSheet();
   return (
     <TouchableOpacity
       style={styles.closeBtn}
-      onPress={onPress}
+      onPress={onPress ?? close}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
     >
