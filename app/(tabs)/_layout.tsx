@@ -1,7 +1,8 @@
 import { Tabs } from 'expo-router';
 import { spacing, typography } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
-import { Home, Calendar, CalendarDays, Settings, Trophy } from 'lucide-react-native';
+import { Home, Calendar, BookOpen, Settings, Trophy } from 'lucide-react-native';
+import { haptics } from '../../src/utils/haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabsLayout() {
@@ -11,8 +12,10 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      screenListeners={{ tabPress: () => haptics.select() }}
       screenOptions={{
         headerShown: false,
+        animation: 'fade',
         tabBarStyle: {
           backgroundColor: colors.bgSurface,
           borderTopColor: colors.borderSubtle,
@@ -36,7 +39,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="dashboard"
         options={{
-          title: 'Dashboard',
+          title: 'Vandaag',
           tabBarIcon: ({ color, size }) => (
             <Home color={color} size={size - 2} strokeWidth={2} />
           ),
@@ -56,7 +59,7 @@ export default function TabsLayout() {
         options={{
           title: 'Logboek',
           tabBarIcon: ({ color, size }) => (
-            <CalendarDays color={color} size={size - 2} strokeWidth={2} />
+            <BookOpen color={color} size={size - 2} strokeWidth={2} />
           ),
         }}
       />

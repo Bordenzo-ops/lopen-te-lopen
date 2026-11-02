@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, Alert, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ChevronDown, ChevronRight, CalendarDays, Pencil, Check, Trash2, Plus } from 'lucide-react-native';
-import Animated, { FadeIn, FadeOut, ReduceMotion } from 'react-native-reanimated';
-import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
+import Animated, { FadeIn, FadeOut, ReduceMotion, useSharedValue, useAnimatedStyle, withTiming, useReducedMotion } from 'react-native-reanimated';
+import { typography, spacing, radius, animation, type ThemeColors } from '../../src/theme/tokens';
+import { haptics } from '../../src/utils/haptics';
 import { useThemeColors } from '../../src/theme/useTheme';
 import { useAppStore, selectIsSessionCompleted, selectCurrentWeek } from '../../src/store/appStore';
 import { getTrainingPlan, zoneInfo, DEFAULT_TRAINING_DAYS } from '../../src/data/trainingPlans';
@@ -32,7 +33,28 @@ const sessionListEntering = FadeIn.duration(260)
   .reduceMotion(ReduceMotion.System);
 const sessionListExiting = FadeOut.duration(180).reduceMotion(ReduceMotion.System);
 
-const dayLabel = ['', 'Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'];
+// No-op under the new architecture, required on the old one for Android.
+if (Platform.OS === 'android') {
+  UIManager.setLayoutAnimationEnabledExperimental?.(true);
+}
+
+// Single chevron that rotates from pointing right (0) to pointing down (90).
+function WeekChevron({ expanded, color }: { expanded: boolean; color: string }) {
+  const reducedMotion = useReducedMotion();
+  const rotation = useSharedValue(expanded ? 90 : 0);
+  useEffect(() => {
+    const target = expanded ? 90 : 0;
+    rotation.value = reducedMotion ? target : withTiming(target, { duration: animation.duration.enter });
+  }, [expanded, reducedMotion, rotation]);
+  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.value}deg` }] }));
+  return (
+    <Animated.View style={style}>
+      <ChevronRight size={18} color={color} strokeWidth={2} />
+    </Animated.View>
+  );
+}
+
+const dayLabel = ['', 'Ma','Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'];
 
 export default function ScheduleScreen() {
   const profile = useAppStore(s => s.profile);
@@ -477,7 +499,16 @@ export default function ScheduleScreen() {
           return (
             <View style={[styles.weekBlock, isCurrent && styles.weekBlockCurrent, allDone && styles.weekBlockDone]}>
               <TouchableOpacity
-                onPress={() => setExpandedWeek(isExpanded ? 0 : week.weekNumber)}
+                onPress={() => {
+                  haptics.select();
+                  LayoutAnimation.configureNext({
+                    duration: animation.duration.enter,
+                    update: { type: 'easeInEaseOut' },
+                    create: { type: 'easeInEaseOut', property: 'opacity' },
+                    delete: { type: 'easeInEaseOut', property: 'opacity' },
+                  });
+                  setExpandedWeek(isExpanded ? 0 : week.weekNumber);
+                }}
                 activeOpacity={0.75}
                 style={styles.weekHeader}
               >
@@ -513,10 +544,7 @@ export default function ScheduleScreen() {
                       <Trash2 size={16} color={colors.error} strokeWidth={2} />
                     </TouchableOpacity>
                   )}
-                  {isExpanded
-                    ? <ChevronDown size={18} color={colors.textSecondary} strokeWidth={2} />
-                    : <ChevronRight size={18} color={colors.textSecondary} strokeWidth={2} />
-                  }
+                  <WeekChevron expanded={isExpanded} color={colors.textSecondary} />
                 </View>
               </TouchableOpacity>
 

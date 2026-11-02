@@ -465,7 +465,7 @@ export default function SummaryScreen() {
           />
         ) : (
           <Button
-            label="Terug naar dashboard"
+            label="Terug naar Vandaag"
             onPress={() => router.replace('/(tabs)/dashboard')}
             fullWidth
             size="lg"
