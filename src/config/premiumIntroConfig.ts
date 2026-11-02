@@ -15,7 +15,7 @@
 
 // ── Copy ───────────────────────────────────────────────────────────────────
 
-export const PREMIUM_INTRO_CAMPAIGN_LABEL = 'ROAD TO ROTTERDAM';
+export const PREMIUM_INTRO_CAMPAIGN_LABEL = 'Road to Rotterdam';
 
 export const PREMIUM_INTRO_TITLE = 'Jij over de finish op de Coolsingel.';
 
