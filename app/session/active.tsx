@@ -237,6 +237,12 @@ export default function ActiveSessionScreen() {
   const [weakGpsSignal, setWeakGpsSignal]   = useState(false);
   // Toont "Open instellingen" als de locatietoestemming expliciet geweigerd is.
   const [permissionDenied, setPermissionDenied] = useState(false);
+  // Android granted only approximate location: accuracy can never reach the threshold.
+  const [approximateOnly, setApproximateOnly] = useState(false);
+  const approximateOnlyRef = useRef(false);
+  // Live accuracy (metres) of the latest point while waiting for the first fix.
+  const [signalAccuracyM, setSignalAccuracyM] = useState<number | null>(null);
+  const lastSignalUpdateRef = useRef(0);
   // Live hartslag van een gekoppelde BLE-hartslagmeter (fase A). Null zolang
   // er geen signaal is: geen meter gekoppeld, nog niet verbonden, of verlies
   // van signaal tijdens de run.
@@ -420,6 +426,13 @@ export default function ActiveSessionScreen() {
   // niet bij elk volgend punt opnieuw draait (firstGpsRef bleef anders wissen).
   const gpsReadyRef = useRef(gpsReady);
   gpsReadyRef.current = gpsReady || gpsReadyRef.current;
+  // Signal strength bars (0-4) derived from the live accuracy.
+  const signalBars =
+    signalAccuracyM == null ? 0
+    : signalAccuracyM <= 35 ? 4
+    : signalAccuracyM <= 50 ? 3
+    : signalAccuracyM <= 100 ? 2
+    : 1;
   const autoPauseEnabledRef = useRef(autoPauseEnabled);
   autoPauseEnabledRef.current = autoPauseEnabled;
   // Premium-status laadt asynchroon (RevenueCat), dus de eerste render kan nog
@@ -537,6 +550,11 @@ export default function ActiveSessionScreen() {
   // watchPositionAsync, zodat GPS-tracking nooit helemaal uitvalt.
   useEffect(() => {
     let mounted = true;
+    // Polls a fresh position while waiting for the first fix. The watchers use
+    // distanceInterval 5, so a runner standing still gets no new points and a
+    // better fix at the same spot would never arrive before the timeout.
+    let firstFixPoll: ReturnType<typeof setInterval> | null = null;
+    let firstFixPollBusy = false;
     if (!profile) return;
 
     // Verwerk één binnenkomend locatiepunt. Exact dezelfde logica als voorheen
@@ -547,6 +565,17 @@ export default function ActiveSessionScreen() {
 
       const { latitude, longitude, accuracy, speed } = loc.coords;
       const now = loc.timestamp;
+
+      // Live signal strength for the waiting screen: before the filter, only until
+      // the first fix, throttled to one state update per second on changed value.
+      if (!gpsReadyRef.current && accuracy != null) {
+        const rounded = Math.round(accuracy);
+        const nowMs = Date.now();
+        if (nowMs - lastSignalUpdateRef.current >= 1000) {
+          lastSignalUpdateRef.current = nowMs;
+          setSignalAccuracyM(prev => (prev === rounded ? prev : rounded));
+        }
+      }
 
       // ── GPS-nauwkeurigheidsfilter: te onnauwkeurige punten negeren we
       // volledig, zowel voor de afstandsberekening als de routelijn.
@@ -697,7 +726,8 @@ export default function ActiveSessionScreen() {
       await ensureLocationPriming();
       if (!mounted) return;
 
-      const { status } = await Location.requestForegroundPermissionsAsync();
+      const permission = await Location.requestForegroundPermissionsAsync();
+      const { status } = permission;
       if (status !== 'granted') {
         setPermissionDenied(true);
         setGpsError('Geen locatietoestemming. Geef toegang via je telefooninstellingen.');
@@ -705,11 +735,19 @@ export default function ActiveSessionScreen() {
         startSessionNow(null);
         return;
       }
+      if (permission.android?.accuracy === 'coarse') {
+        approximateOnlyRef.current = true;
+        setApproximateOnly(true);
+      }
 
       // 30-seconden timeout
       gpsTimeoutRef.current = setTimeout(() => {
         if (!mounted) return;
-        setGpsError('Geen GPS-signaal. Afstand wordt niet bijgehouden.');
+        setGpsError(
+          approximateOnlyRef.current
+            ? 'Alleen locatie bij benadering. Zet exacte locatie aan om je afstand te meten.'
+            : 'Geen GPS-signaal. Afstand wordt niet bijgehouden.',
+        );
         setGpsReady(true);
         startSessionNow(null);
       }, 30_000);
@@ -719,6 +757,20 @@ export default function ActiveSessionScreen() {
       unsubscribeLocationsRef.current = subscribeToLocations((locations) => {
         locations.forEach(handleLocation);
       });
+
+      firstFixPoll = setInterval(() => {
+        if (!mounted || gpsReadyRef.current) {
+          if (firstFixPoll) clearInterval(firstFixPoll);
+          firstFixPoll = null;
+          return;
+        }
+        if (firstFixPollBusy) return;
+        firstFixPollBusy = true;
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.BestForNavigation })
+          .then(handleLocation)
+          .catch(() => {})
+          .finally(() => { firstFixPollBusy = false; });
+      }, 3000);
 
       const backgroundStarted = await startBackgroundTracking();
       if (!backgroundStarted && mounted) {
@@ -737,6 +789,7 @@ export default function ActiveSessionScreen() {
 
     return () => {
       mounted = false;
+      if (firstFixPoll) clearInterval(firstFixPoll);
       unsubscribeLocationsRef.current?.();
       locationSub.current?.remove();
       void stopBackgroundTracking();
@@ -1152,6 +1205,57 @@ export default function ActiveSessionScreen() {
                 </Text>
               </View>
 
+              {approximateOnly ? (
+                <View style={styles.approxCard}>
+                  <Text style={styles.approxTitle}>Alleen locatie bij benadering</Text>
+                  <Text style={styles.approxText}>
+                    Je telefoon deelt je locatie niet exact, dus de afstand kan niet gemeten worden. Zet 'Exacte locatie gebruiken' aan bij de locatierechten van Lopen te Lopen.
+                  </Text>
+                  <Button label="Open instellingen" onPress={() => Linking.openSettings()} variant="secondary" size="sm" />
+                </View>
+              ) : (
+                <View style={styles.signalBlock}>
+                  <View
+                    style={styles.signalRow}
+                    accessible
+                    accessibilityLabel={
+                      signalAccuracyM == null ? 'Nog geen signaal' : `Signaal: ±${signalAccuracyM} m`
+                    }
+                  >
+                    <View style={styles.signalDots}>
+                      {[1, 2, 3, 4].map(i => (
+                        <View
+                          key={i}
+                          style={[
+                            styles.signalDot,
+                            { backgroundColor: i <= signalBars ? colors.textPrimary : colors.borderDefault },
+                          ]}
+                        />
+                      ))}
+                    </View>
+                    <Text
+                      style={[
+                        styles.signalText,
+                        { color: signalAccuracyM != null && signalAccuracyM > 50 ? colors.warning : colors.textPrimary },
+                      ]}
+                    >
+                      {signalAccuracyM == null ? 'Nog geen signaal' : `Signaal: ±${signalAccuracyM} m`}
+                    </Text>
+                  </View>
+                  {signalAccuracyM != null && signalAccuracyM > GPS_ACCURACY_THRESHOLD_M && (
+                    <Text style={styles.signalHint}>
+                      We wachten op minder dan 25 m. Buiten of bij een raam gaat het sneller.
+                    </Text>
+                  )}
+                </View>
+              )}
+
+              {!isTimedRef.current && canUsePlannerRef.current && (
+                <Text style={styles.routeHint}>
+                  De routeplanner verschijnt zodra je GPS-signaal goed genoeg is.
+                </Text>
+              )}
+
               <TouchableOpacity
                 onPress={() => setShowCoachExplainer(true)}
                 style={styles.coachExplainerLink}
@@ -1214,7 +1318,11 @@ export default function ActiveSessionScreen() {
             <TouchableOpacity
               onPress={() => {
                 if (gpsTimeoutRef.current) clearTimeout(gpsTimeoutRef.current);
-                setGpsError('Geen GPS-signaal. Afstand wordt niet bijgehouden.');
+                setGpsError(
+                  approximateOnly
+                    ? 'Alleen locatie bij benadering. Zet exacte locatie aan om je afstand te meten.'
+                    : 'Geen GPS-signaal. Afstand wordt niet bijgehouden.',
+                );
                 setGpsReady(true);
                 startSessionNow(null);
               }}
@@ -1324,7 +1432,7 @@ export default function ActiveSessionScreen() {
         {gpsError && (
           <View style={styles.gpsBanner}>
             <Text style={styles.gpsBannerText}>{gpsError}</Text>
-            {permissionDenied && (
+            {(permissionDenied || approximateOnly) && (
               <TouchableOpacity
                 onPress={() => Linking.openSettings()}
                 style={styles.gpsSettingsBtn}
@@ -1663,6 +1771,38 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.base,
     color: colors.textSecondary, textAlign: 'center', maxWidth: 280,
     lineHeight: typography.fontSize.base * typography.lineHeight.relaxed,
+  },
+  signalBlock: { alignItems: 'center', gap: 4 },
+  signalRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
+  signalDots: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  signalDot: { width: 6, height: 6, borderRadius: radius.full },
+  signalText: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
+  },
+  signalHint: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
+    color: colors.textSecondary, textAlign: 'center', maxWidth: 280,
+  },
+  routeHint: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
+    color: colors.textTertiary, textAlign: 'center', maxWidth: 280,
+  },
+  approxCard: {
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.warning + '66',
+    borderRadius: radius.lg,
+    padding: spacing[2],
+    gap: spacing[1],
+    alignItems: 'center',
+  },
+  approxTitle: {
+    fontFamily: typography.fontFamily.sansSemi, fontSize: typography.fontSize.sm,
+    color: colors.textPrimary, textAlign: 'center',
+  },
+  approxText: {
+    fontFamily: typography.fontFamily.sans, fontSize: typography.fontSize.xs,
+    color: colors.textSecondary, textAlign: 'center',
   },
 
   // Workout-briefing (GPS-wachtscherm)
