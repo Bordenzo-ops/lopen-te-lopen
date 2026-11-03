@@ -195,6 +195,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   previewScroll: {
     paddingHorizontal: spacing[2],
     paddingBottom: spacing[2],
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   previewWrapper: {
     overflow: 'hidden',

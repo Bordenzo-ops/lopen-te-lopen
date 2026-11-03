@@ -317,6 +317,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
 
   previewScroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
     paddingHorizontal: spacing[2],
     paddingBottom: spacing[2],
   },
