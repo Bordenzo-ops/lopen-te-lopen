@@ -1,6 +1,13 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { AppState } from 'react-native';
-import { Stack, useRouter, type Href } from 'expo-router';
+import {
+  Stack,
+  useRouter,
+  type Href,
+  ThemeProvider,
+  DarkTheme,
+  DefaultTheme,
+} from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
   useFonts,
@@ -15,7 +22,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
 import { useAppStore, useHasHydrated } from '../src/store/appStore';
 import { rescheduleNotifications, listenForNotificationTaps } from '../src/services/notificationService';
-import { useIsLightTheme } from '../src/theme/useTheme';
+import { useIsLightTheme, useThemeColors } from '../src/theme/useTheme';
 import {
   init as initPurchases,
   addPremiumListener,
@@ -297,6 +304,23 @@ export default function RootLayout() {
   }, []);
 
   const isLight = useIsLightTheme();
+  const colors = useThemeColors();
+  // Without a navigation theme, react-navigation paints its light-grey default
+  // behind every screen, which flashes through during the tab cross-fade.
+  const navigationTheme = useMemo(() => {
+    const base = isLight ? DefaultTheme : DarkTheme;
+    return {
+      ...base,
+      colors: {
+        ...base.colors,
+        primary: colors.brandPrimary,
+        background: colors.bgBase,
+        card: colors.bgSurface,
+        text: colors.textPrimary,
+        border: colors.borderSubtle,
+      },
+    };
+  }, [isLight, colors]);
 
   // Bij een font-fout starten we door met systeemfonts in plaats van eeuwig
   // achter de native splash te blijven wachten (fontsLoaded blijft dan false).
@@ -308,19 +332,21 @@ export default function RootLayout() {
         <AnimatedSplash>
           <SafeAreaProvider>
             <StatusBar style={isLight ? 'dark' : 'light'} />
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="(onboarding)" options={{ animation: 'fade' }} />
-              <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
-              <Stack.Screen name="session/active" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
-              <Stack.Screen name="session/summary" options={{ animation: 'slide_from_right' }} />
-              <Stack.Screen name="routine/warmup" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
-              <Stack.Screen name="routine/cooldown" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
-              <Stack.Screen name="paywall" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-              <Stack.Screen name="premium-intro" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-              <Stack.Screen name="account" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-              <Stack.Screen name="strava-callback" options={{ animation: 'fade' }} />
-            </Stack>
+            <ThemeProvider value={navigationTheme}>
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="index" />
+                <Stack.Screen name="(onboarding)" options={{ animation: 'fade' }} />
+                <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+                <Stack.Screen name="session/active" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="session/summary" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="routine/warmup" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="routine/cooldown" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="paywall" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="premium-intro" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="account" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="strava-callback" options={{ animation: 'fade' }} />
+              </Stack>
+            </ThemeProvider>
           </SafeAreaProvider>
         </AnimatedSplash>
       </GestureHandlerRootView>
