@@ -21,7 +21,7 @@
  *   />
  */
 
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -30,6 +30,8 @@ import {
   ActivityIndicator,
   Platform,
   TextInput,
+  ScrollView,
+  Keyboard,
 } from 'react-native';
 import MapView, {
   Polyline,
@@ -144,6 +146,17 @@ export function RoutePreviewSheet({
     }
   }, [plannedRoute]);
 
+  // Keep the save input in view: the sheet is taller than the space above the
+  // keyboard, so scroll to the end (input + confirm button) when it opens.
+  const scrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    if (!showSaveInput) return;
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    });
+    return () => sub.remove();
+  }, [showSaveInput]);
+
   const handleConfirmSave = useCallback(() => {
     if (!plannedRoute) return;
     const result = saveRoute(plannedRoute, saveName);
@@ -180,6 +193,11 @@ export function RoutePreviewSheet({
         </Text>
       </SheetGrabZone>
 
+      <ScrollView
+        ref={scrollRef}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         {/* Type-knoppen */}
         <View style={styles.typeRow}>
           {(['loop', 'outAndBack'] as RouteType[]).map(type => (
@@ -368,6 +386,7 @@ export function RoutePreviewSheet({
             )
           )}
         </View>
+      </ScrollView>
 
         {/* Laatste kind, zie sheetParts. */}
         <SheetCloseButton />
