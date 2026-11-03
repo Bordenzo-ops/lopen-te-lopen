@@ -26,13 +26,10 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
-  TouchableWithoutFeedback,
   TouchableOpacity,
   ActivityIndicator,
   Platform,
   TextInput,
-  KeyboardAvoidingView,
 } from 'react-native';
 import MapView, {
   Polyline,
@@ -41,11 +38,11 @@ import MapView, {
   PROVIDER_GOOGLE,
 } from 'react-native-maps';
 import { RefreshCw, Navigation, ArrowRight, MapPin, Bookmark, Check } from 'lucide-react-native';
-import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
+import { typography, spacing, radius, type ThemeColors } from '../../theme/tokens';
 import { formatKm } from '../../utils/format';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors, useIsLightTheme } from '../../theme/useTheme';
-import { SheetHandle, SheetCloseButton } from './sheetParts';
+import { BottomSheet } from './BottomSheet';
+import { SheetHandle, SheetCloseButton, SheetGrabZone } from './sheetParts';
 import { PremiumBadge } from './PremiumBadge';
 import { useAppStore } from '../../store/appStore';
 import { usePremium } from '../../hooks/usePremium';
@@ -117,8 +114,7 @@ export function RoutePreviewSheet({
 }: RoutePreviewSheetProps) {
   const colors = useThemeColors();
   const isLight = useIsLightTheme();
-  const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const mapCoords = plannedRoute?.waypoints.map(wp => ({
     latitude:  wp.lat,
     longitude: wp.lon,
@@ -168,28 +164,10 @@ export function RoutePreviewSheet({
   }, [plannedRoute, saveName, saveRoute, promptUpgrade]);
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      statusBarTranslucent
-      onRequestClose={onClose}
-    >
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.backdrop} />
-      </TouchableWithoutFeedback>
-
-      {/* KeyboardAvoidingView rond de sheet (i.p.v. erin): het naamveld bij
-          "Bewaar deze route" hieronder zit onderin deze bottom sheet en zou
-          zonder dit anders onder het toetsenbord verdwijnen. Zelfde patroon
-          als app/(tabs)/settings.tsx. De sheet zelf is niet meer losstaand
-          position:'absolute' (dat verhuisde naar deze wrapper), zodat de
-          'padding'-behavior op iOS hem ook echt omhoog kan duwen. */}
-      <KeyboardAvoidingView
-        style={styles.sheetKeyboardWrap}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-      <View style={styles.sheet}>
+    // avoidKeyboard: het naamveld bij "Bewaar deze route" hieronder zit onderin
+    // deze bottom sheet en zou anders onder het toetsenbord verdwijnen.
+    <BottomSheet visible={visible} onClose={onClose} avoidKeyboard>
+      <SheetGrabZone>
         <SheetHandle />
 
         {/* Titel */}
@@ -200,6 +178,7 @@ export function RoutePreviewSheet({
         <Text style={styles.subtitle}>
           Kies een routetype voor {targetDistanceKm} km
         </Text>
+      </SheetGrabZone>
 
         {/* Type-knoppen */}
         <View style={styles.typeRow}>
@@ -391,40 +370,14 @@ export function RoutePreviewSheet({
         </View>
 
         {/* Laatste kind, zie sheetParts. */}
-        <SheetCloseButton onPress={onClose} />
-      </View>
-      </KeyboardAvoidingView>
-    </Modal>
+        <SheetCloseButton />
+    </BottomSheet>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const makeStyles = (colors: ThemeColors, insetBottom: number) => StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-
-  // Absolute positionering verhuisd naar de KeyboardAvoidingView-wrapper
-  // eromheen (zie hierboven in de render): zo kan de 'padding'-behavior op
-  // iOS de hele sheet omhoog duwen zodra het naamveld bij "Bewaar deze
-  // route" de aandacht (en het toetsenbord) krijgt.
-  sheetKeyboardWrap: {
-    position: 'absolute',
-    bottom:    0,
-    left:      0,
-    right:     0,
-  },
-
-  sheet: {
-    backgroundColor:      colors.bgSurface,
-    borderTopLeftRadius:  radius['2xl'],
-    borderTopRightRadius: radius['2xl'],
-    paddingBottom:        Math.max(insetBottom, Platform.OS === 'ios' ? 34 : 24),
-    ...shadows.lg,
-  },
-
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   titleRow: {
     flexDirection:  'row',
     alignItems:     'center',

@@ -1339,24 +1339,22 @@ export default function ActiveSessionScreen() {
         </SafeAreaView>
 
         {/* Route preview sheet, verschijnt bovenop GPS-wachtscherm */}
-        {session && (
-          <RoutePreviewSheet
-            visible={showRoutePreview}
-            plannedRoute={planner.route}
-            routeType={planner.routeType}
-            isLoading={planner.isLoading}
-            error={planner.error}
-            targetDistanceKm={session.distanceKm}
-            onSelectType={(type) => {
-              planner.setRouteType(type);
-              handleReplan();
-            }}
-            onReplan={handleReplan}
-            onStartWithRoute={handleStartWithRoute}
-            onStartWithoutRoute={handleStartWithoutRoute}
-            onClose={handleStartWithoutRoute}
-          />
-        )}
+        <RoutePreviewSheet
+          visible={showRoutePreview}
+          plannedRoute={planner.route}
+          routeType={planner.routeType}
+          isLoading={planner.isLoading}
+          error={planner.error}
+          targetDistanceKm={session?.distanceKm ?? 0}
+          onSelectType={(type) => {
+            planner.setRouteType(type);
+            handleReplan();
+          }}
+          onReplan={handleReplan}
+          onStartWithRoute={handleStartWithRoute}
+          onStartWithoutRoute={handleStartWithoutRoute}
+          onClose={handleStartWithoutRoute}
+        />
 
         <CoachExplainerSheet
           visible={showCoachExplainer}

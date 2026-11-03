@@ -19,34 +19,32 @@
  * vrijwel alles behalve afstand, tijd en tempo. Elk blok hieronder valt dus
  * gewoon weg als de data ontbreekt — nooit een leeg kader of een "0"/"—".
  *
- * Gebruik:
- *   {runToDetail && (
+ * Gebruik (de ouder bewaart de laatste run met useLastValue, zodat de inhoud
+ * blijft staan tijdens de sluitanimatie; sluiten gaat via visible=false):
+ *   const shownRun = useLastValue(runToDetail);
+ *   {shownRun && (
  *     <RunDetailSheet
  *       visible={!!runToDetail}
- *       session={runToDetail}
+ *       session={shownRun}
  *       onClose={() => setRunToDetail(null)}
  *     />
  *   )}
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   ScrollView,
   Alert,
-  Platform,
 } from 'react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import { Share2, FileDown, Zap } from 'lucide-react-native';
-import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { typography, spacing, radius, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
 import { useAppStore } from '../../store/appStore';
 import type { CompletedSession } from '../../store/appStore';
@@ -54,7 +52,8 @@ import type { HeartRateZone } from '../../data/trainingPlans';
 import { resolveActivePlan } from '../../data/activePlan';
 import { formatPacePerKm, formatDuration } from '../../data/paceModel';
 import { exportSessionAsGpx } from '../../services/exportService';
-import { SheetHandle, SheetCloseButton } from './sheetParts';
+import { BottomSheet } from './BottomSheet';
+import { SheetHandle, SheetCloseButton, SheetGrabZone } from './sheetParts';
 import { ZoneBadge } from './ZoneBadge';
 import { ShareRunSheet } from './ShareRunSheet';
 import { formatKm } from '../../utils/format';
@@ -150,8 +149,7 @@ export interface RunDetailSheetProps {
 
 export function RunDetailSheet({ visible, session, onClose }: RunDetailSheetProps) {
   const colors = useThemeColors();
-  const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const profile    = useAppStore(s => s.profile);
   const racePlan   = useAppStore(s => s.racePlan);
@@ -160,6 +158,12 @@ export function RunDetailSheet({ visible, session, onClose }: RunDetailSheetProp
 
   const [showShare, setShowShare] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+
+  // The sheet stays mounted after closing, so the nested share sheet must not
+  // reopen on top of the next run's details.
+  useEffect(() => {
+    if (!visible) setShowShare(false);
+  }, [visible]);
 
   // Plan- en sessienaam herleiden, zelfde patroon als logbook.tsx en
   // session/summary.tsx. Lukt dit niet (schema sindsdien gewijzigd, of een
@@ -219,20 +223,10 @@ export function RunDetailSheet({ visible, session, onClose }: RunDetailSheetProp
   };
 
   return (
-    <>
-      <Modal
-        visible={visible}
-        transparent
-        animationType="slide"
-        statusBarTranslucent
-        onRequestClose={onClose}
-      >
-        <TouchableWithoutFeedback onPress={onClose}>
-          <View style={styles.backdrop} />
-        </TouchableWithoutFeedback>
-
-        <View style={styles.sheet}>
+    <BottomSheet visible={visible} onClose={onClose}>
+        <SheetGrabZone>
           <SheetHandle />
+        </SheetGrabZone>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
             {/* Datum/tijd + evt. geplande sessie */}
@@ -372,48 +366,31 @@ export function RunDetailSheet({ visible, session, onClose }: RunDetailSheetProp
             </View>
           </ScrollView>
 
-          {/* Laatste kind, zie sheetParts. */}
-          <SheetCloseButton onPress={onClose} />
-        </View>
-      </Modal>
+          {/* Bewust BINNEN deze sheet gemount, niet als sibling: op iOS kan een
+              Modal alleen boven een al getoonde Modal verschijnen als hij erin
+              genest zit. Sluit de detailsheet, dan sluit de deelsheet mee. */}
+          {profile && (
+            <ShareRunSheet
+              visible={showShare}
+              session={session}
+              weekNumber={session.weekNumber}
+              totalWeeks={activePlan?.totalWeeks}
+              planLabel={activePlan?.name}
+              runnerName={profile.name}
+              maxHeartRate={profile.maxHeartRate}
+              onClose={() => setShowShare(false)}
+            />
+          )}
 
-      {profile && (
-        <ShareRunSheet
-          visible={showShare}
-          session={session}
-          weekNumber={session.weekNumber}
-          totalWeeks={activePlan?.totalWeeks}
-          planLabel={activePlan?.name}
-          runnerName={profile.name}
-          maxHeartRate={profile.maxHeartRate}
-          onClose={() => setShowShare(false)}
-        />
-      )}
-    </>
+          {/* Laatste kind, zie sheetParts. */}
+          <SheetCloseButton />
+    </BottomSheet>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const makeStyles = (colors: ThemeColors, insetBottom: number) => StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-  },
-
-  sheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: colors.bgSurface,
-    borderTopLeftRadius:  radius['2xl'],
-    borderTopRightRadius: radius['2xl'],
-    maxHeight: '88%',
-    paddingBottom: Math.max(insetBottom, Platform.OS === 'ios' ? 30 : 20),
-    ...shadows.lg,
-  },
-
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   scroll: {
     paddingHorizontal: spacing[3],
     paddingTop: spacing[2],

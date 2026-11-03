@@ -20,20 +20,17 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   ActivityIndicator,
   ScrollView,
-  Platform,
   type LayoutChangeEvent,
 } from 'react-native';
 import Svg, { Defs, Pattern, Rect } from 'react-native-svg';
 import { Share2, Download, Camera } from 'lucide-react-native';
 import { palette, typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '../../theme/useTheme';
-import { SheetHandle, SheetCloseButton } from './sheetParts';
+import { BottomSheet } from './BottomSheet';
+import { SheetHandle, SheetCloseButton, SheetGrabZone } from './sheetParts';
 import { ShareRunCard, CARD_WIDTH, CARD_HEIGHT, type ShareRunCardVariant } from './ShareRunCard';
 import { useShareRun } from '../../hooks/useShareRun';
 import type { CompletedSession } from '../../store/appStore';
@@ -97,8 +94,7 @@ export function ShareRunSheet({
 }: ShareRunSheetProps) {
   const { cardRef, isSharing, share, saveToLibrary, captureCard } = useShareRun();
   const colors = useThemeColors();
-  const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [variant, setVariant] = useState<ShareRunCardVariant>('card');
 
   // De transparante variant heeft geen vaste CARD_HEIGHT — hij groeit mee met
@@ -140,24 +136,15 @@ export function ShareRunSheet({
   }, [share, onClose]);
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      statusBarTranslucent
-      onRequestClose={onClose}
-    >
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.backdrop} />
-      </TouchableWithoutFeedback>
-
-      <View style={styles.sheet}>
+    <BottomSheet visible={visible} onClose={onClose}>
+      <SheetGrabZone>
         <SheetHandle />
 
         <Text style={styles.title}>Deel je run</Text>
         <Text style={styles.subtitle}>
           Klaar voor de 'gram? Jouw stats in één oogopslag.
         </Text>
+      </SheetGrabZone>
 
         {/* Stijlkiezer */}
         <View style={styles.variantRow}>
@@ -275,33 +262,14 @@ export function ShareRunSheet({
         </View>
 
         {/* Laatste kind, zie sheetParts. */}
-        <SheetCloseButton onPress={onClose} />
-      </View>
-    </Modal>
+        <SheetCloseButton />
+    </BottomSheet>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const makeStyles = (colors: ThemeColors, insetBottom: number) => StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-  },
-
-  sheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: colors.bgSurface,
-    borderTopLeftRadius:  radius['2xl'],
-    borderTopRightRadius: radius['2xl'],
-    paddingBottom: Math.max(insetBottom, Platform.OS === 'ios' ? 34 : 24),
-    ...shadows.lg,
-  },
-
-
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   title: {
     fontFamily: typography.fontFamily.sansBold,
     fontSize:   typography.fontSize.xl,

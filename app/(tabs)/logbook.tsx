@@ -7,6 +7,7 @@ import { nl } from 'date-fns/locale';
 import { Share2, CalendarX2, ChevronRight } from 'lucide-react-native';
 import { typography, spacing, radius, type ThemeColors } from '../../src/theme/tokens';
 import { useThemeColors } from '../../src/theme/useTheme';
+import { useLastValue } from '../../src/hooks/useLastValue';
 import { useAppStore } from '../../src/store/appStore';
 import type { CompletedSession } from '../../src/store/appStore';
 import { RunCalendar } from '../../src/components/ui/RunCalendar';
@@ -50,6 +51,10 @@ export default function LogbookScreen() {
   const [showPeriodShare, setShowPeriodShare] = useState(false);
   const [runToShare, setRunToShare] = useState<CompletedSession | null>(null);
   const [runToDetail, setRunToDetail] = useState<CompletedSession | null>(null);
+  // Houd de laatste run vast voor de sluitanimatie van de sheets; sluiten gaat
+  // via visible=false, de sheets blijven dus gemount zodra ze eenmaal open waren.
+  const shownRunToShare = useLastValue(runToShare);
+  const shownRunToDetail = useLastValue(runToDetail);
 
   // Groepeer voltooide runs per dag (key = 'yyyy-MM-dd') voor de kalender en
   // het dagdetail hieronder.
@@ -226,11 +231,11 @@ export default function LogbookScreen() {
         </View>
       </ScrollView>
 
-      {runToShare && profile && (
+      {shownRunToShare && profile && (
         <ShareRunSheet
           visible={!!runToShare}
-          session={runToShare}
-          weekNumber={runToShare.weekNumber}
+          session={shownRunToShare}
+          weekNumber={shownRunToShare.weekNumber}
           totalWeeks={activePlan?.totalWeeks}
           planLabel={activePlan?.name}
           runnerName={profile.name}
@@ -239,10 +244,10 @@ export default function LogbookScreen() {
         />
       )}
 
-      {runToDetail && (
+      {shownRunToDetail && (
         <RunDetailSheet
           visible={!!runToDetail}
-          session={runToDetail}
+          session={shownRunToDetail}
           onClose={() => setRunToDetail(null)}
         />
       )}

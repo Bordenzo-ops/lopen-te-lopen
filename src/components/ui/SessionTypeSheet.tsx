@@ -6,14 +6,12 @@
  */
 
 import React, { useMemo } from 'react';
-import {
-  View, Text, StyleSheet, Modal,
-  TouchableWithoutFeedback, ScrollView, Platform,
-} from 'react-native';
-import { palette, typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { palette, typography, spacing, radius, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
-import { SheetHandle, SheetCloseButton } from './sheetParts';
+import { useLastValue } from '../../hooks/useLastValue';
+import { BottomSheet } from './BottomSheet';
+import { SheetHandle, SheetCloseButton, SheetGrabZone } from './sheetParts';
 import type { Session } from '../../data/trainingPlans';
 
 // ── Content per sessie-type ───────────────────────────────────────────────────
@@ -142,26 +140,20 @@ interface SessionTypeSheetProps {
 
 export function SessionTypeSheet({ sessionType, onClose }: SessionTypeSheetProps) {
   const colors = useThemeColors();
-  const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
-  if (!sessionType) return null;
-  const info = SESSION_TYPE_INFO[sessionType];
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  // The parent passes null as soon as it closes the sheet; keep the last type
+  // so the content stays put during the exit animation. Null only before the
+  // first open, when there is nothing to animate.
+  const shownType = useLastValue(sessionType);
+  if (!shownType) return null;
+  const info = SESSION_TYPE_INFO[shownType];
   const accent = info.accentColor;
 
   return (
-    <Modal
-      visible={!!sessionType}
-      transparent
-      animationType="slide"
-      statusBarTranslucent
-      onRequestClose={onClose}
-    >
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.backdrop} />
-      </TouchableWithoutFeedback>
-
-      <View style={styles.sheet}>
+    <BottomSheet visible={!!sessionType} onClose={onClose} maxHeight="85%">
+      <SheetGrabZone>
         <SheetHandle />
+      </SheetGrabZone>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
           {/* Hero */}
@@ -202,29 +194,14 @@ export function SessionTypeSheet({ sessionType, onClose }: SessionTypeSheetProps
         </ScrollView>
 
         {/* Laatste kind, zie sheetParts. */}
-        <SheetCloseButton onPress={onClose} />
-      </View>
-    </Modal>
+        <SheetCloseButton />
+    </BottomSheet>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const makeStyles = (colors: ThemeColors, insetBottom: number) => StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  sheet: {
-    position: 'absolute',
-    bottom: 0, left: 0, right: 0,
-    backgroundColor: colors.bgSurface,
-    borderTopLeftRadius:  radius['2xl'],
-    borderTopRightRadius: radius['2xl'],
-    maxHeight: '85%',
-    paddingBottom: Math.max(insetBottom, Platform.OS === 'ios' ? 36 : 24),
-    ...shadows.lg,
-  },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   scroll: {
     paddingHorizontal: spacing[3],
     paddingTop: spacing[2],
