@@ -13,15 +13,14 @@
 
 import React, { useMemo } from 'react';
 import {
-  View, Text, StyleSheet, Modal,
-  TouchableWithoutFeedback, ScrollView, Platform,
+  View, Text, StyleSheet, ScrollView,
 } from 'react-native';
 import { Compass, Play, Footprints, Route, PartyPopper, Settings2 } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
-import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { typography, spacing, radius, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
-import { SheetHandle, SheetCloseButton } from './sheetParts';
+import { BottomSheet } from './BottomSheet';
+import { SheetHandle, SheetCloseButton, SheetGrabZone } from './sheetParts';
 
 // ── Inhoud ────────────────────────────────────────────────────────────────────
 // Losstaand van de rendercode, zodat de copy later makkelijk bij te werken is.
@@ -180,30 +179,20 @@ interface CoachExplainerSheetProps {
 
 export function CoachExplainerSheet({ visible, onClose }: CoachExplainerSheetProps) {
   const colors = useThemeColors();
-  const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      statusBarTranslucent
-      onRequestClose={onClose}
-    >
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.backdrop} />
-      </TouchableWithoutFeedback>
-
-      <View style={styles.sheet}>
-        <SheetHandle />
+    <BottomSheet visible={visible} onClose={onClose} maxHeight="85%">
+        <SheetGrabZone>
+          <SheetHandle />
+          <View style={styles.titleBar}>
+            <Text style={styles.title}>Wat kun je verwachten van je coach?</Text>
+          </View>
+        </SheetGrabZone>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-          {/* Titel + intro in de coach-stem */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Wat kun je verwachten van je coach?</Text>
-            <Text style={styles.intro}>{COACH_EXPLAINER_INTRO}</Text>
-          </View>
+          {/* Intro in de coach-stem */}
+          <Text style={styles.intro}>{COACH_EXPLAINER_INTRO}</Text>
 
           {COACH_EXPLAINER_SECTIONS.map(section => {
             const Icon = section.icon;
@@ -229,36 +218,24 @@ export function CoachExplainerSheet({ visible, onClose }: CoachExplainerSheetPro
         </ScrollView>
 
         {/* Laatste kind, zie sheetParts. */}
-        <SheetCloseButton onPress={onClose} />
-      </View>
-    </Modal>
+        <SheetCloseButton />
+    </BottomSheet>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const makeStyles = (colors: ThemeColors, insetBottom: number) => StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  sheet: {
-    position: 'absolute',
-    bottom: 0, left: 0, right: 0,
-    backgroundColor: colors.bgSurface,
-    borderTopLeftRadius:  radius['2xl'],
-    borderTopRightRadius: radius['2xl'],
-    maxHeight: '85%',
-    paddingBottom: Math.max(insetBottom, Platform.OS === 'ios' ? 36 : 24),
-    ...shadows.lg,
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  titleBar: {
+    paddingHorizontal: spacing[3],
+    paddingTop: spacing[2],
   },
   scroll: {
     paddingHorizontal: spacing[3],
-    paddingTop: spacing[2],
+    paddingTop: spacing[1],
     paddingBottom: spacing[2],
     gap: spacing[2.5],
   },
-  header: { gap: spacing[1] },
   title: {
     fontFamily: typography.fontFamily.sansBold,
     fontSize: typography.fontSize.xl,

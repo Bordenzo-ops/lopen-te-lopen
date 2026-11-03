@@ -9,14 +9,14 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, Modal, TouchableOpacity,
-  TouchableWithoutFeedback, ScrollView, ActivityIndicator, Platform,
+  View, Text, StyleSheet, TouchableOpacity,
+  ScrollView, ActivityIndicator,
 } from 'react-native';
 import { HeartPulse, Bluetooth, Link2 } from 'lucide-react-native';
-import { typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { typography, spacing, radius, type ThemeColors } from '../../theme/tokens';
 import { useThemeColors } from '../../theme/useTheme';
-import { SheetHandle, SheetCloseButton } from './sheetParts';
+import { BottomSheet } from './BottomSheet';
+import { SheetHandle, SheetCloseButton, SheetGrabZone } from './sheetParts';
 import {
   isBleAvailable,
   requestBlePermissions,
@@ -44,8 +44,7 @@ export function HeartRateMonitorSheet({
   visible, deviceId, deviceName, onClose, onPair, onUnpair,
 }: HeartRateMonitorSheetProps) {
   const colors = useThemeColors();
-  const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [scanning, setScanning] = useState(false);
   const [devices, setDevices] = useState<ScannedHeartRateDevice[]>([]);
@@ -55,11 +54,14 @@ export function HeartRateMonitorSheet({
   const stopScanRef = useRef<() => void>(() => {});
   const bleAvailable = isBleAvailable();
 
-  // Ruim scan/testverbinding netjes op zodra de sheet sluit.
+  // Ruim scan/testverbinding netjes op zodra de sheet sluit. De toestand wordt
+  // pas bij het openen teruggezet, zodat de inhoud tijdens de sluit-animatie
+  // blijft staan.
   useEffect(() => {
     if (!visible) {
       stopScanRef.current();
       void disconnectMonitor();
+    } else {
       setScanning(false);
       setDevices([]);
       setScanError(null);
@@ -119,24 +121,12 @@ export function HeartRateMonitorSheet({
     onUnpair();
   }
 
-  if (!visible) return null;
-
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      statusBarTranslucent
-      onRequestClose={onClose}
-    >
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.backdrop} />
-      </TouchableWithoutFeedback>
-
-      <View style={styles.sheet}>
-        <SheetHandle />
-
-        <Text style={styles.title}>Hartslagmeter</Text>
+    <BottomSheet visible={visible} onClose={onClose} maxHeight="80%">
+        <SheetGrabZone>
+          <SheetHandle />
+          <Text style={styles.title}>Hartslagmeter</Text>
+        </SheetGrabZone>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
           {deviceId ? (
@@ -228,29 +218,14 @@ export function HeartRateMonitorSheet({
         </View>
 
         {/* Laatste kind, zie sheetParts. */}
-        <SheetCloseButton onPress={onClose} />
-      </View>
-    </Modal>
+        <SheetCloseButton />
+    </BottomSheet>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const makeStyles = (colors: ThemeColors, insetBottom: number) => StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  sheet: {
-    position: 'absolute',
-    bottom: 0, left: 0, right: 0,
-    backgroundColor: colors.bgSurface,
-    borderTopLeftRadius:  radius['2xl'],
-    borderTopRightRadius: radius['2xl'],
-    maxHeight: '80%',
-    paddingBottom: Math.max(insetBottom, Platform.OS === 'ios' ? 30 : 20),
-    ...shadows.lg,
-  },
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   title: {
     fontFamily: typography.fontFamily.sansBold,
     fontSize: typography.fontSize.xl,

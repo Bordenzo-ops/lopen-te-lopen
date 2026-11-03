@@ -8,16 +8,15 @@
 
 import React, { useMemo } from 'react';
 import {
-  View, Text, StyleSheet, Modal, TouchableOpacity,
-  TouchableWithoutFeedback, Platform,
+  View, Text, StyleSheet, TouchableOpacity,
 } from 'react-native';
 import { Check } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { typography, spacing, radius, shadows, type ThemeColors } from '../theme/tokens';
+import { typography, spacing, radius, type ThemeColors } from '../theme/tokens';
 import { useThemeColors } from '../theme/useTheme';
 import { GOAL_LABELS } from '../data/trainingPlans';
 import type { GoalType } from '../data/trainingPlans';
-import { SheetHandle, SheetCloseButton } from './ui/sheetParts';
+import { BottomSheet } from './ui/BottomSheet';
+import { SheetHandle, SheetCloseButton, SheetGrabZone } from './ui/sheetParts';
 
 /** Kiesbare doelen, in oplopende volgorde, met de labels uit de rest van de app. */
 export const GOAL_OPTIONS: ReadonlyArray<{ key: GoalType; label: string }> = (
@@ -33,26 +32,18 @@ interface GoalPickerSheetProps {
 
 export function GoalPickerSheet({ visible, currentGoal, onSelect, onClose }: GoalPickerSheetProps) {
   const colors = useThemeColors();
-  const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      statusBarTranslucent
-      onRequestClose={onClose}
-    >
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.backdrop} />
-      </TouchableWithoutFeedback>
-
-      <View style={styles.sheet}>
-        <SheetHandle />
+    <BottomSheet visible={visible} onClose={onClose}>
+        <SheetGrabZone>
+          <SheetHandle />
+          <View style={styles.titleBar}>
+            <Text style={styles.title}>Doel wijzigen</Text>
+          </View>
+        </SheetGrabZone>
 
         <View style={styles.content}>
-          <Text style={styles.title}>Doel wijzigen</Text>
           <Text style={styles.intro}>Kies het doel waar je naartoe wilt trainen.</Text>
 
           <View style={styles.list}>
@@ -77,29 +68,19 @@ export function GoalPickerSheet({ visible, currentGoal, onSelect, onClose }: Goa
         </View>
 
         {/* Laatste kind, zie sheetParts. */}
-        <SheetCloseButton onPress={onClose} />
-      </View>
-    </Modal>
+        <SheetCloseButton />
+    </BottomSheet>
   );
 }
 
-const makeStyles = (colors: ThemeColors, insetBottom: number) => StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  sheet: {
-    position: 'absolute',
-    bottom: 0, left: 0, right: 0,
-    backgroundColor: colors.bgSurface,
-    borderTopLeftRadius:  radius['2xl'],
-    borderTopRightRadius: radius['2xl'],
-    paddingBottom: Math.max(insetBottom, Platform.OS === 'ios' ? 36 : 24),
-    ...shadows.lg,
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  titleBar: {
+    paddingHorizontal: spacing[3],
+    paddingTop: spacing[2],
+    paddingBottom: spacing[1],
   },
   content: {
     paddingHorizontal: spacing[3],
-    paddingTop: spacing[2],
     gap: spacing[1],
   },
   title: {
