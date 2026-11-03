@@ -20,18 +20,15 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   ActivityIndicator,
   ScrollView,
-  Platform,
 } from 'react-native';
 import { Share2, Download, Camera } from 'lucide-react-native';
 import { palette, typography, spacing, radius, shadows, type ThemeColors } from '../../theme/tokens';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '../../theme/useTheme';
-import { SheetHandle, SheetCloseButton } from './sheetParts';
+import { BottomSheet } from './BottomSheet';
+import { SheetHandle, SheetCloseButton, SheetGrabZone } from './sheetParts';
 import { ShareCountdownCard } from './ShareCountdownCard';
 import { CARD_WIDTH, CARD_HEIGHT } from './shareCardParts';
 import { useShareRun } from '../../hooks/useShareRun';
@@ -62,8 +59,7 @@ export function ShareCountdownSheet({
     eventProps: { raceId: race.id, distance: race.distance },
   });
   const colors = useThemeColors();
-  const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors, insets.bottom), [colors, insets.bottom]);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const handleInstagram = useCallback(async () => {
     const result = await share();
@@ -91,24 +87,15 @@ export function ShareCountdownSheet({
   }, [share, onClose]);
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      statusBarTranslucent
-      onRequestClose={onClose}
-    >
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.backdrop} />
-      </TouchableWithoutFeedback>
+    <BottomSheet visible={visible} onClose={onClose}>
+        <SheetGrabZone>
+          <SheetHandle />
 
-      <View style={styles.sheet}>
-        <SheetHandle />
-
-        <Text style={styles.title}>Deel je countdown</Text>
-        <Text style={styles.subtitle}>
-          Laat je volgers weten waar je naartoe traint.
-        </Text>
+          <Text style={styles.title}>Deel je countdown</Text>
+          <Text style={styles.subtitle}>
+            Laat je volgers weten waar je naartoe traint.
+          </Text>
+        </SheetGrabZone>
 
         {/* Zichtbare geschaalde preview */}
         <ScrollView
@@ -181,32 +168,14 @@ export function ShareCountdownSheet({
         </View>
 
         {/* Laatste kind, zie sheetParts. */}
-        <SheetCloseButton onPress={onClose} />
-      </View>
-    </Modal>
+        <SheetCloseButton />
+    </BottomSheet>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const makeStyles = (colors: ThemeColors, insetBottom: number) => StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-  },
-
-  sheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: colors.bgSurface,
-    borderTopLeftRadius:  radius['2xl'],
-    borderTopRightRadius: radius['2xl'],
-    paddingBottom: Math.max(insetBottom, Platform.OS === 'ios' ? 34 : 24),
-    ...shadows.lg,
-  },
-
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   title: {
     fontFamily: typography.fontFamily.sansBold,
     fontSize:   typography.fontSize.xl,
