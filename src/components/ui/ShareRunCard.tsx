@@ -201,7 +201,10 @@ export const ShareRunCard = forwardRef<View, ShareRunCardProps>(function ShareRu
   const fastest = session.avgHeartRate ? null : fastestSplitSec(session);
 
   return (
-    <View ref={ref} style={isTransparent ? shared.cardTransparent : shared.card}>
+    // collapsable={false}: without a background the transparent root has no
+    // visual props, so view flattening drops its native view and captureRef
+    // (view-shot) finds nothing to snapshot on iOS.
+    <View ref={ref} collapsable={false} style={isTransparent ? shared.cardTransparent : shared.card}>
       {!isTransparent && (
         <>
           <Image source={ART_TEXTURE} style={StyleSheet.absoluteFill} resizeMode="cover" />
