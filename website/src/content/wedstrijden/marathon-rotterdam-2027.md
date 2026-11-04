@@ -81,6 +81,10 @@ Wil je vooraf weten waar je ongeveer staat? De [startvak-tool](/tools/startvak-m
 
 Wil je een andere tijd uitrekenen, gebruik dan de [tempo calculator](/tools/tempo-calculator/).
 
+## Hoe is het om Rotterdam te lopen?
+
+Janike liep haar eerste marathon in Rotterdam en finishte in 3:57:19. Ze noemt het publiek, de muziek langs het parcours en het feest in het bos als momenten die ze nooit vergeet. [Lees hoe zij zich voorbereidde](/verhalen/janike-marathon-rotterdam/).
+
 :::ervaring Zo pakken wij het aan
 [Anne: vul hier in 2-3 zinnen je eigen ervaring in, bijvoorbeeld hoe je een voorjaarsmarathon voorbereidt in de winter.]
 :::

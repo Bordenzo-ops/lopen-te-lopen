@@ -98,8 +98,8 @@ Neem na je marathon eerst echt rust. Daarna kun je een kortere afstand kiezen, b
 
 Wil je weten welk tempo bij je streeftijd past? Probeer de [tempocalculator](/tools/tempo-calculator/).
 
-:::ervaring Zo ging het bij ons
-[Lars/Anne: vul hier in 2-3 zinnen je eigen ervaring in]
+:::ervaring Janike liep Rotterdam in 3:57
+Janike trainde 27 weken voor haar eerste marathon: vier keer per week hardlopen, plus kracht en pilates. Haar langste duurloop was 35 km, met een loopgroep, zodat ze het lange stuk niet alleen hoefde te doen. Gels en drinken bouwde ze op tijdens de trainingen, zodat er op de dag zelf niets nieuw was. [Lees haar hele verhaal](/verhalen/janike-marathon-rotterdam/).
 :::
 
 :::disclaimer

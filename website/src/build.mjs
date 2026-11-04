@@ -14,7 +14,8 @@
  *   title, description, h1, sectie, kaart (card text in section lists),
  *   antwoord (short answer box), auteur, gepubliceerd, bijgewerkt (YYYY-MM-DD),
  *   volgorde (sort order in lists), schema (article|webapp|none), noindex (ja),
- *   bronnen (" | "-separated "text => url" pairs), campagne (store link tag).
+ *   bronnen (" | "-separated "text => url" pairs), campagne (store link tag),
+ *   afbeelding (site path of the article photo, used as JSON-LD image).
  */
 
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -42,6 +43,7 @@ const SECTION_NAMES = {
   wedstrijden: 'Wedstrijden',
   tools: 'Tools',
   tips: 'Tips',
+  verhalen: 'Verhalen',
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -245,7 +247,7 @@ function jsonLd(page) {
       dateModified: page.meta.bijgewerkt || page.meta.gepubliceerd,
       author: { '@type': 'Person', name: author.name, url: author.url },
       publisher: { '@id': ORG['@id'] },
-      image: `${SITE}/assets/og-image.jpg`,
+      image: page.meta.afbeelding ? SITE + page.meta.afbeelding : `${SITE}/assets/og-image.jpg`,
     });
   }
   if (schema === 'webapp') {
