@@ -73,7 +73,7 @@ Het belangrijkste: niets daarvan was nieuw op de dag zelf. "Alles heb ik opgebou
 
 ## Wat zou ze nu anders doen?
 
-Minder op de klok lopen. "Mijn voorbereiding was erg strak en ik had me erg vastgebeten in mijn doel: onder die 4 uur. Daardoor was ik tijdens de marathon ook erg met de tijd bezig. Alles uitdenken, alles tot op de kilometer berekenen. Als ik hem nog een keer loop, wil ik de tijd meer loslaten en meer genieten." "Al is een snellere tijd neerzetten stiekem misschien toch ook een mooi doel."
+Minder op de klok lopen. "Mijn voorbereiding was erg strak en ik had me erg vastgebeten in mijn doel: onder die 4 uur. Daardoor was ik tijdens de marathon ook erg met de tijd bezig. Alles uitdenken, alles tot op de kilometer berekenen. Als ik hem nog een keer loop, wil ik de tijd meer loslaten en meer genieten. Al is een snellere tijd neerzetten stiekem misschien toch ook een mooi doel."
 
 ## Haar advies voor je eerste marathon
 
