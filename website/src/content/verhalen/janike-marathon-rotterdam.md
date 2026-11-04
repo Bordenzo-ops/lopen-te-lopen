@@ -14,7 +14,7 @@ campagne: verhaal-janike
 appKop: Train naar jouw eerste marathon
 appTekst: Lopen te Lopen maakt een marathonschema op jouw wedstrijddatum en jouw trainingsdagen. Een Nederlandse stem praat je tijdens het lopen door elke training.
 ---
-Janike is een vriendin van ons. Ze liep haar eerste marathon in Rotterdam, in de 45e editie. We vroegen haar hoe ze zich voorbereidde, hoe de dag ging en wat ze nu anders zou doen. Dit zijn haar antwoorden, zo dicht mogelijk bij haar eigen woorden.
+Janike ([@jani.ke_ op Instagram](https://www.instagram.com/jani.ke_/)) is een vriendin van ons. Ze liep in april 2026 haar eerste marathon in Rotterdam, de 45e editie. We vroegen haar hoe ze zich voorbereidde, hoe de dag ging en wat ze nu anders zou doen. Dit zijn haar antwoorden, zo dicht mogelijk bij haar eigen woorden.
 
 <figure class="staand">
 <img src="/assets/verhalen/janike-finish.jpg" alt="Janike zit na de finish in het gras in Rotterdam, met haar medaille in de hand en roze compressiekousen aan" width="900" height="1200" loading="lazy">
