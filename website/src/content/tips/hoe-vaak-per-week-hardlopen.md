@@ -49,8 +49,8 @@ Verander steeds maar één ding tegelijk: eerst de duur, dan het aantal dagen, d
 
 Dat laatste staat ook in het Sportzorg-schema: kun je niet meer aan een stuk praten omdat je naar lucht hapt, dan ga je te hard.
 
-:::ervaring Zo doen wij het
-[Lars/Anne: vul hier in 2-3 zinnen je eigen ervaring in]
+:::ervaring Lars: hardlopen naast voetbal
+Ik loop vooral in de winterstop en de zomerstop, zodat mijn conditie op peil blijft. Zo ga ik bij de hervatting van het seizoen niet als een vrachtwagen over het veld. Drie keer per week is dan prima, waarvan één intervaltraining. Mijn ideale afstand ligt tussen de 5 en 10 km.
 :::
 
 ## Hoe past hardlopen in de beweegrichtlijnen?

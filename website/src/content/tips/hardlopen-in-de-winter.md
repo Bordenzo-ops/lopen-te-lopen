@@ -54,8 +54,8 @@ Voor het donker geldt verder:
 - Zet je muziek zacht of gebruik maar één oortje.
 - Een hoofd- of borstlamp helpt op onverlichte stukken. Dat is ons eigen advies.
 
-:::ervaring Zo doen wij het
-[Lars/Anne: vul hier in 2-3 zinnen je eigen ervaring in]
+:::ervaring Lars: oren en handen eerst
+In de winter gaat het mij vooral om beschermen tegen koude wind. Het fijnst vind ik het als mijn oren en handen warm blijven: handschoenen aan, en een muts of een hoofdband die over je oren valt.
 :::
 
 ## Waarom moet je binnen opwarmen?
