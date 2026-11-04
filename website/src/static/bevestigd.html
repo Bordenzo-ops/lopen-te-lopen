@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>E-mailadres bevestigd - Lopen te Lopen</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0A0F1A;
+      color: #F9FAFB;
+      line-height: 1.6;
+    }
+    main { max-width: 420px; padding: 32px 24px; }
+    h1 { font-size: 30px; line-height: 1.2; margin: 0 0 12px; }
+    p { font-size: 16px; color: #9CA3AF; margin: 0 0 12px; }
+    .accent { width: 48px; height: 4px; background: #FD7642; border-radius: 2px; margin-bottom: 24px; }
+    a { color: #FD7642; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="accent"></div>
+    <h1 id="title">Je e-mailadres is bevestigd</h1>
+    <p id="text">Je kunt dit venster sluiten en teruggaan naar de app Lopen te Lopen.</p>
+  </main>
+  <script>
+    // Supabase returns the result in the URL fragment. It is read only here and
+    // removed right away, so tokens do not stay in the address bar or history.
+    var params = new URLSearchParams(location.hash.slice(1));
+    if (params.get('error') || params.get('error_code')) {
+      document.getElementById('title').textContent = 'Deze link werkt niet meer';
+      document.getElementById('text').textContent =
+        'De link is verlopen of al gebruikt. Was je e-mailadres al bevestigd, dan kun je gewoon inloggen in de app.';
+      document.title = 'Link verlopen - Lopen te Lopen';
+    }
+    if (location.hash) history.replaceState(null, '', location.pathname);
+  </script>
+</body>
+</html>

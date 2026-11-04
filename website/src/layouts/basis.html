@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}}</title>
+<meta name="description" content="{{description}}">
+<link rel="canonical" href="{{url}}">
+{{robots}}
+<meta name="theme-color" content="#0A0F1A">
+<link rel="icon" type="image/png" href="/assets/logo-v2.png">
+<link rel="apple-touch-icon" href="/assets/logo-v2.png">
+<meta property="og:site_name" content="Lopen te Lopen">
+<meta property="og:locale" content="nl_NL">
+<meta property="og:type" content="{{ogType}}">
+<meta property="og:title" content="{{ogTitle}}">
+<meta property="og:description" content="{{description}}">
+<meta property="og:url" content="{{url}}">
+<meta property="og:image" content="https://lopentelopen.nl/assets/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preload" href="/assets/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site.css?v={{cssVersion}}">
+{{head}}
+{{jsonld}}
+</head>
+<body>
+<a class="skip" href="#inhoud">Naar de inhoud</a>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="merk" href="/">
+      <img src="/assets/logo-v2.png" alt="" width="36" height="36">
+      <span>Lopen te Lopen</span>
+    </a>
+    <nav aria-label="Hoofdmenu">
+      <ul class="nav-links">
+        <li><a href="/schemas/">Schema's</a></li>
+        <li><a href="/wedstrijden/">Wedstrijden</a></li>
+        <li><a href="/tools/">Tools</a></li>
+        <li><a href="/tips/">Tips</a></li>
+        <li class="altijd"><a class="knop" href="{{downloadHref}}">Download gratis</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="inhoud">
+{{body}}
+</main>
+
+<footer class="voet">
+  <div class="wrap">
+    <div class="voet-grid">
+      <div class="voet-merk">
+        <a class="merk" href="/">
+          <img src="/assets/logo-v2.png" alt="" width="36" height="36" loading="lazy">
+          <span>Lopen te Lopen</span>
+        </a>
+        <p>Nederlandse hardloopcoach voor iPhone en Android. Van de bank naar de finish.</p>
+      </div>
+      <div>
+        <h2>Trainen</h2>
+        <ul>
+          <li><a href="/schemas/beginnen-met-hardlopen/">Beginnen met hardlopen</a></li>
+          <li><a href="/schemas/">Alle schema's</a></li>
+          <li><a href="/wedstrijden/">Wedstrijden</a></li>
+          <li><a href="/tips/">Tips</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2>Tools</h2>
+        <ul>
+          <li><a href="/tools/tempo-calculator/">Tempo calculator</a></li>
+          <li><a href="/tools/finishtijd-voorspeller/">Finishtijd voorspellen</a></li>
+          <li><a href="/tools/startvak-marathon/">Startvak bij de marathon</a></li>
+        </ul>
+      </div>
+      <div>
+        <h2>Over</h2>
+        <ul>
+          <li><a href="/over-ons/">Over ons</a></li>
+          <li><a href="/privacy-policy.html">Privacybeleid</a></li>
+          <li><a href="/voorwaarden.html">Voorwaarden</a></li>
+          <li><a href="/account-verwijderen.html">Account verwijderen</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="voet-onder">© {{year}} Lopen te Lopen. Geen advertenties, geen datahandel.</p>
+  </div>
+</footer>
+{{scripts}}
+</body>
+</html>

@@ -1,0 +1,96 @@
+---
+title: Finishtijd voorspellen met Riegel | Lopen te Lopen
+description: Voorspel je tijd op 5 km, 10 km, 21,1 km en de marathon uit een recente uitslag met de Riegel-formule. Gratis, en eerlijk over de onzekerheid.
+h1: Finishtijd voorspellen
+sectie: tools
+kaart: Vul een recente uitslag in en zie je geschatte tijd op 5 km, 10 km, 21,1 km en de marathon.
+schema: webapp
+script: tools.js
+campagne: tool-finishtijd
+---
+<div class="wrap">
+{{kruimel}}
+<article class="artikel">
+  <header class="artikel-kop">
+    <h1>Finishtijd voorspellen</h1>
+    <p class="artikel-meta">Gratis rekentool. Rekent live mee, zonder account.</p>
+  </header>
+  <div class="kort-antwoord"><strong>Kort antwoord</strong>Met de Riegel-formule reken je een recente uitslag om naar andere afstanden. Een 10 km in 50:00 geeft ongeveer 1:50:20 op 21,1 km en rond 3:50 op de marathon. Het is een schatting, en op de marathon vaak een optimistische.</div>
+
+  <form class="tool" data-tool="finish" aria-label="Finishtijd voorspellen">
+    <div class="rij">
+      <div>
+        <label for="f-snel">Snelkeuze afstand</label>
+        <select id="f-snel" name="snelkeuze">
+          <option value="5">5 km</option>
+          <option value="10" selected>10 km</option>
+          <option value="15">15 km</option>
+          <option value="21,1">21,1 km</option>
+          <option value="42,195">Marathon (42,195 km)</option>
+          <option value="">Eigen afstand</option>
+        </select>
+      </div>
+      <div>
+        <label for="f-afstand">Afstand van je uitslag in km</label>
+        <input id="f-afstand" name="afstand" type="text" inputmode="decimal" autocomplete="off" value="10" aria-describedby="f-afstand-fout">
+        <p class="fout" id="f-afstand-fout" role="alert" data-fout="afstand" hidden></p>
+      </div>
+    </div>
+    <div class="rij">
+      <div>
+        <label for="f-tijd">Je eindtijd</label>
+        <input id="f-tijd" name="tijd" type="text" inputmode="numeric" autocomplete="off" placeholder="50:00" aria-describedby="f-tijd-hulp f-tijd-fout">
+        <p class="hulp" id="f-tijd-hulp">Zoals 25:30 of 1:45:00. Kies een recente wedstrijd of serieuze test.</p>
+        <p class="fout" id="f-tijd-fout" role="alert" data-fout="tijd" hidden></p>
+      </div>
+    </div>
+    <div class="uitkomst">
+      <output name="uitkomst" aria-live="polite">&ndash;</output>
+      <div data-lijst aria-live="polite"></div>
+      <div data-extra class="hulp"></div>
+    </div>
+  </form>
+
+  <div class="prose">
+    <h2>Hoe voorspel je je finishtijd?</h2>
+    <p>Met de formule van Pete Riegel: T2 = T1 &times; (D2 / D1)<sup>1,06</sup>. T1 is je tijd op de afstand D1 die je al liep, T2 is de verwachte tijd op de nieuwe afstand D2. De exponent 1,06 zegt dat je tempo iets terugloopt naarmate de afstand groeit.</p>
+
+    <h2>Hoe betrouwbaar is de voorspelling?</h2>
+    <p>Het is een schatting, geen belofte. Riegel gaat ervan uit dat je voor de nieuwe afstand even goed getraind bent als voor de afstand van je uitslag. Dat klopt zelden helemaal. Op de marathon is de uitkomst vaak te optimistisch voor lopers met weinig duurtraining: wie een mooie 10 km loopt zonder veel lange duurlopen, redt de tweede helft van een marathon meestal niet op hetzelfde tempo.</p>
+    <p>Gebruik de uitkomst daarom als richting, niet als doel. Zeker voor je eerste marathon is een iets voorzichtiger tijd verstandiger dan de uitkomst van de formule. De formule werkt het best met een uitslag vanaf ongeveer 3 km en voor afstanden die niet te ver van je uitslag liggen.</p>
+
+    <h2>Voorbeelden vanaf een 10 km</h2>
+    <p>Zo ziet de formule eruit voor een aantal 10 km-tijden. De tijden zijn afgerond op hele seconden.</p>
+    <div class="tabel-scroll">
+      <table>
+        <thead><tr><th scope="col">10 km in</th><th scope="col">5 km</th><th scope="col">21,1 km</th><th scope="col">Marathon</th></tr></thead>
+        <tbody>
+<tr><td>40:00</td><td>19:11</td><td>1:28:16</td><td>3:04:00</td></tr>
+<tr><td>45:00</td><td>21:35</td><td>1:39:18</td><td>3:27:01</td></tr>
+<tr><td>50:00</td><td>23:59</td><td>1:50:20</td><td>3:50:01</td></tr>
+<tr><td>55:00</td><td>26:23</td><td>2:01:22</td><td>4:13:01</td></tr>
+<tr><td>1:00:00</td><td>28:47</td><td>2:12:24</td><td>4:36:01</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Veelgestelde vragen</h2>
+    <h3>Welke uitslag kan ik het best invullen?</h3>
+    <p>Een recente wedstrijd of een serieuze test op vlak parcours, liefst van de afgelopen paar weken. Een rustige duurloop geeft een te trage voorspelling, een wedstrijd met flinke wind of heuvels ook.</p>
+    <h3>Kan ik mijn marathontijd voorspellen uit een 5 km?</h3>
+    <p>Dat kan, maar hoe groter het verschil tussen de afstanden, hoe onzekerder de uitkomst. Een marathonschatting uit een 5 km is grof. Een 10 km of 21,1 km zegt meer over je duurvermogen.</p>
+    <h3>Waarom zit de formule er bij een marathon vaak naast?</h3>
+    <p>Voor de marathon spelen duurtraining, voeding en tempokeuze mee. Lopers die weinig lange duurlopen doen, lopen het tempo van hun 10 km vaak niet vol te houden. De voorspelling is dan te snel.</p>
+
+    <section class="bronnen" aria-labelledby="bronnen"><h2 id="bronnen">Bronnen</h2><ul>
+      <li>Riegel, P. S. (1981). &ldquo;Athletic Records and Human Endurance&rdquo;. American Scientist, 69(3), 285-290.</li>
+    </ul></section>
+  </div>
+
+  <aside class="app-blok" aria-labelledby="app-blok">
+    <h2 id="app-blok">Bouw je duurvermogen op met een schema</h2>
+    <p>Een goede marathon begint bij opgebouwde duurlopen. Lopen te Lopen maakt een schema op jouw datum en jouw trainingsdagen, met een Nederlandse stem die je onderweg coacht. Gratis te gebruiken, zonder account.</p>
+    {{badges:tool-finishtijd}}
+  </aside>
+</article>
+</div>

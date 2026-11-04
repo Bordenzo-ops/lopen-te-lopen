@@ -1,0 +1,79 @@
+---
+title: Startvak bij de marathon bepalen | Lopen te Lopen
+description: Vul je doeltijd in en zie in welk deel van het startveld je bij de marathon past, met je gemiddelde tempo per km. Indicatief advies, gratis.
+h1: Startvak bij de marathon
+sectie: tools
+kaart: Vul je doeltijd in en zie een indicatieve plek in het startveld van de marathon.
+schema: webapp
+script: tools.js
+campagne: tool-startvak
+---
+<div class="wrap">
+{{kruimel}}
+<article class="artikel">
+  <header class="artikel-kop">
+    <h1>Startvak bij de marathon</h1>
+    <p class="artikel-meta">Gratis rekentool. Rekent live mee, zonder account.</p>
+  </header>
+  <div class="kort-antwoord"><strong>Kort antwoord</strong>Je plek in het startveld hangt af van je verwachte eindtijd. Wie 4:15:00 wil lopen, hoort in het middenveld en loopt gemiddeld 6:03 per km. Dit is een indicatie. Welk startvak voor jou geldt, staat op je startbewijs.</div>
+
+  <form class="tool" data-tool="startvak" aria-label="Startvak bij de marathon">
+    <div class="rij">
+      <div>
+        <label for="s-tijd">Je doeltijd op de marathon</label>
+        <input id="s-tijd" name="doeltijd" type="text" inputmode="numeric" autocomplete="off" placeholder="4:15:00" aria-describedby="s-tijd-hulp s-tijd-fout">
+        <p class="hulp" id="s-tijd-hulp">Uren, minuten en seconden, zoals 4:15:00</p>
+        <p class="fout" id="s-tijd-fout" role="alert" data-fout="doeltijd" hidden></p>
+      </div>
+    </div>
+    <div class="uitkomst">
+      <output name="uitkomst" aria-live="polite">&ndash;</output>
+      <div data-extra></div>
+      <p class="hulp">Dit is een indicatief advies op basis van je doeltijd, geen officiële indeling. Welk startvak voor jou geldt, staat op je startbewijs en op de website van de organisator.</p>
+    </div>
+  </form>
+
+  <div class="prose">
+    <h2>Hoe werken startvakken bij een marathon?</h2>
+    <p>Bij grote marathons start het veld niet in &eacute;&eacute;n keer. De organisator deelt lopers in groepen in, op basis van de verwachte eindtijd die je bij je inschrijving opgeeft. Snelle lopers staan voorin, langzamere lopers achterin. Zo hoeft niemand door een dichte menigte te slalommen.</p>
+    <p>Je indeling staat op je startbewijs. De organisator beslist: de groepen, de grenzen en de plek waar je moet staan verschillen per wedstrijd en per jaar. Kijk dus altijd op de website van de organisator of in de deelnemersinformatie die je krijgt.</p>
+
+    <h2>Wat zegt deze tool dan wel?</h2>
+    <p>De tool geeft een indicatie in zes groepen, van &ldquo;Helemaal voorin&rdquo; tot &ldquo;Achteraan&rdquo;. Dezelfde indeling gebruikt de app Lopen te Lopen op de wedstrijdpagina. De grenzen zijn onze eigen, algemene grenzen en geen officiële vakken van een bepaalde marathon.</p>
+
+    <h2>Welke groep hoort bij welke doeltijd?</h2>
+    <div class="tabel-scroll">
+      <table>
+        <thead><tr><th scope="col">Doeltijd</th><th scope="col">Groep</th><th scope="col">Gemiddeld tempo</th></tr></thead>
+        <tbody>
+<tr><td>Onder 3:00:00</td><td>Helemaal voorin</td><td>sneller dan 4:16 per km</td></tr>
+<tr><td>3:00:00 tot 3:30:00</td><td>Voorin</td><td>4:16 tot 4:59 per km</td></tr>
+<tr><td>3:30:00 tot 4:00:00</td><td>Voorste helft</td><td>4:59 tot 5:41 per km</td></tr>
+<tr><td>4:00:00 tot 4:30:00</td><td>Middenveld</td><td>5:41 tot 6:24 per km</td></tr>
+<tr><td>4:30:00 tot 5:00:00</td><td>Achterste helft</td><td>6:24 tot 7:07 per km</td></tr>
+<tr><td>5:00:00 of langzamer</td><td>Achteraan</td><td>langzamer dan 7:07 per km</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Veelgestelde vragen</h2>
+    <h3>Mag ik in een ander startvak staan dan op mijn startbewijs?</h3>
+    <p>Meestal niet. Bij veel wedstrijden controleren vrijwilligers de toegang tot het vak. Wil je een ander vak, vraag dan bij de organisator na of omschrijven mogelijk is en hoe dat gaat.</p>
+    <h3>Wat als ik mijn doeltijd nog niet weet?</h3>
+    <p>Reken je verwachte tijd uit je recente uitslagen met de <a href="/tools/finishtijd-voorspeller/">finishtijd-voorspeller</a>, en kies liever een iets voorzichtigere tijd. Start je te ver voorin, dan word je de eerste kilometers door sneller veld meegezogen.</p>
+    <h3>Welk tempo hoort bij mijn doeltijd?</h3>
+    <p>De tool laat het gemiddelde tempo per km zien. Voor andere afstanden en tempo's gebruik je de <a href="/tools/tempo-calculator/">tempo calculator</a>.</p>
+
+    <section class="bronnen" aria-labelledby="bronnen"><h2 id="bronnen">Bronnen</h2><ul>
+      <li>Startvakken en indeling: de website en deelnemersinformatie van de organisator van jouw marathon.</li>
+      <li>Gemiddeld tempo: doeltijd gedeeld door 42,195 km, afgerond op hele seconden.</li>
+    </ul></section>
+  </div>
+
+  <aside class="app-blok" aria-labelledby="app-blok">
+    <h2 id="app-blok">Aftellen naar jouw marathon</h2>
+    <p>In Lopen te Lopen kies je je wedstrijd, tel je af naar de startdag en zie je op basis van je doeltijd een indicatief advies voor je startvak. Gratis te gebruiken, zonder account.</p>
+    {{badges:tool-startvak}}
+  </aside>
+</article>
+</div>

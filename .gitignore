@@ -65,3 +65,6 @@ _workspace/
 # dat zijn projectafspraken (commitstijl, tsc-check, wat Lars zelf doet) die
 # bij de repo horen en niet op een enkele schijf moeten leven.
 .claude/settings.local.json
+
+# Website: gegenereerde uitvoer (bron staat in website/src)
+/website/public/

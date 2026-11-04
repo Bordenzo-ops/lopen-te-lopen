@@ -1,0 +1,113 @@
+---
+title: Tempo calculator hardlopen | Lopen te Lopen
+description: Reken je hardlooptempo in min/km en km/u uit met afstand en tijd, of bereken je eindtijd met je tempo. Gratis, met tabel van 4:00 tot 8:00 per km.
+h1: Tempo calculator voor hardlopers
+sectie: tools
+kaart: Reken van afstand en tijd naar min/km en km/u, of van tempo naar eindtijd.
+schema: webapp
+script: tools.js
+campagne: tool-tempo
+---
+<div class="wrap">
+{{kruimel}}
+<article class="artikel">
+  <header class="artikel-kop">
+    <h1>Tempo calculator voor hardlopers</h1>
+    <p class="artikel-meta">Gratis rekentool. Rekent live mee, zonder account.</p>
+  </header>
+  <div class="kort-antwoord"><strong>Kort antwoord</strong>Deel je eindtijd door je afstand en je hebt je tempo per kilometer. 10 km in 50:00 is 5:00 per km, ofwel 12,0 km/u. Vul hieronder je gegevens in of reken terug van tempo naar eindtijd.</div>
+
+  <form class="tool" data-tool="tempo" aria-label="Tempo calculator">
+    <div class="rij">
+      <div>
+        <label for="t-modus">Wat wil je weten?</label>
+        <select id="t-modus" name="modus">
+          <option value="tijd">Mijn tempo, bij een afstand en tijd</option>
+          <option value="tempo">Mijn eindtijd, bij een tempo</option>
+        </select>
+      </div>
+    </div>
+    <div class="rij">
+      <div>
+        <label for="t-snel">Snelkeuze afstand</label>
+        <select id="t-snel" name="snelkeuze">
+          <option value="5">5 km</option>
+          <option value="10" selected>10 km</option>
+          <option value="15">15 km</option>
+          <option value="21,1">21,1 km</option>
+          <option value="42,195">Marathon (42,195 km)</option>
+          <option value="">Eigen afstand</option>
+        </select>
+      </div>
+      <div>
+        <label for="t-afstand">Afstand in km</label>
+        <input id="t-afstand" name="afstand" type="text" inputmode="decimal" autocomplete="off" value="10" aria-describedby="t-afstand-fout">
+        <p class="fout" id="t-afstand-fout" role="alert" data-fout="afstand" hidden></p>
+      </div>
+    </div>
+    <div class="rij">
+      <div data-modus="tijd">
+        <label for="t-tijd">Tijd</label>
+        <input id="t-tijd" name="tijd" type="text" inputmode="numeric" autocomplete="off" placeholder="50:00" aria-describedby="t-tijd-hulp t-tijd-fout">
+        <p class="hulp" id="t-tijd-hulp">Zoals 25:30 of 1:45:00</p>
+        <p class="fout" id="t-tijd-fout" role="alert" data-fout="tijd" hidden></p>
+      </div>
+      <div data-modus="tempo" hidden>
+        <label for="t-tempo">Tempo per km</label>
+        <input id="t-tempo" name="tempo" type="text" inputmode="numeric" autocomplete="off" placeholder="5:30" aria-describedby="t-tempo-hulp t-tempo-fout">
+        <p class="hulp" id="t-tempo-hulp">Minuten en seconden, zoals 5:30</p>
+        <p class="fout" id="t-tempo-fout" role="alert" data-fout="tempo" hidden></p>
+      </div>
+    </div>
+    <div class="uitkomst">
+      <output name="uitkomst" aria-live="polite">&ndash;</output>
+      <div data-extra></div>
+    </div>
+  </form>
+
+  <div class="prose">
+    <h2>Hoe reken je je hardlooptempo uit?</h2>
+    <p>Deel je tijd in seconden door het aantal kilometers. Wie 10 km in 50:00 (3000 seconden) loopt, doet 300 seconden per km: een tempo van 5:00 per km. Voor km/u deel je 3600 door je seconden per km: 3600 / 300 = 12,0 km/u.</p>
+
+    <h2>Hoe bereken je je eindtijd bij een bepaald tempo?</h2>
+    <p>Vermenigvuldig je tempo per km met de afstand. Bij 5:30 per km over 10 km is dat 55:00. Kies in de tool bovenaan &ldquo;Mijn eindtijd, bij een tempo&rdquo; en vul je tempo in.</p>
+
+    <h2>Eindtijden bij een vast tempo</h2>
+    <p>Deze tabel laat zien welke eindtijd bij welk gelijkmatig tempo hoort. Je tempo is het gemiddelde over de hele afstand.</p>
+    <div class="tabel-scroll">
+      <table>
+        <thead><tr><th scope="col">Tempo per km</th><th scope="col">km/u</th><th scope="col">5 km</th><th scope="col">10 km</th><th scope="col">21,1 km</th><th scope="col">Marathon</th></tr></thead>
+        <tbody>
+<tr><td>4:00</td><td>15,0</td><td>20:00</td><td>40:00</td><td>1:24:24</td><td>2:48:47</td></tr>
+<tr><td>4:30</td><td>13,3</td><td>22:30</td><td>45:00</td><td>1:34:57</td><td>3:09:53</td></tr>
+<tr><td>5:00</td><td>12,0</td><td>25:00</td><td>50:00</td><td>1:45:30</td><td>3:30:59</td></tr>
+<tr><td>5:30</td><td>10,9</td><td>27:30</td><td>55:00</td><td>1:56:03</td><td>3:52:04</td></tr>
+<tr><td>6:00</td><td>10,0</td><td>30:00</td><td>1:00:00</td><td>2:06:36</td><td>4:13:10</td></tr>
+<tr><td>6:30</td><td>9,2</td><td>32:30</td><td>1:05:00</td><td>2:17:09</td><td>4:34:16</td></tr>
+<tr><td>7:00</td><td>8,6</td><td>35:00</td><td>1:10:00</td><td>2:27:42</td><td>4:55:22</td></tr>
+<tr><td>7:30</td><td>8,0</td><td>37:30</td><td>1:15:00</td><td>2:38:15</td><td>5:16:28</td></tr>
+<tr><td>8:00</td><td>7,5</td><td>40:00</td><td>1:20:00</td><td>2:48:48</td><td>5:37:34</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Veelgestelde vragen</h2>
+    <h3>Wat is een goed hardlooptempo?</h3>
+    <p>Dat verschilt per loper en per dag. Een goed tempo voor jou is een tempo dat je rustig kunt volhouden terwijl je nog een zin kunt zeggen. Vergelijk je liever met jezelf van een paar maanden terug dan met anderen.</p>
+    <h3>Hoe zet je min/km om naar km/u?</h3>
+    <p>Deel 60 door je tempo in minuten. Bij 6:00 per km (6 minuten) is dat 60 / 6 = 10 km/u. Bij 5:30 reken je met 5,5 minuten: 60 / 5,5 = 10,9 km/u.</p>
+    <h3>Waarom loopt mijn horloge een ander tempo dan de calculator?</h3>
+    <p>De calculator gaat uit van een gelijkmatig tempo over de hele afstand. In de praktijk loop je heuvels, bochten en een rustiger begin, en meet gps de afstand nooit exact.</p>
+
+    <section class="bronnen" aria-labelledby="bronnen"><h2 id="bronnen">Bronnen</h2><ul>
+      <li>Rekenregel: tempo = tijd / afstand, snelheid = 3600 / seconden per km. Alle tabelwaarden zijn hiermee nagerekend en afgerond op hele seconden.</li>
+    </ul></section>
+  </div>
+
+  <aside class="app-blok" aria-labelledby="app-blok">
+    <h2 id="app-blok">Weet je je tempo? Train er dan mee</h2>
+    <p>In Lopen te Lopen krijgt elke training een tempo en een hartslagzone, en een Nederlandse stem coacht je onderweg. Gratis te gebruiken, zonder account.</p>
+    {{badges:tool-tempo}}
+  </aside>
+</article>
+</div>
