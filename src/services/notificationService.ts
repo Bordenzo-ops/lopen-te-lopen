@@ -30,6 +30,9 @@
  *   iOS staat maximaal 64 geplande meldingen toe. Het venster schuift mee bij
  *   elke herplanning (app-start, terug naar de voorgrond, afgeronde training,
  *   schema-/doel- of instellingswijziging, zie app/_layout.tsx).
+ * - Eerste-run-duwtje en terugkomduwtje (premium) vallen onder de categorie
+ *   trainingsherinneringen en worden in dezelfde herplanning bepaald; de
+ *   planningsregels staan in utils/notificationPlanning.ts.
  * - Countdown-mijlpalen liggen buiten dat venster (tot 100 dagen vooruit),
  *   maar zijn er maar vier, dus die plannen we altijd allemaal.
  */
@@ -40,6 +43,13 @@ import { formatLocalISODate, parseLocalISODate, raceScheduleStatus } from '../da
 import { sessionPlannedSeconds } from '../data/runWalk';
 import type { Session, TrainingWeek } from '../data/trainingPlans';
 import { isSessionHandledInCurrentAttempt } from '../utils/trainingWeek';
+import {
+  hasRealRun,
+  lastRealRunAt,
+  planComeback,
+  planFirstRun,
+} from '../utils/notificationPlanning';
+import { trackEvent } from './analyticsService';
 
 // ── Eigen minimale typedefinities voor expo-notifications ──────────────────
 // Geen import type van de package: tsc moet ook schoon blijven zonder dat het
@@ -249,6 +259,8 @@ const TRAINING_ID_PREFIX = 'lt-training-';
 const WEEKLY_ID_PREFIX = 'lt-weekly-';
 const COUNTDOWN_ID_PREFIX = 'lt-countdown-';
 const STREAK_ID_PREFIX = 'lt-streak-';
+const FIRST_RUN_ID_PREFIX = 'lt-firstrun-';   // alleen het vangnet; het eerste duwtje hergebruikt een lt-training-id
+const COMEBACK_ID = 'lt-comeback';
 
 /** Vaste identifiers van eerdere versies (streak-bescherming, weekoverzicht, herhalende dagen). */
 const LEGACY_IDS = [
@@ -272,7 +284,19 @@ const DATA_KIND = {
   weekly: 'weekly-progress',
   countdown: 'countdown',
   streak: 'streak-protection',
+  firstRun: 'first-run',
+  comeback: 'premium-comeback',
 } as const;
+
+/** Waarde van de `kind`-prop bij het analytics-event notification_opened. */
+const ANALYTICS_KIND: Record<string, string> = {
+  [DATA_KIND.training]: 'training',
+  [DATA_KIND.weekly]: 'weekly',
+  [DATA_KIND.countdown]: 'countdown',
+  [DATA_KIND.streak]: 'streak',
+  [DATA_KIND.firstRun]: 'first_run',
+  [DATA_KIND.comeback]: 'premium_comeback',
+};
 
 /** Expo Router-paden waar een tik op een melding naartoe leidt. */
 const ROUTE_TRAINING = '/(tabs)/dashboard';
@@ -359,6 +383,9 @@ interface PlannedNotification {
   body: string;
   date: Date;
   data: Record<string, unknown>;
+  /** Alleen trainingsherinneringen: de sessie en of het wedstrijddag is, voor het eerste-run-duwtje. */
+  session?: Session;
+  raceDay?: boolean;
 }
 
 /** Trainingsherinneringen: een melding per schemadag in het venster. */
@@ -395,9 +422,97 @@ function buildTrainingReminders(state: StoreState, weeks: TrainingWeek[], now: D
         : `Vandaag: ${describeSession(session)}`,
       date: fireAt,
       data: { kind: DATA_KIND.training, route: ROUTE_TRAINING },
+      session,
+      raceDay: isRaceDay,
     });
   }
   return out;
+}
+
+/** Wat er in de eerste-run-melding over de sessie staat ("25 minuten lopen en wandelen"). */
+function describeFirstSession(session: Session | undefined): string | null {
+  if (!session) return null;
+  if (session.type === 'runwalk') {
+    const sec = sessionPlannedSeconds(session);
+    return sec ? `${Math.round(sec / 60)} minuten lopen en wandelen` : 'Een rustige training';
+  }
+  if (session.type === 'easy' || session.type === 'long') return `${formatKm(session.distanceKm)} km rustig lopen`;
+  return null;
+}
+
+/**
+ * Eerste-run-duwtje: voor wie nog geen echte run (afstand > 0) heeft wordt de
+ * eerstvolgende trainingsherinnering eerste-run-specifiek (zelfde identifier,
+ * dus geen tweede melding die dag), plus een vangnet 2 dagen later. Valt dat
+ * vangnet op een dag met een trainingsherinnering, dan wordt die herinnering
+ * het vangnet. Zodra er een echte run is, geeft planFirstRun null en blijft
+ * de gewone planning staan.
+ */
+function applyFirstRunNudge(state: StoreState, reminders: PlannedNotification[], now: Date): PlannedNotification[] {
+  const eligible = reminders.filter(r => !r.raceDay);
+  const plan = planFirstRun(hasRealRun(state.completedSessions), eligible.map(r => r.date), now);
+  if (!plan) return reminders;
+
+  const primary = eligible[0];
+  const what = describeFirstSession(primary.session);
+  const data = { kind: DATA_KIND.firstRun, route: ROUTE_TRAINING };
+  const result = reminders.map(r => ({ ...r }));
+  const primaryOut = result.find(r => r.identifier === primary.identifier)!;
+  primaryOut.title = 'Je eerste training staat klaar';
+  primaryOut.body = what
+    ? `${what}. Meer is het niet. Zet je schoenen alvast klaar.`
+    : 'Een rustige eerste loop is genoeg. Zet je schoenen alvast klaar.';
+  primaryOut.date = plan.primary;
+  primaryOut.data = data;
+
+  const backupBody = what
+    ? `${what}. Een rustig begin is genoeg. Schoenen aan en gaan!`
+    : 'Een rustig begin is genoeg. Schoenen aan en gaan!';
+  const backupKey = formatLocalISODate(plan.backup);
+  const sameDay = result.find(r => !r.raceDay && formatLocalISODate(r.date) === backupKey);
+  if (sameDay) {
+    sameDay.title = 'Je eerste training wacht nog';
+    sameDay.body = backupBody;
+    sameDay.date = plan.backup;
+    sameDay.data = data;
+  } else {
+    result.push({
+      identifier: `${FIRST_RUN_ID_PREFIX}${backupKey}`,
+      title: 'Je eerste training wacht nog',
+      body: backupBody,
+      date: plan.backup,
+      data,
+    });
+  }
+  return result;
+}
+
+/**
+ * Terugkomduwtje voor premium: een melding op laatste echte run + 5 dagen om
+ * 18:30. Wordt bij elke herplanning (app-start, voorgrond, afgeronde run)
+ * opnieuw bepaald, dus er staat er altijd hooguit een. Is dat moment al voorbij
+ * (de gebruiker is al terug in de app), dan komt er geen tweede.
+ */
+function buildComeback(state: StoreState, weeks: TrainingWeek[], now: Date): PlannedNotification[] {
+  const fireAt = planComeback(state.isPremium === true, lastRealRunAt(state.completedSessions), now);
+  if (!fireAt) return [];
+
+  const week = weekForDate(state, weeks, fireAt);
+  let body: string;
+  if (week) {
+    body = `Week ${week.weekNumber} van je schema staat klaar. Eén rustige training en je zit er weer in.`;
+  } else if (state.schemaMode === 'race' && state.racePlan) {
+    body = `Je training voor ${state.racePlan.race.name} wacht op je. Eén rustige training en je zit er weer in.`;
+  } else {
+    body = 'Je schema staat voor je klaar. Eén rustige training en je zit er weer in.';
+  }
+  return [{
+    identifier: COMEBACK_ID,
+    title: 'Je schema loopt door',
+    body,
+    date: fireAt,
+    data: { kind: DATA_KIND.comeback, route: ROUTE_TRAINING },
+  }];
 }
 
 /** Wekelijkse voortgang: elke zondagavond in het venster. */
@@ -511,6 +626,8 @@ async function cancelOwnNotifications(N: NotificationsModule): Promise<void> {
         id.startsWith(WEEKLY_ID_PREFIX) ||
         id.startsWith(COUNTDOWN_ID_PREFIX) ||
         id.startsWith(STREAK_ID_PREFIX) ||
+        id.startsWith(FIRST_RUN_ID_PREFIX) ||
+        id === COMEBACK_ID ||
         LEGACY_IDS.includes(id),
       );
   } catch {
@@ -551,7 +668,8 @@ async function runReschedule(): Promise<void> {
   }).weeks;
 
   const planned: PlannedNotification[] = [
-    ...(wantsTraining ? buildTrainingReminders(state, weeks, now) : []),
+    ...(wantsTraining ? applyFirstRunNudge(state, buildTrainingReminders(state, weeks, now), now) : []),
+    ...(wantsTraining ? buildComeback(state, weeks, now) : []),
     ...(wantsWeekly ? buildWeeklyProgress(state, weeks, now) : []),
     ...(wantsCountdown ? buildCountdown(state, now) : []),
     ...(wantsStreak ? buildStreakProtection(state, now) : []),
@@ -616,13 +734,15 @@ export function resolveNotificationTapRoute(response: NotificationTapResponse | 
   const data = response?.notification?.request?.content?.data;
   if (!data || typeof data !== 'object') return null;
   const { kind, route } = data as Record<string, unknown>;
-  if (kind !== DATA_KIND.training && kind !== DATA_KIND.weekly && kind !== DATA_KIND.countdown && kind !== DATA_KIND.streak) return null;
+  if (typeof kind !== 'string' || !Object.prototype.hasOwnProperty.call(ANALYTICS_KIND, kind)) return null;
   if (route !== ROUTE_TRAINING && route !== ROUTE_PROGRESS) return null;
 
   // Dezelfde tik kan zowel via de listener als via getLastNotificationResponse binnenkomen.
   const key = `${response?.notification?.request?.identifier ?? ''}|${response?.notification?.date ?? ''}`;
   if (handledResponses.has(key)) return null;
   handledResponses.add(key);
+  // Meten welke meldingen tot een tik leiden; alleen de soort, geen persoonsgegevens.
+  void trackEvent('notification_opened', { kind: ANALYTICS_KIND[kind] }).catch(() => {});
   return route;
 }
 

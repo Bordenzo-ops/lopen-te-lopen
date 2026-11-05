@@ -166,7 +166,8 @@ export default function RootLayout() {
         state.weeklyProgressEnabled !== prev.weeklyProgressEnabled ||
         state.countdownEnabled !== prev.countdownEnabled ||
         state.streakEnabled !== prev.streakEnabled ||
-        state.reminderHour !== prev.reminderHour
+        state.reminderHour !== prev.reminderHour ||
+        state.isPremium !== prev.isPremium
       ) {
         schedule(1000);
       }
