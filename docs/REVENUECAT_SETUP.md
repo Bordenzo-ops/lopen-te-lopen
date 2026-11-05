@@ -314,6 +314,65 @@ op `environment = 'PRODUCTION'` voor echte abonnees.
 
 ---
 
+## Analyse van klanten
+
+Migratie `supabase/migrations/0009_subscription_funnel.sql` maakt de view
+`public.subscription_customers`: een rij per klant (alleen PRODUCTION, zonder
+PROMOTIONAL en TEST) met trial, omzetting, opzegging, verloop, omzet en
+appgedrag (onboarding-doel, wedstrijd gekozen, echte runs, laatst actief). Toepassen
+zoals 0007: plak de inhoud in de SQL Editor en Run. De view is alleen leesbaar
+via de SQL Editor of de service-role, nooit via de client-API.
+
+```sql
+-- Funnel in een oogopslag
+select status, count(*) from public.subscription_customers group by 1 order by 2 desc;
+
+-- Trials die niet zijn omgezet: deden ze iets in de app?
+select user_id, product_id, trial_started_at, status, cancel_reason,
+       onboarding_goal, race_chosen, real_runs_first_14d, last_event_at
+  from public.subscription_customers
+ where status in ('trial_cancelled', 'expired') and converted_at is null
+ order by trial_started_at desc;
+
+-- Omzetting naar aantal echte runs in de eerste 14 dagen
+select least(real_runs_first_14d, 5) as runs_14d,
+       count(*) as trials,
+       count(*) filter (where converted_at is not null) as omgezet
+  from public.subscription_customers
+ where trial_started_at is not null
+ group by 1 order by 1;
+```
+
+Klanten met een `rc_anonymous_id` maar zonder `user_id` hebben gekocht zonder
+Supabase-account; voor hen is er geen appgedrag te koppelen.
+
+## Controle: komen opzeggingen binnen?
+
+Vaststelling op 05-11-2026: `revenuecat_events` heeft tot nu toe nog **nooit** een
+`CANCELLATION`-event ontvangen, terwijl er wel een trial is opgezegd. Controleer
+waar het misgaat:
+
+1. Check in de database wat er wel binnenkomt:
+   `select event_type, payload->>'environment' as env, count(*) from public.revenuecat_events group by 1, 2 order by 1;`
+2. RevenueCat-dashboard, **Project settings**, **Integrations**, **Webhooks**,
+   open de webhook en controleer:
+   - het **event-type-filter** laat alle events door (geen enkel type uitgevinkt,
+     CANCELLATION en UNCANCELLATION zeker niet);
+   - de **environment** staat op Production en Sandbox (of in elk geval op
+     Production).
+3. Zoek de klant op (Customers, zoek op app user id of via de aankoop) en open
+   het CANCELLATION-event in de tijdlijn. Bekijk de **delivery-log** van de
+   webhook: is het event verstuurd, en wat was de HTTP-status? 200 betekent
+   ontvangen; 401 is een fout `Authorization`-header (secret
+   `REVENUECAT_WEBHOOK_AUTH`); 500 is een verwerkingsfout (zie Supabase, Edge
+   Functions, Logs).
+4. Let op: een opzegging van een trial komt als `CANCELLATION` zodra de klant
+   auto-renew uitzet in de store. Is er in de tijdlijn van de klant geen
+   CANCELLATION te zien, dan heeft de store het nog niet gemeld (Apple en Google
+   kunnen dat vertragen) en ligt het niet aan de webhook.
+
+---
+
 ## Probleemoplossing
 
 | Symptoom | Oorzaak / oplossing |
