@@ -29,7 +29,7 @@
           "instagram-stories"
         ]
       },
-      "buildNumber": "36"
+      "buildNumber": "37"
     },
     "android": {
       "adaptiveIcon": {
@@ -37,7 +37,7 @@
         "backgroundColor": "#0A0F1A"
       },
       "package": "com.lopentelopen.app",
-      "versionCode": 38,
+      "versionCode": 39,
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
