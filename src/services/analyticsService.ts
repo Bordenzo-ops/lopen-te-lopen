@@ -52,7 +52,12 @@ export type AnalyticsEvent =
   | 'strava_connected'
   | 'strava_connect_failed'
   | 'strava_waitlist_joined'
-  | 'goal_changed';
+  | 'goal_changed'
+  // Schoenenteller. Props: nooit de naam van de schoen (vrije tekst) of een merk.
+  | 'shoe_added'                // props: hasStartKm (boolean), limitKm (number)
+  | 'shoe_retired'              // props: km (number, afgerond)
+  | 'shoe_wear_alert_shown'     // props: threshold (80 | 100)
+  | 'shoe_switched_on_run';
 
 /** Kleine, generieke eigenschappen bij een event. Geen persoonsgegevens. */
 export type AnalyticsProps = Record<string, string | number | boolean | null>;

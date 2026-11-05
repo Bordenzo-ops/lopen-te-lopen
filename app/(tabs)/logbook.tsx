@@ -18,6 +18,7 @@ import { getPeriodStats, type PeriodType, type PeriodStats } from '../../src/uti
 import { resolveActivePlan } from '../../src/data/activePlan';
 import { SharePeriodSheet } from '../../src/components/ui/SharePeriodSheet';
 import { Button } from '../../src/components/ui/Button';
+import { ShoesSection } from '../../src/components/ui/ShoesSection';
 import { Tappable } from '../../src/components/motion/Tappable';
 import { formatKm } from '../../src/utils/format';
 
@@ -229,6 +230,9 @@ export default function LogbookScreen() {
             </View>
           )}
         </View>
+
+        {/* Schoenenteller */}
+        <ShoesSection />
       </ScrollView>
 
       {shownRunToShare && profile && (

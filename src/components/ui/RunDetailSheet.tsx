@@ -56,6 +56,7 @@ import { BottomSheet } from './BottomSheet';
 import { SheetHandle, SheetCloseButton, SheetGrabZone } from './sheetParts';
 import { ZoneBadge } from './ZoneBadge';
 import { ShareRunSheet } from './ShareRunSheet';
+import { RunShoeRow } from './RunShoeRow';
 import { formatKm } from '../../utils/format';
 
 /**
@@ -330,6 +331,10 @@ export function RunDetailSheet({ visible, session, onClose }: RunDetailSheetProp
                 </View>
               </View>
             )}
+
+            {/* Schoen: alleen zichtbaar zodra er minstens één paar is. De keuzesheet
+                zit in de regel zelf en dus binnen deze sheet (geneste Modal op iOS). */}
+            <RunShoeRow run={session} />
 
             {/* Bron, alleen als de run niet in de app zelf gelopen is */}
             {session.source !== 'app' && (

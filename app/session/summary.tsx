@@ -18,6 +18,11 @@ import { Button } from '../../src/components/ui/Button';
 import { Card } from '../../src/components/ui/Card';
 import { ZoneBadge } from '../../src/components/ui/ZoneBadge';
 import { ShareRunSheet } from '../../src/components/ui/ShareRunSheet';
+import { RunShoeRow } from '../../src/components/ui/RunShoeRow';
+import { ShoeWearCard } from '../../src/components/ui/ShoeWearCard';
+import { ShoeEditorSheet } from '../../src/components/ui/ShoeEditorSheet';
+import { pendingWearAlert, shoeKm, type WearThreshold } from '../../src/utils/shoes';
+import { trackEvent } from '../../src/services/analyticsService';
 import { exportSessionAsGpx } from '../../src/services/exportService';
 import { maybeAskForReview } from '../../src/services/reviewService';
 import { usePremium } from '../../src/hooks/usePremium';
@@ -43,6 +48,11 @@ export default function SummaryScreen() {
   const schemaMode        = useAppStore(s => s.schemaMode);
   const completedSessions = useAppStore(s => s.completedSessions);
   const [showShare, setShowShare] = useState(false);
+  const shoes = useAppStore(s => s.shoes);
+  const markShoeWearAlertShown = useAppStore(s => s.markShoeWearAlertShown);
+  // Slijtagekaart: eenmalig vastgelegd bij het openen van dit scherm (zie effect hieronder).
+  const [wearAlert, setWearAlert] = useState<{ shoeId: string; threshold: WearThreshold } | null>(null);
+  const [showShoeEditor, setShowShoeEditor] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const skippedSessions   = useAppStore(s => s.skippedSessions);
   const currentWeekTraining = useAppStore(s => s.currentWeekTraining);
@@ -106,6 +116,22 @@ export default function SummaryScreen() {
     if (record.longestRun || record.fastestPace) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Slijtagekaart voor het paar van deze run: elke drempel (80% en 100%) hooguit
+  // een keer per paar. Vastleggen als getoond gebeurt direct, ook als de
+  // gebruiker de kaart wegtikt. Staat vóór de "!profile"-guard (rules of hooks).
+  useEffect(() => {
+    const last = completedSessions[completedSessions.length - 1];
+    if (!last?.shoeId) return;
+    const shoe = shoes.find(s => s.id === last.shoeId);
+    if (!shoe) return;
+    const threshold = pendingWearAlert(shoe, completedSessions);
+    if (!threshold) return;
+    setWearAlert({ shoeId: shoe.id, threshold });
+    markShoeWearAlertShown(shoe.id, threshold);
+    void trackEvent('shoe_wear_alert_shown', { threshold });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -192,6 +218,8 @@ export default function SummaryScreen() {
     const sec = s % 60;
     return `${m}:${String(sec).padStart(2, '0')}`;
   };
+
+  const wearShoe = wearAlert ? shoes.find(s => s.id === wearAlert.shoeId) : undefined;
 
   // GPX-export is alleen zinvol met een route van minimaal 2 punten
   const hasRoute = (lastSession?.route?.length ?? 0) >= 2;
@@ -316,6 +344,9 @@ export default function SummaryScreen() {
           )}
         </View>
 
+        {/* Schoen van deze run (alleen zichtbaar als er schoenen zijn) */}
+        {lastSession && <RunShoeRow run={lastSession} />}
+
         {/* Hartslag (fase B): alleen tonen als deze run daadwerkelijk met een
             gekoppelde BLE-hartslagmeter gelopen is (avgHeartRate/maxHeartRateBpm
             worden alleen gezet als er metingen waren, zie completeSession in
@@ -390,6 +421,17 @@ export default function SummaryScreen() {
             </View>
           )}
         </View>
+
+        {/* Slijtagekaart: schoenen dichtbij of over hun grens */}
+        {wearShoe && wearAlert && (
+          <ShoeWearCard
+            shoe={wearShoe}
+            km={shoeKm(wearShoe, completedSessions)}
+            threshold={wearAlert.threshold}
+            onAddNew={() => setShowShoeEditor(true)}
+            onDismiss={() => setWearAlert(null)}
+          />
+        )}
 
         {/* Coach bericht */}
         {session && (
@@ -473,6 +515,8 @@ export default function SummaryScreen() {
           />
         )}
       </View>
+
+      <ShoeEditorSheet visible={showShoeEditor} shoe={null} onClose={() => setShowShoeEditor(false)} />
 
       {lastSession && (
         <ShareRunSheet

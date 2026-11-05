@@ -20,6 +20,9 @@ import { trackEvent } from '../services/analyticsService';
 import type { VoiceType } from '../config/voiceConfig';
 import type { PlannedRoute, RouteWaypoint, RouteInstruction } from '../services/routeService';
 import { canSaveAnotherRoute } from '../config/premiumConfig';
+import {
+  assignDefaultShoe, isActiveShoe, activeShoes, setOnlyDefault, withDefaultFallback, shoeKm, DEFAULT_SHOE_LIMIT_KM,
+} from '../utils/shoes';
 
 // ── Hulpfuncties voor het vrije schema ────────
 /**
@@ -57,6 +60,16 @@ function roundWaypoint(w: RouteWaypoint): RouteWaypoint {
     lat: Math.round(w.lat * 100000) / 100000,
     lon: Math.round(w.lon * 100000) / 100000,
   };
+}
+
+/** Genereert een stabiele, unieke id voor een paar schoenen (zelfde patroon als generateSavedRouteId). */
+function generateShoeId(): string {
+  try {
+    if (typeof Crypto.randomUUID === 'function') return `shoe-${Crypto.randomUUID()}`;
+  } catch {
+    // val terug op de simpele variant hieronder
+  }
+  return `shoe-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 /** Verzint een bruikbare naam op basis van type en afstand, bv. "Rondje 8,2 km". */
@@ -159,7 +172,43 @@ export interface CompletedSession {
    */
   splits?: KmSplit[];
   source: 'app' | 'strava' | 'garmin' | 'apple_health' | 'google_fit' | 'mi_fitness';
+  /**
+   * Pair of shoes this run was done in (Shoe.id). Set automatically to the
+   * default shoe when the run is added (see completeSession); absent for runs
+   * from before the shoe counter or when the user picked "Geen". Local only,
+   * not synced to the cloud.
+   */
+  shoeId?: string;
 }
+
+/** A pair of running shoes for the shoe counter. */
+export interface Shoe {
+  id: string;
+  /** Free text from the user. Never send this to analytics. */
+  name: string;
+  /** Km already on the pair before it was added to the app. */
+  startKm: number;
+  /** Wear limit in km (default DEFAULT_SHOE_LIMIT_KM). */
+  limitKm: number;
+  /** The pair new runs are assigned to. At most one active pair is the default. */
+  isDefault: boolean;
+  /** ISO date when retired ("Met pensioen"); absent while in use. */
+  retiredAt?: string;
+  createdAt: string;
+  /** ISO dates on which the 80% / 100% wear card was shown, so each shows once. */
+  wearAlertsShown?: { at80?: string; at100?: string };
+}
+
+/** Input for addShoe. */
+export interface NewShoeInput {
+  name: string;
+  startKm: number;
+  limitKm: number;
+  makeDefault: boolean;
+}
+
+/** Identifies one run (same key as clientRunId in syncService.ts). */
+export type RunRef = Pick<CompletedSession, 'sessionId' | 'weekNumber' | 'completedAt'>;
 
 /**
  * Een bewust overgeslagen sessie. Telt mee als "afgehandeld" voor de
@@ -326,6 +375,28 @@ interface AppState {
   renameSavedRoute: (id: string, name: string) => void;
   /** Verwijdert een bewaarde route. Doet niets als het id niet bestaat. */
   deleteSavedRoute: (id: string) => void;
+
+  // Schoenenteller (gepersisteerd, lokaal; wordt niet naar de cloud gesynct)
+  /** Alle paar schoenen, ook die met pensioen zijn (retiredAt gezet). */
+  shoes: Shoe[];
+  /**
+   * Voegt een paar toe. De eerste actieve schoen wordt automatisch de
+   * standaardschoen; anders alleen als makeDefault waar is (dan verliest de
+   * vorige standaard die status). Geeft null terug bij een lege naam.
+   */
+  addShoe: (input: NewShoeInput) => Shoe | null;
+  /** Werkt naam, startkilometers, grens of standaardstatus bij. Een nieuwe grens wist de getoonde slijtagekaarten. */
+  updateShoe: (id: string, updates: Partial<Pick<Shoe, 'name' | 'startKm' | 'limitKm' | 'isDefault'>>) => void;
+  /** Zet een paar met pensioen. Was het de standaard, dan geldt withDefaultFallback. */
+  retireShoe: (id: string) => void;
+  /** Haalt een paar uit pensioen (wordt niet automatisch weer de standaard). */
+  reactivateShoe: (id: string) => void;
+  /** Verwijdert een paar; runs die eraan gekoppeld waren verliezen hun shoeId. */
+  deleteShoe: (id: string) => void;
+  /** Koppelt een gelopen run aan een ander paar (of aan geen: shoeId undefined). */
+  setRunShoe: (run: RunRef, shoeId: string | undefined) => void;
+  /** Legt vast dat de slijtagekaart van deze drempel getoond is (100 telt ook voor 80). */
+  markShoeWearAlertShown: (id: string, threshold: 80 | 100) => void;
 
   // Hydration: true zodra AsyncStorage geladen is
   _hasHydrated: boolean;
@@ -683,7 +754,120 @@ export const useAppStore = create<AppState>()(
       routePlanCount: 0,
       routePlanWeekStart: null,
       savedRoutes: [],
+      shoes: [],
       _hasHydrated: false,
+
+      // Schoenenteller
+      addShoe: (input) => {
+        const name = input.name.trim();
+        if (!name) return null;
+        const { shoes } = get();
+        const isFirstActive = activeShoes(shoes).length === 0;
+        const shoe: Shoe = {
+          id: generateShoeId(),
+          name,
+          startKm: Math.max(0, input.startKm),
+          limitKm: input.limitKm > 0 ? input.limitKm : DEFAULT_SHOE_LIMIT_KM,
+          isDefault: isFirstActive || input.makeDefault,
+          createdAt: new Date().toISOString(),
+        };
+        set({ shoes: shoe.isDefault ? [...setOnlyDefault(shoes, ''), shoe] : [...shoes, shoe] });
+        void trackEvent('shoe_added', { hasStartKm: shoe.startKm > 0, limitKm: Math.round(shoe.limitKm) });
+        return shoe;
+      },
+
+      updateShoe: (id, updates) => {
+        const { shoes } = get();
+        const current = shoes.find(s => s.id === id);
+        if (!current) return;
+        const name = updates.name !== undefined ? updates.name.trim() : current.name;
+        const limitKm = updates.limitKm !== undefined && updates.limitKm > 0 ? updates.limitKm : current.limitKm;
+        const patched: Shoe = {
+          ...current,
+          name: name || current.name,
+          startKm: updates.startKm !== undefined ? Math.max(0, updates.startKm) : current.startKm,
+          limitKm,
+          // A new limit means new thresholds: the cards may show again.
+          wearAlertsShown: limitKm !== current.limitKm ? undefined : current.wearAlertsShown,
+        };
+        let next = shoes.map(s => (s.id === id ? patched : s));
+        if (updates.isDefault === true && isActiveShoe(patched)) {
+          next = setOnlyDefault(next, id);
+        } else if (updates.isDefault === false) {
+          next = next.map(s => (s.id === id ? { ...s, isDefault: false } : s));
+        }
+        set({ shoes: next });
+      },
+
+      retireShoe: (id) => {
+        const { shoes, completedSessions } = get();
+        const current = shoes.find(s => s.id === id);
+        if (!current || !isActiveShoe(current)) return;
+        const wasDefault = current.isDefault;
+        const retired = shoes.map(s =>
+          s.id === id ? { ...s, isDefault: false, retiredAt: new Date().toISOString() } : s,
+        );
+        set({ shoes: wasDefault ? withDefaultFallback(retired) : retired });
+        void trackEvent('shoe_retired', { km: Math.round(shoeKm(current, completedSessions)) });
+      },
+
+      reactivateShoe: (id) => {
+        set(state => ({
+          shoes: state.shoes.map(s => {
+            if (s.id !== id) return s;
+            const { retiredAt: _retiredAt, ...rest } = s;
+            return rest;
+          }),
+        }));
+      },
+
+      deleteShoe: (id) => {
+        const { shoes, completedSessions } = get();
+        const current = shoes.find(s => s.id === id);
+        if (!current) return;
+        const remaining = shoes.filter(s => s.id !== id);
+        set({
+          shoes: current.isDefault && isActiveShoe(current) ? withDefaultFallback(remaining) : remaining,
+          completedSessions: completedSessions.some(c => c.shoeId === id)
+            ? completedSessions.map(c => {
+                if (c.shoeId !== id) return c;
+                const { shoeId: _shoeId, ...rest } = c;
+                return rest;
+              })
+            : completedSessions,
+        });
+      },
+
+      setRunShoe: (run, shoeId) => {
+        set(state => ({
+          completedSessions: state.completedSessions.map(c => {
+            if (
+              c.sessionId !== run.sessionId ||
+              c.weekNumber !== run.weekNumber ||
+              c.completedAt !== run.completedAt
+            ) return c;
+            if (shoeId) return { ...c, shoeId };
+            const { shoeId: _shoeId, ...rest } = c;
+            return rest;
+          }),
+        }));
+      },
+
+      markShoeWearAlertShown: (id, threshold) => {
+        const now = new Date().toISOString();
+        set(state => ({
+          shoes: state.shoes.map(s => {
+            if (s.id !== id) return s;
+            const shown = s.wearAlertsShown ?? {};
+            return {
+              ...s,
+              wearAlertsShown: threshold === 100
+                ? { at80: shown.at80 ?? now, at100: shown.at100 ?? now }
+                : { ...shown, at80: shown.at80 ?? now },
+            };
+          }),
+        }));
+      },
 
       // Strava-koppeling (offline-first defaults)
       stravaConnected: false,
@@ -1223,12 +1407,17 @@ export const useAppStore = create<AppState>()(
         // dankzij de `if (!activeSession) return;` hierboven: zodra de eerste
         // aanroep synchroon `activeSession: null` zet, ziet een tweede aanroep
         // direct daarna geen activeSession meer en stopt vroeg.
-        const completed: CompletedSession = {
+        // Schoenenteller: de ENIGE plek waar een nieuwe run aan completedSessions
+        // wordt toegevoegd (ook het herstel in app/index.tsx loopt hierlangs).
+        // Een run zonder shoeId krijgt de standaardschoen, ongeacht de bron.
+        // Runs die reconcileWithAccount uit de cloud terughaalt krijgen bewust
+        // GEEN schoen: dat is oude geschiedenis, en schoenen zelf worden niet gesynct.
+        const completed: CompletedSession = assignDefaultShoe({
           ...result,
           sessionId: activeSession.session.id,
           weekNumber: activeSession.weekNumber,
           completedAt: new Date().toISOString(),
-        };
+        }, get().shoes);
 
         const updatedCompleted = [...completedSessions, completed];
 
@@ -1480,6 +1669,7 @@ export const useAppStore = create<AppState>()(
           routePlanCount: 0,
           routePlanWeekStart: null,
           savedRoutes: [],
+          shoes: [],
           stravaConnected: false,
           stravaAthleteName: undefined,
           stravaUploadQueue: [],
@@ -1703,7 +1893,8 @@ export const useAppStore = create<AppState>()(
         routePlanCount:         state.routePlanCount,
         routePlanWeekStart:     state.routePlanWeekStart,
         savedRoutes:            state.savedRoutes,
-        stravaConnected:        state.stravaConnected,
+        shoes:                  state.shoes,
+        stravaConnected:       state.stravaConnected,
         stravaAthleteName:      state.stravaAthleteName,
         stravaAutoUpload:       state.stravaAutoUpload,
         stravaUploadQueue:      state.stravaUploadQueue,
