@@ -7,6 +7,7 @@ export default function OnboardingLayout() {
       <Stack.Screen name="goal" />
       <Stack.Screen name="profile" />
       <Stack.Screen name="voice" />
+      <Stack.Screen name="reminders" options={{ gestureEnabled: false }} />
     </Stack>
   );
 }

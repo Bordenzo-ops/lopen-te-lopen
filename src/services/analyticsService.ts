@@ -46,6 +46,7 @@ export type AnalyticsEvent =
   | 'premium_intro_shown'
   | 'premium_intro_cta'
   | 'notification_category_toggled'
+  | 'reminder_optin_answered'
   | 'notification_opened'
   | 'week_return_choice'
   | 'strava_connected'

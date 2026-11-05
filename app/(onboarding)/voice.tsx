@@ -106,6 +106,14 @@ export default function VoiceScreen() {
 
     if (racePlan) setRacePlan(racePlan);
 
+    // Opt-in voor trainingsherinneringen: één keer vragen, en niet als ze al
+    // aan staan. Dit scherm doet daarna zelf de laatste navigatie.
+    const { reminderOptinAnswered, remindersEnabled } = useAppStore.getState();
+    if (!reminderOptinAnswered && !remindersEnabled) {
+      router.push({ pathname: '/(onboarding)/reminders', params: { newGoal: isNewGoal ? '1' : '0' } });
+      return;
+    }
+
     if (isNewGoal) {
       // Nieuw doel: de stack bevat nog de tabs (en evt. het voltooide-scherm).
       // dismissTo gaat terug naar het bestaande dashboard i.p.v. er een extra

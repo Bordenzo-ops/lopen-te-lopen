@@ -403,6 +403,9 @@ interface AppState {
   /** Gekozen tijdstip (uur, 0-23) voor de dagelijkse trainingsherinnering. Default 8 (08:00). */
   reminderHour: number;
   setReminderHour: (hour: number) => void;
+  /** Is de opt-in-vraag voor herinneringen aan het eind van de onboarding al beantwoord (ja of nu niet)? */
+  reminderOptinAnswered: boolean;
+  setReminderOptinAnswered: (answered: boolean) => void;
   /** Wekelijkse voortgangsmelding (zondagavond). Default false: opt-in. */
   weeklyProgressEnabled: boolean;
   setWeeklyProgressEnabled: (enabled: boolean) => void;
@@ -730,6 +733,8 @@ export const useAppStore = create<AppState>()(
       setRemindersEnabled: (enabled) => set({ remindersEnabled: enabled }),
       reminderHour: 8,
       setReminderHour: (hour) => set({ reminderHour: hour }),
+      reminderOptinAnswered: false,
+      setReminderOptinAnswered: (answered) => set({ reminderOptinAnswered: answered }),
       weeklyProgressEnabled: false,
       setWeeklyProgressEnabled: (enabled) => set({ weeklyProgressEnabled: enabled }),
       countdownEnabled: false,
@@ -1711,6 +1716,7 @@ export const useAppStore = create<AppState>()(
         autoPauseEnabled:       state.autoPauseEnabled,
         remindersEnabled:       state.remindersEnabled,
         reminderHour:           state.reminderHour,
+        reminderOptinAnswered:  state.reminderOptinAnswered,
         weeklyProgressEnabled:  state.weeklyProgressEnabled,
         countdownEnabled:       state.countdownEnabled,
         streakEnabled:          state.streakEnabled,
